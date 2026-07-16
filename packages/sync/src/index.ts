@@ -72,7 +72,7 @@ export class CrdtSyncEngine {
  * Talks to the Blink sync API (`apps/sync-server`), which is the only thing that
  * touches Cloud-Postgres. The client never sees the DB; it sends already-E2EE
  * {@link SyncPacket}s over HTTPS with a bearer token the API maps onto a
- * Row-Level-Security session. See `db/migrations`.
+ * Row-Level-Security session. See `packages/db`.
  */
 export class HttpSyncTransport implements SyncTransport {
   constructor(private readonly config: { baseUrl: string; token: string }) {}

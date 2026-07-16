@@ -1,14 +1,17 @@
+import { type BlinkDb, type BlinkTx, createDb, tasks, withUser } from '@blink/db';
 import type { SyncPacket } from '@blink/sync';
+import { gte, sql } from 'drizzle-orm';
 
 /**
  * Persistence seam for the sync API. The API never inspects ciphertext — it only
  * routes {@link SyncPacket}s to/from the owner's rows. Two implementations:
  *
  *   {@link InMemoryTaskRepository}  — dev/test, no Postgres required.
- *   {@link PostgresTaskRepository}  — the real self-hosted Cloud-Postgres store.
+ *   {@link PostgresTaskRepository}  — the real self-hosted Cloud-Postgres store,
+ *                                     via Drizzle, with Row-Level Security.
  */
 export interface TaskRepository {
-  /** Upsert the caller's packets. Returns how many rows were written. */
+  /** Upsert the caller's packets. Returns how many were accepted. */
   push(userId: string, packets: SyncPacket[]): Promise<number>;
   /** Return the caller's packets updated at/after the given HLC physical time. */
   pull(userId: string, sincePhysical: number): Promise<SyncPacket[]>;
@@ -42,26 +45,62 @@ function isNewer(a: SyncPacket, b: SyncPacket): boolean {
 }
 
 /**
- * Postgres-backed repository against the self-hosted Cloud-Postgres.
+ * Postgres-backed repository against the self-hosted Cloud-Postgres via Drizzle.
  *
- * TODO(phase-2): implement with the `pg` driver. Each call opens a transaction,
- * runs `SET LOCAL app.current_user_id = $userId` so Row-Level Security scopes
- * every statement to the caller, then upserts/selects the `tasks` table mapping
- * `SyncPacket.encrypted.*` onto the `*_cipher` columns. See db/migrations.
+ * Every call runs inside {@link withUser}, which sets `app.current_user_id` so
+ * Row-Level Security scopes all statements to the caller. Sensitive fields are
+ * stored verbatim as the ciphertext envelopes the client already produced.
  */
 export class PostgresTaskRepository implements TaskRepository {
-  private readonly connectionString: string;
+  private readonly db: BlinkDb;
 
   constructor(connectionString: string) {
-    this.connectionString = connectionString;
+    this.db = createDb(connectionString);
   }
 
-  async push(_userId: string, _packets: SyncPacket[]): Promise<number> {
-    void this.connectionString;
-    throw new Error('PostgresTaskRepository requires the `pg` driver (not yet installed)');
+  async push(userId: string, packets: SyncPacket[]): Promise<number> {
+    if (packets.length === 0) return 0;
+    return withUser(this.db, userId, async (tx) => {
+      for (const packet of packets) await upsertPacket(tx, userId, packet);
+      return packets.length;
+    });
   }
 
-  async pull(_userId: string, _sincePhysical: number): Promise<SyncPacket[]> {
-    throw new Error('PostgresTaskRepository requires the `pg` driver (not yet installed)');
+  async pull(userId: string, sincePhysical: number): Promise<SyncPacket[]> {
+    return withUser(this.db, userId, async (tx) => {
+      const rows = await tx.select().from(tasks).where(gte(tasks.hlcPhysical, sincePhysical));
+      return rows.map(rowToPacket);
+    });
   }
+}
+
+async function upsertPacket(tx: BlinkTx, userId: string, packet: SyncPacket): Promise<void> {
+  const fields = {
+    status: packet.status,
+    titleCipher: packet.encrypted.title,
+    bodyCipher: packet.encrypted.body,
+    hlcPhysical: packet.clock.physical,
+    hlcCounter: packet.clock.counter,
+    hlcNodeId: packet.clock.nodeId,
+    updatedAt: new Date(),
+  };
+  await tx
+    .insert(tasks)
+    .values({ id: packet.taskId, ownerId: userId, ...fields })
+    .onConflictDoUpdate({
+      target: tasks.id,
+      set: fields,
+      // LWW on the Hybrid Logical Clock — ignore stale writes. Placeholder until
+      // the field-level CRDT merge lands.
+      setWhere: sql`(${tasks.hlcPhysical}, ${tasks.hlcCounter}, ${tasks.hlcNodeId}) < (${packet.clock.physical}, ${packet.clock.counter}, ${packet.clock.nodeId})`,
+    });
+}
+
+function rowToPacket(row: typeof tasks.$inferSelect): SyncPacket {
+  return {
+    taskId: row.id,
+    clock: { physical: row.hlcPhysical, counter: row.hlcCounter, nodeId: row.hlcNodeId },
+    status: row.status,
+    encrypted: { title: row.titleCipher, body: row.bodyCipher },
+  };
 }

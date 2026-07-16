@@ -5,9 +5,13 @@
   "type": "module",
   "description": "Blink self-hosted sync API — the thin tier between clients and Cloud-Postgres.",
   "scripts": {
-    "dev": "node --watch src/index.ts",
+    "dev": "pnpm --filter @blink/db build && node --watch src/index.ts",
     "start": "node src/index.ts",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@blink/db": "workspace:*",
+    "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
     "@blink/core": "workspace:*",

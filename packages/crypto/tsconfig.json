@@ -2,7 +2,10 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "./src",
-    "noEmit": true
+    "noEmit": true,
+    // WebCrypto module — only the DOM lib globals, never ambient @types/node
+    // (which would make Uint8Array conflict with BufferSource).
+    "types": []
   },
   "include": ["src"]
 }

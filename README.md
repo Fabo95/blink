@@ -20,15 +20,19 @@ end-to-end encrypted client-side so even the operator only stores ciphertext.
 | Local Database   | SQLite via SQLCipher (AES-256)| `src-tauri/src/store.rs` · in-memory stub for now |
 | Local AI Engine  | ONNX Runtime / local LLM      | `packages/ai`              |
 | Zero-Knowledge E2EE | PBKDF2 + AES-GCM (WebCrypto)| `packages/crypto`          |
-| Cloud Sync       | CRDT → self-hosted Postgres   | `packages/sync`, `apps/sync-server`, `db/` |
+| Cloud Sync       | CRDT → self-hosted Postgres   | `packages/sync`, `apps/sync-server` |
+| Cloud schema/ORM | Drizzle (schema + migrations) | `packages/db`              |
 | Shared model     | Types, theme, DLP patterns    | `packages/core`            |
 
 The cloud tier is **self-hosted**: a thin sync API (`apps/sync-server`) is the only
-thing that talks to Postgres, so raw DB access is never exposed to clients. Because
-Blink is zero-knowledge, Postgres only ever stores ciphertext; the API enforces
-*who* can read *which* rows via per-request Row-Level Security. `HttpSyncTransport`
-(the default) targets this API; `SupabaseSyncTransport` remains as a managed-cloud
-option for tenants who don't self-host.
+thing that talks to Postgres, so raw DB access is never exposed to clients. It uses
+**Drizzle** (`packages/db`) — the TS schema is the source of truth and drizzle-kit
+generates the SQL migrations; the least-privilege role, RLS policies and GRANTs live
+in a hand-written migration alongside. Because Blink is zero-knowledge, Postgres only
+ever stores ciphertext; the API enforces *who* can read *which* rows via per-request
+Row-Level Security (`withUser` sets `app.current_user_id` inside each transaction).
+`HttpSyncTransport` (the default) targets this API; `SupabaseSyncTransport` remains as
+a managed-cloud option for tenants who don't self-host.
 
 ### Capture data flow
 
@@ -60,12 +64,21 @@ Type-check everything: `pnpm typecheck` · Lint/format: `pnpm lint` / `pnpm form
 ### Self-hosted cloud tier (Postgres + sync API)
 
 ```bash
-docker compose up          # Postgres (auto-runs db/migrations) + the sync API
+docker compose up          # Postgres (auto-runs migrations) + the sync API
+# host port clashes with a local Postgres? → POSTGRES_PORT=5433 docker compose up
+
 pnpm --filter @blink/sync-server dev   # or run the API on the host (Node ≥ 23.6)
 ```
 
 The API listens on `:8787` (`/health`, `/v1/sync/push`, `/v1/sync/pull`). Point the
 desktop client at it via `SYNC_API_URL`. See `.env.example`.
+
+Schema changes go through Drizzle:
+
+```bash
+pnpm --filter @blink/db db:generate    # regenerate SQL migrations from the TS schema
+pnpm --filter @blink/db db:migrate     # apply migrations to $DATABASE_URL (real deploys)
+```
 
 ### Icons
 
@@ -87,8 +100,8 @@ blink/
 │   ├── core/              # shared types, brand theme tokens, DLP patterns
 │   ├── ai/                # local-ONNX / cloud title generation (seam)
 │   ├── crypto/            # zero-knowledge E2EE primitives
+│   ├── db/                # Drizzle schema, client (withUser/RLS), migrations
 │   └── sync/              # CRDT engine + Http/Supabase transports (seam)
-├── db/migrations/         # self-hosted Postgres schema (RLS, ciphertext columns)
 ├── docker-compose.yml     # Postgres + sync API for local self-hosting
 └── scripts/               # repo tooling
 ```
