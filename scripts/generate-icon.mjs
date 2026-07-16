@@ -1,10 +1,11 @@
 // Generates a 1024×1024 source PNG for Blink's app icon using only Node built-ins.
 // A "crystal ball" mark on the architecture doc's dark-violet palette.
 // Run `pnpm tauri icon` afterwards to expand it into the platform icon set.
-import { deflateSync } from 'node:zlib';
+
 import { writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { deflateSync } from 'node:zlib';
 
 const SIZE = 1024;
 
@@ -92,6 +93,9 @@ const png = Buffer.concat([
   chunk('IEND', Buffer.alloc(0)),
 ]);
 
-const out = resolve(dirname(fileURLToPath(import.meta.url)), '../apps/desktop/src-tauri/app-icon.png');
+const out = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../apps/desktop/src-tauri/app-icon.png',
+);
 writeFileSync(out, png);
 console.log(`wrote ${out} (${png.length} bytes)`);

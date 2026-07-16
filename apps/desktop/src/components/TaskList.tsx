@@ -36,6 +36,7 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
                   </p>
                 </div>
                 <button
+                  type="button"
                   onClick={async () => {
                     await api.deleteTask(task.id);
                     onChanged();

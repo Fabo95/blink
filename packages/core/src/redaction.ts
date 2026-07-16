@@ -15,7 +15,8 @@ export interface RedactionPattern {
 export const REDACTION_PATTERNS: readonly RedactionPattern[] = [
   {
     kind: 'private-key',
-    regex: /-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----/g,
+    regex:
+      /-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----/g,
     replacement: '[REDACTED_PRIVATE_KEY]',
   },
   {

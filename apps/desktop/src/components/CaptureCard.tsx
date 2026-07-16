@@ -1,6 +1,6 @@
 import { LocalOnnxTitleGenerator } from '@blink/ai';
 import type { CaptureDraft, NewTask } from '@blink/core';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 
 const titleEngine = new LocalOnnxTitleGenerator();
@@ -66,6 +66,7 @@ export function CaptureCard({ onSaved }: CaptureCardProps) {
           Capture
         </h2>
         <button
+          type="button"
           onClick={loadFromClipboard}
           disabled={busy}
           className="rounded-md border border-blink-primary/40 bg-blink-primary/10 px-3 py-1.5 text-xs font-medium text-blink-soft transition hover:bg-blink-primary/20 disabled:opacity-50"
@@ -76,17 +77,15 @@ export function CaptureCard({ onSaved }: CaptureCardProps) {
 
       {!draft ? (
         <p className="text-sm text-blink-muted">
-          Mark text anywhere, hit the global shortcut, and Blink sanitizes it locally before it
-          ever becomes a task. Nothing leaves this machine.
+          Mark text anywhere, hit the global shortcut, and Blink sanitizes it locally before it ever
+          becomes a task. Nothing leaves this machine.
         </p>
       ) : (
         <div className="space-y-3">
           <div className="flex flex-wrap gap-2 text-[11px] text-blink-muted">
             <Badge>{draft.source.appId}</Badge>
             <Badge>{draft.source.windowTitle}</Badge>
-            {redactions > 0 && (
-              <Badge tone="danger">{redactions} secret(s) redacted locally</Badge>
-            )}
+            {redactions > 0 && <Badge tone="danger">{redactions} secret(s) redacted locally</Badge>}
           </div>
 
           <label className="block text-xs text-blink-muted">
@@ -110,12 +109,14 @@ export function CaptureCard({ onSaved }: CaptureCardProps) {
 
           <div className="flex justify-end gap-2">
             <button
+              type="button"
               onClick={() => setDraft(null)}
               className="rounded-md px-3 py-1.5 text-xs text-blink-muted hover:text-blink-text"
             >
               Discard
             </button>
             <button
+              type="button"
               onClick={save}
               disabled={busy || !title.trim()}
               className="rounded-md bg-blink-primary px-4 py-1.5 text-xs font-medium text-white transition hover:bg-blink-bright disabled:opacity-50"

@@ -51,7 +51,10 @@ export async function deriveKey(password: string, salt: Uint8Array): Promise<Cry
 }
 
 /** Encrypt a single sensitive field into a self-describing envelope. */
-export async function encryptField(plaintext: string, password: string): Promise<EncryptedEnvelope> {
+export async function encryptField(
+  plaintext: string,
+  password: string,
+): Promise<EncryptedEnvelope> {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(GCM_IV_BYTES));
   const key = await deriveKey(password, salt);
@@ -63,7 +66,12 @@ export async function encryptField(plaintext: string, password: string): Promise
   return {
     ciphertext: toBase64(new Uint8Array(ciphertext)),
     iv: toBase64(iv),
-    kdf: { algorithm: 'PBKDF2', hash: 'SHA-256', iterations: PBKDF2_ITERATIONS, salt: toBase64(salt) },
+    kdf: {
+      algorithm: 'PBKDF2',
+      hash: 'SHA-256',
+      iterations: PBKDF2_ITERATIONS,
+      salt: toBase64(salt),
+    },
   };
 }
 

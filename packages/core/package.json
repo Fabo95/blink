@@ -10,7 +10,6 @@
     "./theme": "./src/theme.ts"
   },
   "scripts": {
-    "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
