@@ -67,7 +67,7 @@ Type-check everything: `pnpm typecheck` · Lint/format: `pnpm lint` / `pnpm form
 docker compose up          # Postgres (auto-runs migrations) + the sync API
 # host port clashes with a local Postgres? → POSTGRES_PORT=5433 docker compose up
 
-pnpm --filter @blink/sync-server dev   # or run the API on the host (Node ≥ 23.6)
+pnpm --filter @blink/sync-server dev   # or run the Fastify API on the host (tsx watch)
 ```
 
 The API listens on `:8787` (`/health`, `/v1/sync/push`, `/v1/sync/pull`). Point the
@@ -95,7 +95,15 @@ pnpm --filter @blink/desktop tauri icon src-tauri/app-icon.png
 blink/
 ├── apps/
 │   ├── desktop/           # Tauri app: React frontend + Rust core (src-tauri)
-│   └── sync-server/       # thin self-hosted sync API (Node, zero runtime deps)
+│   └── sync-server/       # self-hosted sync API (Fastify + Zod + Drizzle)
+│       └── src/
+│           ├── index.ts   # bootstrap: listen + graceful shutdown
+│           ├── server.ts  # createServer(): plugins, zod, error handler
+│           ├── router.ts  # registers route plugins
+│           ├── routes/    # thin handlers, always <feature>/latest.ts
+│           ├── services/  # common/ (business logic) + model/ (Drizzle wrappers)
+│           ├── setup/     # database, dependencies (container), logger
+│           └── utils/     # errors, response, schemas
 ├── packages/
 │   ├── core/              # shared types, brand theme tokens, DLP patterns
 │   ├── ai/                # local-ONNX / cloud title generation (seam)

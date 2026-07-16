@@ -91,8 +91,9 @@ export class HttpSyncTransport implements SyncTransport {
     url.searchParams.set('since', String(since?.physical ?? 0));
     const res = await fetch(url, { headers: this.headers() });
     if (!res.ok) throw new Error(`sync pull failed: ${res.status}`);
-    const body = (await res.json()) as { packets: SyncPacket[] };
-    return body.packets;
+    // The sync API wraps success responses in a `{ data, reqId }` envelope.
+    const body = (await res.json()) as { data: { packets: SyncPacket[] } };
+    return body.data.packets;
   }
 
   private headers(): Record<string, string> {
