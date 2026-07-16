@@ -67,10 +67,47 @@ export class CrdtSyncEngine {
 }
 
 /**
- * Supabase-backed transport seam.
+ * Self-hosted transport — the default for VPC / on-premise tenants.
+ *
+ * Talks to the Blink sync API (`apps/sync-server`), which is the only thing that
+ * touches Cloud-Postgres. The client never sees the DB; it sends already-E2EE
+ * {@link SyncPacket}s over HTTPS with a bearer token the API maps onto a
+ * Row-Level-Security session. See `db/migrations`.
+ */
+export class HttpSyncTransport implements SyncTransport {
+  constructor(private readonly config: { baseUrl: string; token: string }) {}
+
+  async push(packets: SyncPacket[]): Promise<void> {
+    const res = await fetch(`${this.config.baseUrl}/v1/sync/push`, {
+      method: 'POST',
+      headers: this.headers(),
+      body: JSON.stringify({ packets }),
+    });
+    if (!res.ok) throw new Error(`sync push failed: ${res.status}`);
+  }
+
+  async pull(since: HybridLogicalClock | null): Promise<SyncPacket[]> {
+    const url = new URL(`${this.config.baseUrl}/v1/sync/pull`);
+    url.searchParams.set('since', String(since?.physical ?? 0));
+    const res = await fetch(url, { headers: this.headers() });
+    if (!res.ok) throw new Error(`sync pull failed: ${res.status}`);
+    const body = (await res.json()) as { packets: SyncPacket[] };
+    return body.packets;
+  }
+
+  private headers(): Record<string, string> {
+    return {
+      'content-type': 'application/json',
+      authorization: `Bearer ${this.config.token}`,
+    };
+  }
+}
+
+/**
+ * Managed-cloud transport — for hosted Blink tenants who don't self-host.
  *
  * TODO(phase-2): construct a `@supabase/supabase-js` client and map push/pull
- * onto the `tasks` table (Row-Level Security enforced). See `supabase/migrations`.
+ * onto the `tasks` table (Row-Level Security enforced).
  */
 export class SupabaseSyncTransport implements SyncTransport {
   constructor(private readonly config: { url: string; anonKey: string }) {}

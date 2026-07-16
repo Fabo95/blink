@@ -20,8 +20,15 @@ end-to-end encrypted client-side so even the operator only stores ciphertext.
 | Local Database   | SQLite via SQLCipher (AES-256)| `src-tauri/src/store.rs` · in-memory stub for now |
 | Local AI Engine  | ONNX Runtime / local LLM      | `packages/ai`              |
 | Zero-Knowledge E2EE | PBKDF2 + AES-GCM (WebCrypto)| `packages/crypto`          |
-| Cloud Sync       | CRDT → Postgres (Supabase)    | `packages/sync`, `supabase/` |
+| Cloud Sync       | CRDT → self-hosted Postgres   | `packages/sync`, `apps/sync-server`, `db/` |
 | Shared model     | Types, theme, DLP patterns    | `packages/core`            |
+
+The cloud tier is **self-hosted**: a thin sync API (`apps/sync-server`) is the only
+thing that talks to Postgres, so raw DB access is never exposed to clients. Because
+Blink is zero-knowledge, Postgres only ever stores ciphertext; the API enforces
+*who* can read *which* rows via per-request Row-Level Security. `HttpSyncTransport`
+(the default) targets this API; `SupabaseSyncTransport` remains as a managed-cloud
+option for tenants who don't self-host.
 
 ### Capture data flow
 
@@ -48,7 +55,17 @@ pnpm desktop
 pnpm tauri dev
 ```
 
-Type-check everything: `pnpm typecheck` · Build: `pnpm build`.
+Type-check everything: `pnpm typecheck` · Lint/format: `pnpm lint` / `pnpm format`.
+
+### Self-hosted cloud tier (Postgres + sync API)
+
+```bash
+docker compose up          # Postgres (auto-runs db/migrations) + the sync API
+pnpm --filter @blink/sync-server dev   # or run the API on the host (Node ≥ 23.6)
+```
+
+The API listens on `:8787` (`/health`, `/v1/sync/push`, `/v1/sync/pull`). Point the
+desktop client at it via `SYNC_API_URL`. See `.env.example`.
 
 ### Icons
 
@@ -63,13 +80,16 @@ pnpm --filter @blink/desktop tauri icon src-tauri/app-icon.png
 
 ```
 blink/
-├── apps/desktop/          # Tauri app: React frontend + Rust core (src-tauri)
+├── apps/
+│   ├── desktop/           # Tauri app: React frontend + Rust core (src-tauri)
+│   └── sync-server/       # thin self-hosted sync API (Node, zero runtime deps)
 ├── packages/
 │   ├── core/              # shared types, brand theme tokens, DLP patterns
 │   ├── ai/                # local-ONNX / cloud title generation (seam)
 │   ├── crypto/            # zero-knowledge E2EE primitives
-│   └── sync/              # CRDT sync engine + Supabase transport (seam)
-├── supabase/migrations/   # Cloud-Postgres schema (RLS, ciphertext columns)
+│   └── sync/              # CRDT engine + Http/Supabase transports (seam)
+├── db/migrations/         # self-hosted Postgres schema (RLS, ciphertext columns)
+├── docker-compose.yml     # Postgres + sync API for local self-hosting
 └── scripts/               # repo tooling
 ```
 

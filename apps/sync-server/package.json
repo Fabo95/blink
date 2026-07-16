@@ -1,0 +1,18 @@
+{
+  "name": "@blink/sync-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Blink self-hosted sync API — the thin tier between clients and Cloud-Postgres.",
+  "scripts": {
+    "dev": "node --watch src/index.ts",
+    "start": "node src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@blink/core": "workspace:*",
+    "@blink/sync": "workspace:*",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}
