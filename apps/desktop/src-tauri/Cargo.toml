@@ -1,0 +1,28 @@
+[package]
+name = "blink"
+version = "0.1.0"
+description = "Blink — Enterprise-Ready Local-First Task Ingestion System"
+authors = ["Blink Inc."]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "blink_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+regex = "1"
+once_cell = "1"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["clock"] }
+
+[features]
+# Reserved for the SQLCipher-backed store (Phase 1 hardening). Until wired, the
+# store lives in-memory so the app builds without native SQLCipher libs.
+# sqlcipher = ["dep:rusqlite"]

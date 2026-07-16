@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1200px 600px at 50% -10%, rgba(139, 92, 246, 0.14), transparent 60%),
+      #0e0b16;
+    color: #ece9f5;
+    font-family:
+      Inter, system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* The accent bar the architecture doc uses before every section heading. */
+  .section-bar::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 1.1em;
+    margin-right: 0.6rem;
+    border-radius: 2px;
+    background: #8b5cf6;
+    transform: translateY(0.15em);
+  }
+}

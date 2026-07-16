@@ -1,0 +1,24 @@
+{
+  "name": "blink",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Blink — Enterprise-Ready Local-First Task Ingestion System",
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md,css}\"",
+    "desktop": "pnpm --filter @blink/desktop dev",
+    "tauri": "pnpm --filter @blink/desktop tauri"
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  }
+}
