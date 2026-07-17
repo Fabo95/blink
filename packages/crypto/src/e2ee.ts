@@ -8,23 +8,13 @@
 // NOTE: not wired into the app yet — this is the ready building block for Phase-2
 // sync.
 
-const PBKDF2_ITERATIONS = 310_000; // OWASP 2023 floor for PBKDF2-HMAC-SHA256
+// The envelope shape is owned by the wire contract (single source of truth); we
+// just produce and consume values of it here.
+import type { EncryptedEnvelope } from '@blink/contract/wire';
 
-/** A self-describing, opaque ciphertext blob — everything needed to decrypt it
- * given the password. */
-export interface EncryptedEnvelope {
-  /** base64 AES-GCM ciphertext (includes auth tag). */
-  ciphertext: string;
-  /** base64 random IV, unique per encryption. */
-  iv: string;
-  kdf: {
-    algorithm: 'PBKDF2';
-    hash: 'SHA-256';
-    iterations: number;
-    /** base64 salt. */
-    salt: string;
-  };
-}
+export type { EncryptedEnvelope };
+
+const PBKDF2_ITERATIONS = 310_000; // OWASP 2023 floor for PBKDF2-HMAC-SHA256
 
 export async function encryptField(
   plaintext: string,

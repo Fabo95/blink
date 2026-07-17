@@ -90,6 +90,9 @@ importers:
 
   apps/sync-server:
     dependencies:
+      '@blink/contract':
+        specifier: workspace:*
+        version: link:../../packages/contract
       '@blink/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -141,6 +144,16 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
 
+  packages/contract:
+    dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+
   packages/core:
     devDependencies:
       typescript:
@@ -148,6 +161,10 @@ importers:
         version: 7.0.2
 
   packages/crypto:
+    dependencies:
+      '@blink/contract':
+        specifier: workspace:*
+        version: link:../contract
     devDependencies:
       typescript:
         specifier: ^7.0.2
@@ -174,12 +191,9 @@ importers:
 
   packages/sync:
     dependencies:
-      '@blink/core':
+      '@blink/contract':
         specifier: workspace:*
-        version: link:../core
-      '@blink/crypto':
-        specifier: workspace:*
-        version: link:../crypto
+        version: link:../contract
     devDependencies:
       typescript:
         specifier: ^7.0.2

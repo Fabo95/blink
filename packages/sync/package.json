@@ -10,8 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@blink/core": "workspace:*",
-    "@blink/crypto": "workspace:*"
+    "@blink/contract": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^7.0.2"

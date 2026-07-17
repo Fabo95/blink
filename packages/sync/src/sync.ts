@@ -1,30 +1,13 @@
-import type { Task } from '@blink/core/models';
-import type { EncryptedEnvelope } from '@blink/crypto/e2ee';
+import type { SyncPacket } from '@blink/contract/wire';
 
-// How the client talks to the self-hosted sync API (apps/sync-server). Defines
-// the wire format and the push/pull calls.
+// The client half of the sync boundary: how the app talks to the self-hosted sync
+// API (apps/sync-server). The wire shapes come from @blink/contract (single
+// source of truth); this file is just the two HTTP calls.
 //
 // NOTE: not wired into the app yet — the conflict-free (CRDT) merge and the
-// realtime subscription are Phase-2 work. This file is just the wire format plus
-// the two HTTP calls.
+// realtime subscription are Phase-2 work.
 
-/** A per-device clock used to order and merge concurrent edits. */
-export interface HybridLogicalClock {
-  physical: number;
-  counter: number;
-  nodeId: string;
-}
-
-/** The unit sent to / from the cloud. Sensitive fields are already ciphertext. */
-export interface SyncPacket {
-  taskId: string;
-  clock: HybridLogicalClock;
-  status: Task['status'];
-  encrypted: {
-    title: EncryptedEnvelope;
-    body: EncryptedEnvelope;
-  };
-}
+export type { HybridLogicalClock, SyncPacket } from '@blink/contract/wire';
 
 export interface SyncServer {
   baseUrl: string;

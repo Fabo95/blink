@@ -9,6 +9,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@blink/contract": "workspace:*"
+  },
   "devDependencies": {
     "typescript": "^7.0.2"
   }
