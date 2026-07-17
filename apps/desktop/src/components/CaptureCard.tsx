@@ -1,7 +1,14 @@
 import { LocalOnnxTitleGenerator } from '@blink/ai';
 import type { CaptureDraft, NewTask } from '@blink/core';
-import { type ReactNode, useCallback, useEffect, useState } from 'react';
-import { api } from '../lib/api.js';
+import { ClipboardPaste, ShieldCheck, Sparkles } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { api } from '@/lib/api';
 
 const titleEngine = new LocalOnnxTitleGenerator();
 
@@ -14,6 +21,7 @@ export function CaptureCard({ onSaved }: CaptureCardProps) {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
+  const [redactions, setRedactions] = useState(0);
 
   const loadFromClipboard = useCallback(async () => {
     setBusy(true);
@@ -29,7 +37,6 @@ export function CaptureCard({ onSaved }: CaptureCardProps) {
   }, []);
 
   // Keep the redaction count live as the user edits the body.
-  const [redactions, setRedactions] = useState(0);
   useEffect(() => {
     let cancelled = false;
     if (!body) {
@@ -60,86 +67,64 @@ export function CaptureCard({ onSaved }: CaptureCardProps) {
   }, [draft, title, body, onSaved]);
 
   return (
-    <section className="rounded-xl border border-blink-border bg-blink-surface p-5 shadow-glow">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="section-bar text-sm font-semibold uppercase tracking-wide text-blink-bright">
+    <Card className="shadow-glow">
+      <CardHeader className="flex-row items-center justify-between space-y-0">
+        <CardTitle className="section-bar text-sm font-semibold uppercase tracking-wide text-primary">
           Capture
-        </h2>
-        <button
-          type="button"
-          onClick={loadFromClipboard}
-          disabled={busy}
-          className="rounded-md border border-blink-primary/40 bg-blink-primary/10 px-3 py-1.5 text-xs font-medium text-blink-soft transition hover:bg-blink-primary/20 disabled:opacity-50"
-        >
+        </CardTitle>
+        <Button variant="outline" size="sm" onClick={loadFromClipboard} disabled={busy}>
+          <ClipboardPaste />
           ⌘⇧B · Read clipboard
-        </button>
-      </div>
+        </Button>
+      </CardHeader>
 
-      {!draft ? (
-        <p className="text-sm text-blink-muted">
-          Mark text anywhere, hit the global shortcut, and Blink sanitizes it locally before it ever
-          becomes a task. Nothing leaves this machine.
-        </p>
-      ) : (
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-2 text-[11px] text-blink-muted">
-            <Badge>{draft.source.appId}</Badge>
-            <Badge>{draft.source.windowTitle}</Badge>
-            {redactions > 0 && <Badge tone="danger">{redactions} secret(s) redacted locally</Badge>}
+      <CardContent>
+        {!draft ? (
+          <p className="text-sm text-muted-foreground">
+            Mark text anywhere, hit the global shortcut, and Blink sanitizes it locally before it
+            ever becomes a task. Nothing leaves this machine.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="secondary">{draft.source.appId}</Badge>
+              <Badge variant="secondary">{draft.source.windowTitle}</Badge>
+              {redactions > 0 && (
+                <Badge variant="destructive" className="gap-1">
+                  <ShieldCheck className="size-3" />
+                  {redactions} secret(s) redacted locally
+                </Badge>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="capture-title">Title</Label>
+              <Input id="capture-title" value={title} onChange={(e) => setTitle(e.target.value)} />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="capture-body">Body (sanitized)</Label>
+              <Textarea
+                id="capture-body"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                rows={5}
+                className="font-mono text-xs text-blink-code"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setDraft(null)}>
+                Discard
+              </Button>
+              <Button onClick={save} disabled={busy || !title.trim()}>
+                <Sparkles />
+                Save task
+              </Button>
+            </div>
           </div>
-
-          <label className="block text-xs text-blink-muted">
-            Title
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="mt-1 w-full rounded-md border border-blink-border bg-blink-bg px-3 py-2 text-sm text-blink-text outline-none focus:border-blink-primary"
-            />
-          </label>
-
-          <label className="block text-xs text-blink-muted">
-            Body (sanitized)
-            <textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              rows={5}
-              className="mt-1 w-full resize-y rounded-md border border-blink-border bg-blink-bg px-3 py-2 font-mono text-xs text-blink-code outline-none focus:border-blink-primary"
-            />
-          </label>
-
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setDraft(null)}
-              className="rounded-md px-3 py-1.5 text-xs text-blink-muted hover:text-blink-text"
-            >
-              Discard
-            </button>
-            <button
-              type="button"
-              onClick={save}
-              disabled={busy || !title.trim()}
-              className="rounded-md bg-blink-primary px-4 py-1.5 text-xs font-medium text-white transition hover:bg-blink-bright disabled:opacity-50"
-            >
-              Save task
-            </button>
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function Badge({ children, tone }: { children: ReactNode; tone?: 'danger' }) {
-  return (
-    <span
-      className={`rounded-full border px-2 py-0.5 ${
-        tone === 'danger'
-          ? 'border-blink-danger/40 bg-blink-danger/10 text-blink-danger'
-          : 'border-blink-border bg-blink-elevated text-blink-muted'
-      }`}
-    >
-      {children}
-    </span>
+        )}
+      </CardContent>
+    </Card>
   );
 }

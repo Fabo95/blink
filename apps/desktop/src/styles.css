@@ -3,8 +3,35 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
+  /* shadcn/ui tokens wired to the Blink violet palette (dark-only product, so
+     the dark values live on :root; .dark mirrors them for the class toggle). */
+  :root,
+  .dark {
+    --background: 256 33% 6%;
+    --foreground: 255 38% 94%;
+    --card: 260 24% 10%;
+    --card-foreground: 255 38% 94%;
+    --popover: 255 33% 14%;
+    --popover-foreground: 255 38% 94%;
+    --primary: 258 90% 66%;
+    --primary-foreground: 250 100% 98%;
+    --secondary: 255 33% 14%;
+    --secondary-foreground: 255 38% 94%;
+    --muted: 255 33% 14%;
+    --muted-foreground: 255 13% 63%;
+    --accent: 254 29% 19%;
+    --accent-foreground: 255 38% 94%;
+    --destructive: 0 91% 71%;
+    --destructive-foreground: 332 41% 7%;
+    --border: 254 29% 19%;
+    --input: 254 29% 19%;
+    --ring: 258 90% 66%;
+    --radius: 0.5rem;
     color-scheme: dark;
+  }
+
+  * {
+    border-color: hsl(var(--border));
   }
 
   html,
@@ -14,10 +41,15 @@
   }
 
   body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
     margin: 0;
-    background:
-      radial-gradient(1200px 600px at 50% -10%, rgba(139, 92, 246, 0.14), transparent 60%), #0e0b16;
-    color: #ece9f5;
+    background-image: radial-gradient(
+      1200px 600px at 50% -10%,
+      rgba(139, 92, 246, 0.14),
+      transparent 60%
+    );
+    background-attachment: fixed;
     font-family: Inter, system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
@@ -30,7 +62,7 @@
     height: 1.1em;
     margin-right: 0.6rem;
     border-radius: 2px;
-    background: #8b5cf6;
+    background: hsl(var(--primary));
     transform: translateY(0.15em);
   }
 }
