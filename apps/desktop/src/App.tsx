@@ -1,4 +1,4 @@
-import type { Task } from '@blink/core/models/task';
+import type { Task } from '@blink/core/models';
 import { useCallback, useEffect, useState } from 'react';
 import { CaptureCard } from '@/components/CaptureCard';
 import { Header } from '@/components/Header';

@@ -1,4 +1,4 @@
-import type { CaptureDraft, NewTask, SanitizeResult, Task } from '@blink/core/models/task';
+import type { CaptureDraft, NewTask, SanitizeResult, Task } from '@blink/core/models';
 
 /**
  * Typed façade over the Tauri IPC boundary. Each method maps to a `#[tauri::command]`

@@ -1,17 +1,15 @@
-import type { RedactionKind } from '../models/task.js';
+import type { RedactionKind, SanitizeResult } from './models.js';
+
+// The list of secret patterns to scrub, and a function that scrubs them. This is
+// the JavaScript mirror of the real Rust filter in `src-tauri/src/security.rs` —
+// kept in parity so any client-side or export-time scrubbing matches.
 
 export interface RedactionPattern {
   kind: RedactionKind;
   regex: RegExp;
-  /** Placeholder substituted for a match. */
   replacement: string;
 }
 
-/**
- * The DLP pattern catalogue. Kept in `@blink/core` so the TypeScript client, the
- * export gateway, and any future JS tooling redact identically to the Rust core.
- * The Rust `security_filter` module mirrors these patterns for the capture path.
- */
 export const REDACTION_PATTERNS: readonly RedactionPattern[] = [
   {
     kind: 'private-key',
@@ -40,3 +38,19 @@ export const REDACTION_PATTERNS: readonly RedactionPattern[] = [
     replacement: 'password=[REDACTED]',
   },
 ];
+
+export function sanitize(input: string): SanitizeResult {
+  let clean = input;
+  let redactionCount = 0;
+  const matched = new Set<RedactionKind>();
+
+  for (const { kind, regex, replacement } of REDACTION_PATTERNS) {
+    clean = clean.replace(regex, () => {
+      redactionCount += 1;
+      matched.add(kind);
+      return replacement;
+    });
+  }
+
+  return { clean, redactionCount, matched: [...matched] };
+}

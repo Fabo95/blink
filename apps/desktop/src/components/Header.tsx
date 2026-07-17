@@ -1,4 +1,4 @@
-import { brand } from '@blink/core/theme/brand';
+import { brand } from '@blink/core/theme';
 import { Badge } from '@/components/ui/badge';
 import { isTauri } from '@/lib/api';
 import { cn } from '@/lib/utils';

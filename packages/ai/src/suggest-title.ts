@@ -1,4 +1,4 @@
-import type { CaptureDraft } from '@blink/core/models/task';
+import type { CaptureDraft } from '@blink/core/models';
 
 export interface TitleSuggestion {
   title: string;

@@ -1,5 +1,5 @@
 import { suggestTitle } from '@blink/ai/suggest-title';
-import type { CaptureDraft, NewTask } from '@blink/core/models/task';
+import type { CaptureDraft, NewTask } from '@blink/core/models';
 import { ClipboardPaste, ShieldCheck, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
