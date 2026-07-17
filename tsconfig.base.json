@@ -15,13 +15,12 @@
     "verbatimModuleSyntax": true,
     "forceConsistentCasingInFileNames": true,
     "declaration": true,
-    "baseUrl": ".",
     "paths": {
-      "@blink/core": ["packages/core/src/index.ts"],
-      "@blink/ai": ["packages/ai/src/index.ts"],
-      "@blink/crypto": ["packages/crypto/src/index.ts"],
-      "@blink/db": ["packages/db/src/index.ts"],
-      "@blink/sync": ["packages/sync/src/index.ts"]
+      "@blink/core": ["./packages/core/src/index.ts"],
+      "@blink/ai": ["./packages/ai/src/index.ts"],
+      "@blink/crypto": ["./packages/crypto/src/index.ts"],
+      "@blink/db": ["./packages/db/src/index.ts"],
+      "@blink/sync": ["./packages/sync/src/index.ts"]
     }
   }
 }

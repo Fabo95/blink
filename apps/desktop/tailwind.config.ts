@@ -1,5 +1,4 @@
 import type { Config } from 'tailwindcss';
-import animate from 'tailwindcss-animate';
 
 // Palette mirrors packages/core/src/theme.ts (the single source of brand truth).
 // shadcn/ui tokens (below) are wired to the same violet palette via CSS variables
@@ -72,5 +71,5 @@ export default {
       },
     },
   },
-  plugins: [animate],
+  plugins: [],
 } satisfies Config;

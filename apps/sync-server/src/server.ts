@@ -50,8 +50,10 @@ export function createServer() {
     let apiError: ApiError | undefined;
 
     if (hasZodFastifySchemaValidationErrors(err)) {
+      // Map from Fastify's stable validation fields (version-agnostic across
+      // fastify-type-provider-zod releases).
       apiError = new ApiError('validation', 'Validation error', {
-        issues: err.validation.map((e) => e.params.issue),
+        issues: err.validation.map((e) => ({ path: e.instancePath, message: e.message })),
       });
     }
 

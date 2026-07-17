@@ -33,14 +33,13 @@ export interface EncryptedEnvelope {
  * Derive the symmetric master key from the user's master password / IdP secret.
  * The salt should be persisted (it is not secret) and reused for the account.
  */
-export async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
-  const material = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(password),
-    'PBKDF2',
-    false,
-    ['deriveKey'],
-  );
+export async function deriveKey(
+  password: string,
+  salt: Uint8Array<ArrayBuffer>,
+): Promise<CryptoKey> {
+  const material = await crypto.subtle.importKey('raw', encodeUtf8(password), 'PBKDF2', false, [
+    'deriveKey',
+  ]);
   return crypto.subtle.deriveKey(
     { name: 'PBKDF2', hash: 'SHA-256', iterations: PBKDF2_ITERATIONS, salt },
     material,
@@ -61,7 +60,7 @@ export async function encryptField(
   const ciphertext = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv },
     key,
-    new TextEncoder().encode(plaintext),
+    encodeUtf8(plaintext),
   );
   return {
     ciphertext: toBase64(new Uint8Array(ciphertext)),
@@ -88,13 +87,21 @@ export async function decryptField(envelope: EncryptedEnvelope, password: string
   return new TextDecoder().decode(plaintext);
 }
 
+// WebCrypto (TS 7 lib) requires ArrayBuffer-backed views, so pin the buffer type.
+function encodeUtf8(text: string): Uint8Array<ArrayBuffer> {
+  const src = new TextEncoder().encode(text);
+  const out = new Uint8Array(src.byteLength);
+  out.set(src);
+  return out;
+}
+
 function toBase64(bytes: Uint8Array): string {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary);
 }
 
-function fromBase64(value: string): Uint8Array {
+function fromBase64(value: string): Uint8Array<ArrayBuffer> {
   const binary = atob(value);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
