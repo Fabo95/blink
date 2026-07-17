@@ -29,14 +29,6 @@ export interface CaptureDraft {
   source: CaptureSource;
 }
 
-/** Result of running the local Data-Loss-Prevention filter over a text. */
-export interface SanitizeResult {
-  clean: string;
-  redactionCount: number;
-  /** Which pattern kinds matched, for the "why was this redacted" affordance. */
-  matched: RedactionKind[];
-}
-
 export type RedactionKind =
   | 'api-key'
   | 'password'
@@ -45,6 +37,14 @@ export type RedactionKind =
   | 'aws-access-key'
   | 'email'
   | 'ip-address';
+
+/** Result of running the local Data-Loss-Prevention filter over a text. */
+export interface SanitizeResult {
+  clean: string;
+  redactionCount: number;
+  /** Which pattern kinds matched, for the "why was this redacted" affordance. */
+  matched: RedactionKind[];
+}
 
 export interface Task {
   id: string;

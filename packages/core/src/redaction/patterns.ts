@@ -1,10 +1,5 @@
-import type { RedactionKind } from './types.js';
+import type { RedactionKind } from '../models/index.js';
 
-/**
- * The DLP pattern catalogue. Kept in `@blink/core` so the TypeScript client, the
- * export gateway, and any future JS tooling redact identically to the Rust core.
- * The Rust `security_filter` module mirrors these patterns for the capture path.
- */
 export interface RedactionPattern {
   kind: RedactionKind;
   regex: RegExp;
@@ -12,6 +7,11 @@ export interface RedactionPattern {
   replacement: string;
 }
 
+/**
+ * The DLP pattern catalogue. Kept in `@blink/core` so the TypeScript client, the
+ * export gateway, and any future JS tooling redact identically to the Rust core.
+ * The Rust `security_filter` module mirrors these patterns for the capture path.
+ */
 export const REDACTION_PATTERNS: readonly RedactionPattern[] = [
   {
     kind: 'private-key',
@@ -40,28 +40,3 @@ export const REDACTION_PATTERNS: readonly RedactionPattern[] = [
     replacement: 'password=[REDACTED]',
   },
 ];
-
-/**
- * Reference JS implementation of the local security filter. The authoritative
- * capture-path filter lives in Rust; this keeps parity for any client-side or
- * export-time sanitization.
- */
-export function sanitize(input: string): {
-  clean: string;
-  redactionCount: number;
-  matched: RedactionKind[];
-} {
-  let clean = input;
-  let redactionCount = 0;
-  const matched = new Set<RedactionKind>();
-
-  for (const { kind, regex, replacement } of REDACTION_PATTERNS) {
-    clean = clean.replace(regex, () => {
-      redactionCount += 1;
-      matched.add(kind);
-      return replacement;
-    });
-  }
-
-  return { clean, redactionCount, matched: [...matched] };
-}

@@ -1,3 +1,3 @@
-export * from './redaction.js';
-export * from './theme.js';
-export * from './types.js';
+export * from './models/index.js';
+export * from './redaction/index.js';
+export * from './theme/index.js';
