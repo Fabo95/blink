@@ -20,6 +20,7 @@ serde_json = "1"
 regex = "1"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["clock"] }
+ts-rs = "10.1.0"
 
 # Global shortcuts are desktop-only (the "capture from anywhere" hotkey).
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]

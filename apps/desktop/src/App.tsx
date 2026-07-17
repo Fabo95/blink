@@ -1,8 +1,8 @@
-import type { Task } from '@blink/core/models';
 import { useCallback, useEffect, useState } from 'react';
 import { CaptureCard } from '@/components/CaptureCard';
 import { Header } from '@/components/Header';
 import { TaskList } from '@/components/TaskList';
+import type { Task } from '@/generated/Task';
 import { api } from '@/lib/api';
 
 export function App() {

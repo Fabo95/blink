@@ -26,12 +26,6 @@ importers:
       '@blink/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@blink/crypto':
-        specifier: workspace:*
-        version: link:../../packages/crypto
-      '@blink/sync':
-        specifier: workspace:*
-        version: link:../../packages/sync
       '@radix-ui/react-label':
         specifier: ^2.1.11
         version: 2.1.11(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -135,10 +129,6 @@ importers:
         version: 7.0.2
 
   packages/ai:
-    dependencies:
-      '@blink/core':
-        specifier: workspace:*
-        version: link:../core
     devDependencies:
       typescript:
         specifier: ^7.0.2

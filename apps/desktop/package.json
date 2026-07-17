@@ -8,13 +8,12 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "gen:types": "cargo test --manifest-path src-tauri/Cargo.toml --lib",
     "tauri": "tauri"
   },
   "dependencies": {
     "@blink/ai": "workspace:*",
     "@blink/core": "workspace:*",
-    "@blink/crypto": "workspace:*",
-    "@blink/sync": "workspace:*",
     "@radix-ui/react-label": "^2.1.11",
     "@radix-ui/react-slot": "^1.3.0",
     "@tauri-apps/api": "^2.11.1",

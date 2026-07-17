@@ -1,5 +1,4 @@
 import { suggestTitle } from '@blink/ai/suggest-title';
-import type { CaptureDraft, NewTask } from '@blink/core/models';
 import { ClipboardPaste, ShieldCheck, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import type { CaptureDraft } from '@/generated/CaptureDraft';
+import type { NewTask } from '@/generated/NewTask';
 import { api, isTauri } from '@/lib/api';
 
 interface CaptureCardProps {

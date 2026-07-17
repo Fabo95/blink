@@ -1,4 +1,8 @@
-import type { CaptureDraft } from '@blink/core/models';
+/** The minimal input suggestTitle needs — decoupled from any specific task model. */
+export interface Snippet {
+  text: string;
+  source: { appId: string; windowTitle: string };
+}
 
 export interface TitleSuggestion {
   title: string;
@@ -12,7 +16,7 @@ export interface TitleSuggestion {
  * There is no real AI yet — when a model (on-device ONNX or a cloud model) is
  * added, this one function is where it plugs in.
  */
-export function suggestTitle(draft: CaptureDraft): TitleSuggestion {
+export function suggestTitle(draft: Snippet): TitleSuggestion {
   const firstLine = draft.text.trim().split('\n', 1)[0] ?? '';
   const words = firstLine.split(/\s+/).filter(Boolean).slice(0, 8);
   const title = words.join(' ') || 'Captured snippet';
