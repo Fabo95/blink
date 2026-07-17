@@ -1,4 +1,4 @@
-import { LocalOnnxTitleGenerator } from '@blink/ai/engines/local-onnx';
+import { suggestTitle } from '@blink/ai/suggest-title';
 import type { CaptureDraft, NewTask } from '@blink/core/models/task';
 import { ClipboardPaste, ShieldCheck, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
@@ -9,8 +9,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { api, isTauri } from '@/lib/api';
-
-const titleEngine = new LocalOnnxTitleGenerator();
 
 interface CaptureCardProps {
   onSaved: () => void;
@@ -29,8 +27,7 @@ export function CaptureCard({ onSaved }: CaptureCardProps) {
       const captured = await api.captureFromClipboard();
       setDraft(captured);
       setBody(captured.text);
-      const suggestion = await titleEngine.suggest(captured);
-      setTitle(suggestion.title);
+      setTitle(suggestTitle(captured).title);
     } finally {
       setBusy(false);
     }
