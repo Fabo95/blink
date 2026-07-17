@@ -21,6 +21,10 @@ regex = "1"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["clock"] }
 
+# Global shortcuts are desktop-only (the "capture from anywhere" hotkey).
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-global-shortcut = "2"
+
 [features]
 # Reserved for the SQLCipher-backed store (Phase 1 hardening). Until wired, the
 # store lives in-memory so the app builds without native SQLCipher libs.

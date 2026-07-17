@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { api } from '@/lib/api';
+import { api, isTauri } from '@/lib/api';
 
 const titleEngine = new LocalOnnxTitleGenerator();
 
@@ -35,6 +35,21 @@ export function CaptureCard({ onSaved }: CaptureCardProps) {
       setBusy(false);
     }
   }, []);
+
+  // The global ⌘⇧B shortcut (registered in the Rust core) emits this event from
+  // any app; run the capture flow when it fires.
+  useEffect(() => {
+    if (!isTauri) return;
+    let unlisten: (() => void) | undefined;
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen('capture-shortcut', () => {
+        void loadFromClipboard();
+      }).then((fn) => {
+        unlisten = fn;
+      });
+    });
+    return () => unlisten?.();
+  }, [loadFromClipboard]);
 
   // Keep the redaction count live as the user edits the body.
   useEffect(() => {
