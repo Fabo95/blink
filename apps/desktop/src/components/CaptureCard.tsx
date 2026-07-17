@@ -80,7 +80,7 @@ export function CaptureCard({ onSaved }: CaptureCardProps) {
   }, [draft, title, body, onSaved]);
 
   return (
-    <Card className="shadow-glow">
+    <Card className="panel">
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle className="section-bar text-sm font-semibold uppercase tracking-wide text-primary">
           Capture
@@ -130,7 +130,11 @@ export function CaptureCard({ onSaved }: CaptureCardProps) {
               <Button variant="ghost" onClick={() => setDraft(null)}>
                 Discard
               </Button>
-              <Button onClick={save} disabled={busy || !title.trim()}>
+              <Button
+                onClick={save}
+                disabled={busy || !title.trim()}
+                className="shadow-[0_6px_20px_-6px_hsl(258_90%_66%/0.55)]"
+              >
                 <Sparkles />
                 Save task
               </Button>

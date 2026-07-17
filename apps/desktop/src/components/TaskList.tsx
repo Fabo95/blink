@@ -12,7 +12,7 @@ interface TaskListProps {
 
 export function TaskList({ tasks, onChanged }: TaskListProps) {
   return (
-    <Card>
+    <Card className="panel">
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle className="section-bar text-sm font-semibold uppercase tracking-wide text-primary">
           Inbox

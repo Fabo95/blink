@@ -1,5 +1,5 @@
 // Blink's brand tokens — the dark-violet palette from the architecture doc.
-// The single source of truth for the app's colors, name and 🔮 wordmark.
+// The single source of truth for the app's colors, name and wordmark.
 
 export const palette = {
   bg: '#0e0b16',
@@ -20,7 +20,6 @@ export type PaletteToken = keyof typeof palette;
 
 export const brand = {
   name: 'Blink',
-  glyph: '🔮',
   tagline: 'Enterprise-Ready Local-First Task Ingestion',
 } as const;
 

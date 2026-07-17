@@ -46,14 +46,20 @@
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
     margin: 0;
-    background-image: radial-gradient(
-      1200px 600px at 50% -10%,
-      rgba(139, 92, 246, 0.14),
-      transparent 60%
-    );
+    background-image:
+      radial-gradient(900px 520px at 50% -12%, rgba(139, 92, 246, 0.2), transparent 62%),
+      radial-gradient(760px 520px at 108% 108%, rgba(124, 86, 230, 0.08), transparent 60%);
     background-attachment: fixed;
     font-family: Inter, system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
+  }
+
+  /* Glass panel: a subtle top sheen + violet-tinted hairline + soft float. */
+  .panel {
+    border: 1px solid hsl(255 30% 46% / 0.16);
+    box-shadow:
+      inset 0 1px 0 hsl(0 0% 100% / 0.05),
+      0 14px 44px -18px rgb(0 0 0 / 0.6);
   }
 
   /* The accent bar the architecture doc uses before every section heading. */
@@ -64,7 +70,8 @@
     height: 1.1em;
     margin-right: 0.6rem;
     border-radius: 2px;
-    background: hsl(var(--primary));
+    background: linear-gradient(to bottom, hsl(var(--primary)), hsl(266 85% 58%));
+    box-shadow: 0 0 8px hsl(258 90% 66% / 0.6);
     transform: translateY(0.15em);
   }
 }

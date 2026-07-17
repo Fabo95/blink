@@ -1,17 +1,18 @@
 import { brand } from '@blink/core/theme';
+import { GlobeMark } from '@/components/GlobeMark';
 import { Badge } from '@/components/ui/badge';
 import { isTauri } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 export function Header() {
   return (
-    <header className="flex items-center justify-between border-b px-6 py-4">
+    <header className="flex items-center justify-between border-b border-border/50 px-6 py-4">
       <div className="flex items-center gap-3">
-        <span className="text-2xl" aria-hidden>
-          {brand.glyph}
-        </span>
+        <GlobeMark className="size-8 drop-shadow-[0_0_10px_rgba(139,92,246,0.45)]" />
         <div>
-          <h1 className="text-lg font-semibold tracking-tight text-primary">{brand.name}</h1>
+          <h1 className="bg-gradient-to-br from-blink-soft to-blink-bright bg-clip-text text-lg font-semibold tracking-tight text-transparent">
+            {brand.name}
+          </h1>
           <p className="text-xs text-muted-foreground">{brand.tagline}</p>
         </div>
       </div>

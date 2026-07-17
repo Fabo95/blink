@@ -23,8 +23,8 @@ export function App() {
         <CaptureCard onSaved={refresh} />
         <TaskList tasks={tasks} onChanged={refresh} />
       </main>
-      <footer className="px-6 py-3 text-center text-[11px] text-muted-foreground">
-        Local-First · Zero-Knowledge E2EE on sync · 🔮 Blink Phase 1 MVP
+      <footer className="px-6 py-3 text-center text-[11px] tracking-wide text-muted-foreground">
+        Local-First · Zero-Knowledge E2EE on sync · Blink Phase 1
       </footer>
     </div>
   );
