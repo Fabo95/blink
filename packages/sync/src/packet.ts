@@ -1,5 +1,5 @@
-import type { Task } from '@blink/core';
-import type { EncryptedEnvelope } from '@blink/crypto';
+import type { Task } from '@blink/core/models/task';
+import type { EncryptedEnvelope } from '@blink/crypto/envelope';
 import type { HybridLogicalClock } from './clock.js';
 
 /**

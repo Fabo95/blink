@@ -1,4 +1,4 @@
-import type { NewTaskRow, TaskRow } from '@blink/db';
+import type { NewTaskRow, TaskRow } from '@blink/db/schema';
 import type { TasksModelService } from '@/services/model/tasksModelService.js';
 import type { SyncPacket } from '@/utils/schemas/index.js';
 

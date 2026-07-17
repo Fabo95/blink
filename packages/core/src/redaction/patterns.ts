@@ -1,4 +1,4 @@
-import type { RedactionKind } from '../models/index.js';
+import type { RedactionKind } from '../models/task.js';
 
 export interface RedactionPattern {
   kind: RedactionKind;

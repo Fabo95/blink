@@ -1,4 +1,5 @@
-import { type BlinkDb, type NewTaskRow, type TaskRow, tasks, withUser } from '@blink/db';
+import { type BlinkDb, withUser } from '@blink/db/client';
+import { type NewTaskRow, type TaskRow, tasks } from '@blink/db/schema';
 import { gte, sql } from 'drizzle-orm';
 
 interface TasksModelServiceDeps {

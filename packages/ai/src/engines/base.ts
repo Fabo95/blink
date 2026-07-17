@@ -1,4 +1,4 @@
-import type { CaptureDraft } from '@blink/core';
+import type { CaptureDraft } from '@blink/core/models/task';
 import type { TitleGenerator, TitleSuggestion } from '../title-generator.js';
 
 /**

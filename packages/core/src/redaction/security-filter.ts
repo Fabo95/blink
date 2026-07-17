@@ -1,4 +1,4 @@
-import type { RedactionKind, SanitizeResult } from '../models/index.js';
+import type { RedactionKind, SanitizeResult } from '../models/task.js';
 import { REDACTION_PATTERNS, type RedactionPattern } from './patterns.js';
 
 /**

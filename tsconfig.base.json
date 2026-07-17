@@ -14,13 +14,6 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "forceConsistentCasingInFileNames": true,
-    "declaration": true,
-    "paths": {
-      "@blink/core": ["./packages/core/src/index.ts"],
-      "@blink/ai": ["./packages/ai/src/index.ts"],
-      "@blink/crypto": ["./packages/crypto/src/index.ts"],
-      "@blink/db": ["./packages/db/src/index.ts"],
-      "@blink/sync": ["./packages/sync/src/index.ts"]
-    }
+    "declaration": true
   }
 }

@@ -1,4 +1,4 @@
-import { type BlinkDb, createDb } from '@blink/db';
+import { type BlinkDb, createDb } from '@blink/db/client';
 import { env } from '@/env.js';
 
 let db: BlinkDb | undefined;

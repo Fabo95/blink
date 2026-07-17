@@ -1,5 +1,5 @@
-import { LocalOnnxTitleGenerator } from '@blink/ai';
-import type { CaptureDraft, NewTask } from '@blink/core';
+import { LocalOnnxTitleGenerator } from '@blink/ai/engines/local-onnx';
+import type { CaptureDraft, NewTask } from '@blink/core/models/task';
 import { ClipboardPaste, ShieldCheck, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';

@@ -1,4 +1,4 @@
-import type { CaptureDraft } from '@blink/core';
+import type { CaptureDraft } from '@blink/core/models/task';
 
 export type TitleEngine = 'local-onnx' | 'cloud-proxy' | 'heuristic';
 

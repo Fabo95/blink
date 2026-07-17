@@ -5,12 +5,7 @@
     "noEmit": true,
     "types": ["vite/client"],
     "paths": {
-      "@/*": ["./src/*"],
-      "@blink/core": ["../../packages/core/src/index.ts"],
-      "@blink/core/theme": ["../../packages/core/src/theme/index.ts"],
-      "@blink/ai": ["../../packages/ai/src/index.ts"],
-      "@blink/crypto": ["../../packages/crypto/src/index.ts"],
-      "@blink/sync": ["../../packages/sync/src/index.ts"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src", "vite.config.ts"]
