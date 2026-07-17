@@ -1,4 +1,4 @@
-import { ApiError } from '@/utils/errors/index.js';
+import { ApiError } from '@/utils/errors/apiError.js';
 
 export interface AuthContext {
   userId: string;

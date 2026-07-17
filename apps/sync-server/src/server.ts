@@ -12,7 +12,7 @@ import router from '@/router.js';
 import { healthCheckRoute } from '@/routes/health-check.js';
 import { createServices } from '@/setup/dependencies/container.js';
 import { logger } from '@/setup/logger.js';
-import { ApiError } from '@/utils/errors/index.js';
+import { ApiError } from '@/utils/errors/apiError.js';
 import '@/types/fastify.js';
 
 /** Comma-separated origins; entries prefixed `regex:` become RegExp. */

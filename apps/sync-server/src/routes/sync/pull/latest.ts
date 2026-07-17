@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { sendOk, zSuccessResponse } from '@/utils/response/index.js';
-import { zAuthHeaders, zSyncPacket } from '@/utils/schemas/index.js';
+import { sendOk, zSuccessResponse } from '@/utils/response/response.js';
+import { zAuthHeaders } from '@/utils/schemas/headers.js';
+import { zSyncPacket } from '@/utils/schemas/sync.js';
 
 const zPullQuery = z.object({
   since: z.coerce.number().default(0),
