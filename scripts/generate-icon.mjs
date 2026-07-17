@@ -23,10 +23,15 @@ const RIM = [214, 197, 255];
 const INNER = [176, 150, 255];
 const WHITE = [255, 255, 255];
 
+// macOS squircle tile (rounded superellipse), normalized 0..1. macOS does NOT
+// round icons for you, so we bake the shape in with transparent corners + margin.
+const TILE_H = 0.44; // half-extent → ~88% of the canvas, ~6% margin each side
+const TILE_N = 5; // superellipse exponent (≈ Apple's continuous-corner squircle)
+
 // ball geometry (normalized 0..1)
 const CX = 0.5;
-const CY = 0.465;
-const R = 0.325;
+const CY = 0.49;
+const R = 0.29;
 
 // light direction (from upper-left, toward viewer)
 const L = norm3(-0.45, -0.62, 0.64);
@@ -48,6 +53,16 @@ const mix = (a, b, t) => [
 ];
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const scale = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+
+// Squircle coverage (0..1) at a point — 1 inside the tile, ramping to 0 at the
+// rounded edge for anti-aliasing.
+function tileAlpha(u, v) {
+  const ax = Math.abs(u - 0.5) / TILE_H;
+  const ay = Math.abs(v - 0.5) / TILE_H;
+  const f = (ax ** TILE_N + ay ** TILE_N) ** (1 / TILE_N); // 1 at the boundary
+  const aa = 1.6 / SIZE / TILE_H;
+  return clamp((1 - f) / aa, 0, 1);
+}
 
 function shade(u, v) {
   // background: vertical gradient + corner vignette
@@ -128,6 +143,7 @@ for (let y = 0; y < SIZE; y++) {
     let r = 0;
     let g = 0;
     let b = 0;
+    let a = 0;
     for (let sy = 0; sy < SS; sy++) {
       for (let sx = 0; sx < SS; sx++) {
         const u = (x + (sx + 0.5) / SS) / SIZE;
@@ -136,13 +152,14 @@ for (let y = 0; y < SIZE; y++) {
         r += c[0];
         g += c[1];
         b += c[2];
+        a += tileAlpha(u, v);
       }
     }
     const n = SS * SS;
     raw[p++] = Math.round(r / n);
     raw[p++] = Math.round(g / n);
     raw[p++] = Math.round(b / n);
-    raw[p++] = 255;
+    raw[p++] = Math.round((a / n) * 255);
   }
 }
 
