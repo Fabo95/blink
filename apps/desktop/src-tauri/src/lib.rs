@@ -51,12 +51,14 @@ fn register_capture_shortcut(app: &mut tauri::App) -> Result<(), Box<dyn std::er
                     return;
                 }
                 let app = app.clone();
-                // Off the UI thread: let the user release the hotkey, copy the
-                // current selection, wait for the clipboard, then open the panel.
+                // Input simulation and window ops must run on the main thread (macOS).
+                // The delays run on this background thread so the UI thread never blocks.
                 std::thread::spawn(move || {
+                    // Let the user release the hotkey keys before we send ⌘C.
                     std::thread::sleep(std::time::Duration::from_millis(60));
-                    copy_selection();
-                    std::thread::sleep(std::time::Duration::from_millis(120));
+                    let _ = app.run_on_main_thread(copy_selection);
+                    // Give the copy a moment to reach the clipboard.
+                    std::thread::sleep(std::time::Duration::from_millis(140));
                     let handle = app.clone();
                     let _ = app.run_on_main_thread(move || open_capture_panel(&handle));
                 });
