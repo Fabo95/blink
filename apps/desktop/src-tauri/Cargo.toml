@@ -29,6 +29,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2"
 enigo = "0.3.0"
+dotenvy = "0.15"
 
 [features]
 # Reserved for the SQLCipher-backed store (Phase 1 hardening). Until wired, the

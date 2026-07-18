@@ -10,6 +10,11 @@ use store::TaskStore;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Load a `.env` (e.g. OPENAI_API_KEY) if present — dev convenience so the key
+    // doesn't have to be exported in every shell. Real env vars still win.
+    #[cfg(desktop)]
+    let _ = dotenvy::dotenv();
+
     // The store is injected as a trait object, so swapping MemoryTaskStore for a
     // SQLCipher-backed store later touches only this line.
     let store: Box<dyn TaskStore> = Box::new(MemoryTaskStore::new());
