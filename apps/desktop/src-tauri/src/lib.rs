@@ -90,17 +90,34 @@ fn copy_selection() {
     let _ = enigo.key(Key::Meta, Direction::Release);
 }
 
-/// Show the capture panel by the cursor and tell it to read the clipboard.
+/// Show the capture panel by the cursor and tell it to read the clipboard. The
+/// position is clamped so the whole panel stays on the monitor under the cursor.
 #[cfg(desktop)]
 fn open_capture_panel(app: &tauri::AppHandle) {
-    use tauri::{Emitter, Manager};
+    use tauri::{Emitter, Manager, PhysicalPosition, PhysicalSize};
 
-    if let Some(window) = app.get_webview_window("capture") {
-        if let Ok(pos) = app.cursor_position() {
-            let _ = window.set_position(tauri::PhysicalPosition::new(pos.x + 12.0, pos.y + 12.0));
+    let Some(window) = app.get_webview_window("capture") else {
+        return;
+    };
+
+    if let Ok(cursor) = app.cursor_position() {
+        let (mut x, mut y) = (cursor.x + 12.0, cursor.y + 12.0);
+        let size = window.outer_size().unwrap_or(PhysicalSize::new(480, 300));
+        if let Ok(Some(monitor)) = window.monitor_from_point(cursor.x, cursor.y) {
+            let m = monitor.position();
+            let s = monitor.size();
+            const MARGIN: f64 = 8.0;
+            let min_x = m.x as f64 + MARGIN;
+            let min_y = m.y as f64 + MARGIN;
+            let max_x = (m.x as f64 + s.width as f64 - size.width as f64 - MARGIN).max(min_x);
+            let max_y = (m.y as f64 + s.height as f64 - size.height as f64 - MARGIN).max(min_y);
+            x = x.clamp(min_x, max_x);
+            y = y.clamp(min_y, max_y);
         }
-        let _ = window.show();
-        let _ = window.set_focus();
-        let _ = app.emit_to("capture", "capture-open", ());
+        let _ = window.set_position(PhysicalPosition::new(x, y));
     }
+
+    let _ = window.show();
+    let _ = window.set_focus();
+    let _ = app.emit_to("capture", "capture-open", ());
 }

@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Core capability for Blink's windows.",
   "windows": ["main", "capture"],
-  "permissions": ["core:default", "core:window:allow-hide"]
+  "permissions": ["core:default", "core:window:allow-hide", "core:window:allow-start-dragging"]
 }

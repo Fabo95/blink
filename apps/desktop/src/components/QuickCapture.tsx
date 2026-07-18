@@ -84,7 +84,11 @@ export function QuickCapture() {
   return (
     <div className="flex h-screen w-screen p-3">
       <div className="flex flex-1 flex-col gap-2.5 rounded-xl border border-white/10 bg-card p-4 shadow-2xl">
-        <div className="flex items-center justify-between">
+        {/* Drag handle: the header row moves the frameless window. */}
+        <div
+          data-tauri-drag-region=""
+          className="flex cursor-grab select-none items-center justify-between [&>*]:pointer-events-none"
+        >
           <span className="section-bar text-xs font-semibold uppercase tracking-wide text-primary">
             Quick capture
           </span>
