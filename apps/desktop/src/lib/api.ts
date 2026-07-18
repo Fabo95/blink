@@ -1,5 +1,6 @@
 import type { CaptureDraft } from '@/generated/CaptureDraft';
 import type { NewTask } from '@/generated/NewTask';
+import type { OptimizedCapture } from '@/generated/OptimizedCapture';
 import type { SanitizeResult } from '@/generated/SanitizeResult';
 import type { Task } from '@/generated/Task';
 
@@ -30,6 +31,9 @@ export const api = {
   deleteTask: (id: string) => invoke<void>('delete_task', { id }),
   /** Close the quick-capture panel and return focus to the previous app. */
   dismissCapture: () => invoke<void>('dismiss_capture'),
+  /** Ask OpenAI to clean up the capture into a crisp title + tidied body. */
+  optimizeCapture: (title: string, body: string) =>
+    invoke<OptimizedCapture>('optimize_capture', { title, body }),
 };
 
 // --- Browser fallback -------------------------------------------------------
@@ -86,6 +90,9 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
     }
     case 'dismiss_capture':
       return undefined as T;
+    case 'optimize_capture':
+      // Browser mock can't reach OpenAI — echo the input back.
+      return { title: String(args?.title ?? ''), body: String(args?.body ?? '') } as T;
     default:
       throw new Error(`Unknown command: ${cmd}`);
   }

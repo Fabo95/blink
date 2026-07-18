@@ -1,4 +1,4 @@
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, WandSparkles } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,8 @@ export function QuickCapture() {
   const [body, setBody] = useState('');
   const [redactions, setRedactions] = useState(0);
   const [source, setSource] = useState<CaptureSource | null>(null);
+  const [optimizing, setOptimizing] = useState(false);
+  const [error, setError] = useState('');
   const titleRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -31,6 +33,7 @@ export function QuickCapture() {
     }
     setRedactions(draft.redactionCount);
     setSource(draft.source);
+    setError('');
     setTimeout(() => titleRef.current?.focus(), 0);
   }, []);
 
@@ -38,8 +41,24 @@ export function QuickCapture() {
     setTitle('');
     setBody('');
     setRedactions(0);
+    setError('');
     await api.dismissCapture();
   }, []);
+
+  const optimize = useCallback(async () => {
+    if (!title.trim() && !body.trim()) return;
+    setOptimizing(true);
+    setError('');
+    try {
+      const result = await api.optimizeCapture(title, body);
+      setTitle(result.title);
+      setBody(result.body);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Optimization failed');
+    } finally {
+      setOptimizing(false);
+    }
+  }, [title, body]);
 
   const save = useCallback(async () => {
     if (!title.trim() || !source) return;
@@ -114,16 +133,30 @@ export function QuickCapture() {
           className="flex-1 resize-none font-mono text-xs text-blink-code"
         />
 
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] text-muted-foreground">Esc to cancel · ⌘↵ to save</span>
+        {error && <p className="line-clamp-2 text-[11px] text-destructive">{error}</p>}
+
+        <div className="flex items-center justify-between gap-2">
           <Button
+            variant="ghost"
             size="sm"
-            onClick={save}
-            disabled={!title.trim()}
-            className="shadow-[0_6px_20px_-6px_hsl(258_90%_66%/0.55)]"
+            onClick={optimize}
+            disabled={optimizing || (!title.trim() && !body.trim())}
+            className="text-blink-bright"
           >
-            Save task
+            <WandSparkles className="size-3.5" />
+            {optimizing ? 'Optimizing…' : 'Optimize with AI'}
           </Button>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] text-muted-foreground">Esc · ⌘↵</span>
+            <Button
+              size="sm"
+              onClick={save}
+              disabled={!title.trim()}
+              className="shadow-[0_6px_20px_-6px_hsl(258_90%_66%/0.55)]"
+            >
+              Save task
+            </Button>
+          </div>
         </div>
       </div>
     </div>

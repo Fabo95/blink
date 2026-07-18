@@ -10,12 +10,15 @@ use serde::Serialize;
 pub enum AppError {
     /// A persistence-layer failure (poisoned lock now; DB errors once SQLCipher lands).
     Store(String),
+    /// An AI-optimization failure (missing key, network, or a bad model response).
+    Ai(String),
 }
 
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AppError::Store(msg) => write!(f, "store error: {msg}"),
+            AppError::Ai(msg) => write!(f, "ai error: {msg}"),
         }
     }
 }

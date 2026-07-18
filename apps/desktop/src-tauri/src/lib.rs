@@ -27,6 +27,7 @@ pub fn run() {
             commands::capture::capture_from_clipboard,
             commands::capture::sanitize,
             commands::capture::dismiss_capture,
+            commands::ai::optimize_capture,
             commands::tasks::list_tasks,
             commands::tasks::save_task,
             commands::tasks::delete_task,
@@ -113,7 +114,7 @@ fn open_capture_panel(app: &tauri::AppHandle) {
     };
 
     if let Ok(cursor) = app.cursor_position() {
-        let (mut x, mut y) = (cursor.x + 12.0, cursor.y + 12.0);
+        let (mut x, mut y) = (cursor.x + 5.0, cursor.y + 5.0);
         let size = window.outer_size().unwrap_or(PhysicalSize::new(480, 300));
         if let Ok(Some(monitor)) = window.monitor_from_point(cursor.x, cursor.y) {
             let m = monitor.position();
