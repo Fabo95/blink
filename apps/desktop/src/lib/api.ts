@@ -5,7 +5,7 @@ import type { Task } from '@/generated/Task';
 
 /**
  * Typed façade over the Tauri IPC boundary. Each method maps to a `#[tauri::command]`
- * in `src-tauri/src/commands.rs`. When the frontend runs under plain Vite (no
+ * in `src-tauri/src/commands/`. When the frontend runs under plain Vite (no
  * Tauri host, e.g. `pnpm --filter @blink/desktop dev` in a browser), we fall back
  * to an in-memory mock so the UI is still developable without the Rust core.
  */
@@ -37,15 +37,20 @@ const mockStore: Task[] = [];
 async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   switch (cmd) {
     case 'capture_from_clipboard': {
-      const text = 'Fix the login race condition\napi_key=sk_live_ZZZ should be rotated';
+      let text = '';
+      try {
+        text = await navigator.clipboard.readText();
+      } catch {
+        text = ''; // no permission / empty clipboard in the browser
+      }
       const { clean, count } = mockSanitize(text);
       const draft: CaptureDraft = {
         text: clean,
         originalLength: text.length,
         redactionCount: count,
         source: {
-          appId: 'com.tinyspeck.slackmacgap',
-          windowTitle: 'engineering — Slack',
+          appId: 'clipboard',
+          windowTitle: 'Copied text',
           capturedAt: new Date().toISOString(),
         },
       };

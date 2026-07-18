@@ -15,6 +15,7 @@ pub fn run() {
     let store: Box<dyn TaskStore> = Box::new(MemoryTaskStore::new());
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(store)
         .manage(SecurityFilter::with_defaults())
         .setup(|app| {
