@@ -23,9 +23,11 @@ chrono = { version = "0.4", features = ["clock"] }
 ts-rs = "10.1.0"
 tauri-plugin-clipboard-manager = "2"
 
-# Global shortcuts are desktop-only (the "capture from anywhere" hotkey).
+# Global shortcuts + input simulation are desktop-only (the capture hotkey and
+# its "copy the current selection" step).
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2"
+enigo = "0.3.0"
 
 [features]
 # Reserved for the SQLCipher-backed store (Phase 1 hardening). Until wired, the

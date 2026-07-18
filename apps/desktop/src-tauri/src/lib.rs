@@ -34,14 +34,12 @@ pub fn run() {
         .expect("error while running Blink");
 }
 
-/// Register the system-wide capture hotkey (⌘⇧B / Ctrl+Shift+B). When pressed
-/// from any app, it brings Blink to the front and emits `capture-shortcut`, which
-/// the frontend listens for to run the capture flow.
+/// Register the system-wide capture hotkey (⌘⇧B / Ctrl+Shift+B). When pressed it
+/// copies the current selection, then opens the quick-capture panel by the cursor.
 #[cfg(desktop)]
 fn register_capture_shortcut(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     use std::str::FromStr;
 
-    use tauri::{Emitter, Manager};
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
     let capture_shortcut = Shortcut::from_str("CommandOrControl+Shift+B")?;
@@ -49,18 +47,19 @@ fn register_capture_shortcut(app: &mut tauri::App) -> Result<(), Box<dyn std::er
     app.handle().plugin(
         tauri_plugin_global_shortcut::Builder::new()
             .with_handler(move |app, shortcut, event| {
-                if shortcut == &capture_shortcut && event.state() == ShortcutState::Pressed {
-                    if let Some(window) = app.get_webview_window("capture") {
-                        // Pop the panel up just off the cursor.
-                        if let Ok(pos) = app.cursor_position() {
-                            let _ = window
-                                .set_position(tauri::PhysicalPosition::new(pos.x + 12.0, pos.y + 12.0));
-                        }
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                        let _ = app.emit_to("capture", "capture-open", ());
-                    }
+                if shortcut != &capture_shortcut || event.state() != ShortcutState::Pressed {
+                    return;
                 }
+                let app = app.clone();
+                // Off the UI thread: let the user release the hotkey, copy the
+                // current selection, wait for the clipboard, then open the panel.
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(60));
+                    copy_selection();
+                    std::thread::sleep(std::time::Duration::from_millis(120));
+                    let handle = app.clone();
+                    let _ = app.run_on_main_thread(move || open_capture_panel(&handle));
+                });
             })
             .build(),
     )?;
@@ -71,4 +70,34 @@ fn register_capture_shortcut(app: &mut tauri::App) -> Result<(), Box<dyn std::er
     }
 
     Ok(())
+}
+
+/// Simulate ⌘C to copy the current selection in the frontmost app. Needs macOS
+/// Accessibility permission; without it the key events are dropped (a no-op) and
+/// capture falls back to whatever is already on the clipboard.
+#[cfg(desktop)]
+fn copy_selection() {
+    use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+
+    let Ok(mut enigo) = Enigo::new(&Settings::default()) else {
+        return;
+    };
+    let _ = enigo.key(Key::Meta, Direction::Press);
+    let _ = enigo.key(Key::Unicode('c'), Direction::Click);
+    let _ = enigo.key(Key::Meta, Direction::Release);
+}
+
+/// Show the capture panel by the cursor and tell it to read the clipboard.
+#[cfg(desktop)]
+fn open_capture_panel(app: &tauri::AppHandle) {
+    use tauri::{Emitter, Manager};
+
+    if let Some(window) = app.get_webview_window("capture") {
+        if let Ok(pos) = app.cursor_position() {
+            let _ = window.set_position(tauri::PhysicalPosition::new(pos.x + 12.0, pos.y + 12.0));
+        }
+        let _ = window.show();
+        let _ = window.set_focus();
+        let _ = app.emit_to("capture", "capture-open", ());
+    }
 }
