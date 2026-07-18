@@ -94,8 +94,8 @@ export function CaptureCard({ onSaved }: CaptureCardProps) {
       <CardContent>
         {!draft ? (
           <p className="text-sm text-muted-foreground">
-            Mark text anywhere, hit the global shortcut, and Blink sanitizes it locally before it
-            ever becomes a task. Nothing leaves this machine.
+            Copy any text (⌘C), then hit ⌘⇧B — Blink reads your clipboard and sanitizes it locally
+            before it ever becomes a task. Nothing leaves this machine.
           </p>
         ) : (
           <div className="space-y-3">
