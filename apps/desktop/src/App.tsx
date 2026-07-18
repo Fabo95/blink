@@ -3,7 +3,7 @@ import { CaptureCard } from '@/components/CaptureCard';
 import { Header } from '@/components/Header';
 import { TaskList } from '@/components/TaskList';
 import type { Task } from '@/generated/Task';
-import { api } from '@/lib/api';
+import { api, isTauri } from '@/lib/api';
 
 export function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -14,6 +14,20 @@ export function App() {
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  // Refresh the inbox when the quick-capture popup saves a task.
+  useEffect(() => {
+    if (!isTauri) return;
+    let unlisten: (() => void) | undefined;
+    import('@tauri-apps/api/event').then(({ listen }) => {
+      listen('task-saved', () => {
+        void refresh();
+      }).then((fn) => {
+        unlisten = fn;
+      });
+    });
+    return () => unlisten?.();
   }, [refresh]);
 
   return (

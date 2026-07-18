@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import type { CaptureDraft } from '@/generated/CaptureDraft';
 import type { NewTask } from '@/generated/NewTask';
-import { api, isTauri } from '@/lib/api';
+import { api } from '@/lib/api';
 
 interface CaptureCardProps {
   onSaved: () => void;
@@ -33,21 +33,6 @@ export function CaptureCard({ onSaved }: CaptureCardProps) {
       setBusy(false);
     }
   }, []);
-
-  // The global ⌘⇧B shortcut (registered in the Rust core) emits this event from
-  // any app; run the capture flow when it fires.
-  useEffect(() => {
-    if (!isTauri) return;
-    let unlisten: (() => void) | undefined;
-    import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('capture-shortcut', () => {
-        void loadFromClipboard();
-      }).then((fn) => {
-        unlisten = fn;
-      });
-    });
-    return () => unlisten?.();
-  }, [loadFromClipboard]);
 
   // Keep the redaction count live as the user edits the body.
   useEffect(() => {

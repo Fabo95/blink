@@ -50,11 +50,16 @@ fn register_capture_shortcut(app: &mut tauri::App) -> Result<(), Box<dyn std::er
         tauri_plugin_global_shortcut::Builder::new()
             .with_handler(move |app, shortcut, event| {
                 if shortcut == &capture_shortcut && event.state() == ShortcutState::Pressed {
-                    if let Some(window) = app.get_webview_window("main") {
+                    if let Some(window) = app.get_webview_window("capture") {
+                        // Pop the panel up just off the cursor.
+                        if let Ok(pos) = app.cursor_position() {
+                            let _ = window
+                                .set_position(tauri::PhysicalPosition::new(pos.x + 12.0, pos.y + 12.0));
+                        }
                         let _ = window.show();
                         let _ = window.set_focus();
+                        let _ = app.emit_to("capture", "capture-open", ());
                     }
-                    let _ = app.emit("capture-shortcut", ());
                 }
             })
             .build(),

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Core capability for Blink's main window.",
-  "windows": ["main"],
+  "description": "Core capability for Blink's windows.",
+  "windows": ["main", "capture"],
   "permissions": ["core:default"]
 }

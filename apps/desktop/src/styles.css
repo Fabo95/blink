@@ -54,6 +54,13 @@
     -webkit-font-smoothing: antialiased;
   }
 
+  /* The frameless quick-capture window is transparent — only its rounded card
+     paints, so it floats with proper corners + shadow. */
+  html.capture-window,
+  html.capture-window body {
+    background: transparent;
+  }
+
   /* Glass panel: a subtle top sheen + violet-tinted hairline + soft float. */
   .panel {
     border: 1px solid hsl(255 30% 46% / 0.16);
