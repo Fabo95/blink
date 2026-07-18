@@ -54,7 +54,17 @@ export function QuickCapture() {
       setTitle(result.title);
       setBody(result.body);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Optimization failed');
+      // Tauri rejects a command's Err with our AppError object `{ kind, message }`,
+      // which isn't an Error instance — pull the message from whatever shape it is.
+      const message =
+        e instanceof Error
+          ? e.message
+          : typeof e === 'string'
+            ? e
+            : e && typeof e === 'object' && 'message' in e
+              ? String((e as { message: unknown }).message)
+              : 'Optimization failed';
+      setError(message);
     } finally {
       setOptimizing(false);
     }

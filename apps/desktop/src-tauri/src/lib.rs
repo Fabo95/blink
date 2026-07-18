@@ -10,8 +10,11 @@ use store::TaskStore;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Load a `.env` (e.g. OPENAI_API_KEY) if present — dev convenience so the key
-    // doesn't have to be exported in every shell. Real env vars still win.
+    // Load a `.env` (e.g. OPENAI_API_KEY) — dev convenience so the key doesn't
+    // have to be exported in every shell. In dev, load the one next to the crate
+    // regardless of the working directory. Real env vars still win.
+    #[cfg(all(desktop, debug_assertions))]
+    let _ = dotenvy::from_filename(concat!(env!("CARGO_MANIFEST_DIR"), "/.env"));
     #[cfg(desktop)]
     let _ = dotenvy::dotenv();
 
