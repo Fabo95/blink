@@ -40,6 +40,9 @@ pub fn dismiss_capture(app: AppHandle) {
     if let Some(window) = app.get_webview_window("capture") {
         let _ = window.hide();
     }
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.hide();
+    }
     #[cfg(target_os = "macos")]
     let _ = app.hide();
 }

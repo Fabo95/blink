@@ -31,8 +31,20 @@ pub fn run() {
             commands::tasks::save_task,
             commands::tasks::delete_task,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Blink");
+        .build(tauri::generate_context!())
+        .expect("error while building Blink")
+        .run(|_app, _event| {
+            // Dock-icon click re-opens the inbox — the capture flow keeps the main
+            // window hidden, so this is how the user brings it back.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = _event {
+                use tauri::Manager;
+                if let Some(main) = _app.get_webview_window("main") {
+                    let _ = main.show();
+                    let _ = main.set_focus();
+                }
+            }
+        });
 }
 
 /// Register the system-wide capture hotkey (⌘⇧B / Ctrl+Shift+B). When pressed it
@@ -119,5 +131,9 @@ fn open_capture_panel(app: &tauri::AppHandle) {
 
     let _ = window.show();
     let _ = window.set_focus();
+    // The shortcut shows only the panel — keep the inbox out of the way.
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.hide();
+    }
     let _ = app.emit_to("capture", "capture-open", ());
 }
