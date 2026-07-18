@@ -26,6 +26,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::capture::capture_from_clipboard,
             commands::capture::sanitize,
+            commands::capture::dismiss_capture,
             commands::tasks::list_tasks,
             commands::tasks::save_task,
             commands::tasks::delete_task,

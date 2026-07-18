@@ -1,5 +1,5 @@
 use chrono::Utc;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
 use crate::models::{CaptureDraft, CaptureSource, SanitizeResult};
@@ -30,4 +30,16 @@ pub fn capture_from_clipboard(app: AppHandle, filter: State<'_, SecurityFilter>)
 #[tauri::command]
 pub fn sanitize(filter: State<'_, SecurityFilter>, text: String) -> SanitizeResult {
     filter.sanitize(&text)
+}
+
+/// Dismiss the quick-capture panel. Hides its window, then hides the whole app on
+/// macOS so focus returns to whatever the user was in — the main window never
+/// surfaces just because the panel closed.
+#[tauri::command]
+pub fn dismiss_capture(app: AppHandle) {
+    if let Some(window) = app.get_webview_window("capture") {
+        let _ = window.hide();
+    }
+    #[cfg(target_os = "macos")]
+    let _ = app.hide();
 }

@@ -28,6 +28,8 @@ export const api = {
   listTasks: () => invoke<Task[]>('list_tasks'),
   saveTask: (task: NewTask) => invoke<Task>('save_task', { task }),
   deleteTask: (id: string) => invoke<void>('delete_task', { id }),
+  /** Close the quick-capture panel and return focus to the previous app. */
+  dismissCapture: () => invoke<void>('dismiss_capture'),
 };
 
 // --- Browser fallback -------------------------------------------------------
@@ -82,6 +84,8 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       if (idx >= 0) mockStore.splice(idx, 1);
       return undefined as T;
     }
+    case 'dismiss_capture':
+      return undefined as T;
     default:
       throw new Error(`Unknown command: ${cmd}`);
   }

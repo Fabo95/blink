@@ -38,9 +38,7 @@ export function QuickCapture() {
     setTitle('');
     setBody('');
     setRedactions(0);
-    if (!isTauri) return;
-    const { getCurrentWindow } = await import('@tauri-apps/api/window');
-    await getCurrentWindow().hide();
+    await api.dismissCapture();
   }, []);
 
   const save = useCallback(async () => {
