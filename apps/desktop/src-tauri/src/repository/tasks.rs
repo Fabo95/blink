@@ -29,7 +29,7 @@ impl TaskRepository {
     pub fn list(&self) -> AppResult<Vec<Task>> {
         let conn = self.db.lock()?;
         let mut stmt = conn
-            .prepare("SELECT * FROM tasks ORDER BY status = 'done', created_at DESC")
+            .prepare("SELECT * FROM tasks ORDER BY created_at DESC")
             .map_err(store_err)?;
         let rows = stmt.query([]).map_err(store_err)?;
         from_rows::<TaskRow>(rows)

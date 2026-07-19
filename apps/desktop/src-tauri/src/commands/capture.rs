@@ -49,11 +49,6 @@ fn fallback_capture_source() -> CaptureSource {
     }
 }
 
-#[tauri::command]
-pub fn sanitize_text(filter: State<'_, SecurityFilter>, text: String) -> SanitizeResult {
-    filter.sanitize(&text)
-}
-
 /// Dismiss the quick-capture panel. Hides its window, then hides the whole app on
 /// macOS so focus returns to whatever the user was in — the main window never
 /// surfaces just because the panel closed.

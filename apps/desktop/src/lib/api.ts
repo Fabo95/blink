@@ -23,8 +23,6 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 export const api = {
   /** Read the clipboard + system metadata, run the DLP filter, return a draft. */
   captureFromClipboard: () => invoke<CaptureDraft>('capture_from_clipboard'),
-  /** Run the local security filter over arbitrary text (live preview in the UI). */
-  sanitizeText: (text: string) => invoke<SanitizeResult>('sanitize_text', { text }),
   listTasks: () => invoke<Task[]>('list_tasks'),
   saveTask: (task: NewTask) => invoke<Task>('save_task', { task }),
   deleteTask: (id: string) => invoke<void>('delete_task', { id }),
@@ -71,10 +69,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       };
       return draft as T;
     }
-    case 'sanitize_text': {
-      const { clean, count } = mockSanitize(String(args?.text ?? ''));
-      return { clean, redactionCount: count, matched: [] } as T;
-    }
+
     case 'list_tasks':
       return [...mockStore] as T;
     case 'save_task': {
