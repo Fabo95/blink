@@ -3,4 +3,4 @@
 /**
  * Where a captured snippet came from — the "system metadata".
  */
-export type CaptureSource = { appId: string, windowTitle: string, capturedAt: string, };
+export type CaptureSource = { appId: string, appName: string, windowTitle: string, capturedAt: string, };

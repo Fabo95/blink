@@ -8,17 +8,18 @@ use ts_rs::TS;
 
 /// Where a captured snippet came from — the "system metadata".
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/generated/")]
+#[ts(export, export_to = "../../../src/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct CaptureSource {
     pub app_id: String,
+    pub app_name: String,
     pub window_title: String,
     pub captured_at: String,
 }
 
 /// A sanitized snippet awaiting review — the DLP filter has already run.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/generated/")]
+#[ts(export, export_to = "../../../src/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct CaptureDraft {
     pub text: String,
@@ -29,7 +30,7 @@ pub struct CaptureDraft {
 
 /// Result of running the local security filter over a text.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/generated/")]
+#[ts(export, export_to = "../../../src/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct SanitizeResult {
     pub clean: String,
@@ -38,23 +39,23 @@ pub struct SanitizeResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/generated/")]
+#[ts(export, export_to = "../../../src/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct Task {
     pub id: String,
-    pub title: String,
-    pub body: String,
+    pub text: String,
     pub status: String,
+    /// Whether the text has already been cleaned up by the AI optimizer.
+    pub improved: bool,
     pub source: CaptureSource,
     pub created_at: String,
     pub updated_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/generated/")]
+#[ts(export, export_to = "../../../src/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct NewTask {
-    pub title: String,
-    pub body: String,
+    pub text: String,
     pub source: CaptureSource,
 }

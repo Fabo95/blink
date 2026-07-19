@@ -1,8 +1,8 @@
 use tauri::State;
 
-use crate::error::AppResult;
-use crate::models::{NewTask, Task};
-use crate::store::TaskStore;
+use crate::core::error::AppResult;
+use crate::core::models::{NewTask, Task};
+use crate::services::store::TaskStore;
 
 #[tauri::command]
 pub fn list_tasks(store: State<'_, Box<dyn TaskStore>>) -> AppResult<Vec<Task>> {
@@ -17,4 +17,16 @@ pub fn save_task(store: State<'_, Box<dyn TaskStore>>, task: NewTask) -> AppResu
 #[tauri::command]
 pub fn delete_task(store: State<'_, Box<dyn TaskStore>>, id: String) -> AppResult<()> {
     store.delete(&id)
+}
+
+/// Run the AI optimizer over a task's text and persist the cleaned-up result,
+/// marking it improved so it isn't offered again.
+#[tauri::command]
+pub async fn improve_task(
+    store: State<'_, Box<dyn TaskStore>>,
+    id: String,
+    text: String,
+) -> AppResult<Task> {
+    let improved = crate::services::ai::optimize(text).await?;
+    store.update_text(&id, &improved)
 }

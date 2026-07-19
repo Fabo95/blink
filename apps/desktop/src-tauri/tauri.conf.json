@@ -19,7 +19,10 @@
         "height": 760,
         "minWidth": 380,
         "minHeight": 520,
-        "resizable": true
+        "resizable": true,
+        "theme": "Dark",
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       },
       {
         "label": "capture",
@@ -31,7 +34,13 @@
         "transparent": true,
         "alwaysOnTop": true,
         "skipTaskbar": true,
-        "visible": false
+        "visible": false,
+        "theme": "Dark",
+        "windowEffects": {
+          "effects": ["hudWindow"],
+          "state": "active",
+          "radius": 16
+        }
       }
     ],
     "security": {

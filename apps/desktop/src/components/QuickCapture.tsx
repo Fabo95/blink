@@ -2,7 +2,6 @@ import { ShieldCheck, WandSparkles } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import type { CaptureSource } from '@/generated/CaptureSource';
 import { api, isTauri } from '@/lib/api';
@@ -10,49 +9,51 @@ import { api, isTauri } from '@/lib/api';
 /**
  * The floating quick-capture panel (a separate frameless window). The global
  * ⌘⇧B shortcut positions it by the cursor, shows it, and emits `capture-open`;
- * this reads the clipboard, splits it into title/body, and saves on ⌘↵.
+ * this reads the clipboard into a single field and saves it as the task on ⌘↵.
  */
 export function QuickCapture() {
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
+  const [text, setText] = useState('');
   const [redactions, setRedactions] = useState(0);
   const [source, setSource] = useState<CaptureSource | null>(null);
   const [optimizing, setOptimizing] = useState(false);
   const [error, setError] = useState('');
-  const titleRef = useRef<HTMLInputElement>(null);
+  const fieldRef = useRef<HTMLTextAreaElement>(null);
 
   const load = useCallback(async () => {
     const draft = await api.captureFromClipboard();
-    const nl = draft.text.indexOf('\n');
-    if (nl === -1) {
-      setTitle(draft.text.trim());
-      setBody('');
-    } else {
-      setTitle(draft.text.slice(0, nl).trim());
-      setBody(draft.text.slice(nl + 1).trim());
-    }
+    setText(draft.text);
     setRedactions(draft.redactionCount);
     setSource(draft.source);
     setError('');
-    setTimeout(() => titleRef.current?.focus(), 0);
+    setTimeout(() => fieldRef.current?.focus(), 0);
   }, []);
 
   const hide = useCallback(async () => {
-    setTitle('');
-    setBody('');
+    setText('');
     setRedactions(0);
     setError('');
     await api.dismissCapture();
   }, []);
 
+  const save = useCallback(async () => {
+    const trimmed = text.trim();
+    if (!trimmed || !source) return;
+    await api.saveTask({ text: trimmed, source });
+    if (isTauri) {
+      // Only the main (inbox) window cares — target it directly instead of
+      // broadcasting to every window.
+      const { emitTo } = await import('@tauri-apps/api/event');
+      await emitTo('main', 'task-saved');
+    }
+    await hide();
+  }, [text, source, hide]);
+
   const optimize = useCallback(async () => {
-    if (!title.trim() && !body.trim()) return;
+    if (!text.trim()) return;
     setOptimizing(true);
     setError('');
     try {
-      const result = await api.optimizeCapture(title, body);
-      setTitle(result.title);
-      setBody(result.body);
+      setText(await api.optimizeText(text));
     } catch (e) {
       // Tauri rejects a command's Err with our AppError object `{ kind, message }`,
       // which isn't an Error instance — pull the message from whatever shape it is.
@@ -68,19 +69,9 @@ export function QuickCapture() {
     } finally {
       setOptimizing(false);
     }
-  }, [title, body]);
+  }, [text]);
 
-  const save = useCallback(async () => {
-    if (!title.trim() || !source) return;
-    await api.saveTask({ title: title.trim(), body, source });
-    if (isTauri) {
-      const { emit } = await import('@tauri-apps/api/event');
-      await emit('task-saved');
-    }
-    await hide();
-  }, [title, body, source, hide]);
-
-  // Refresh the draft whenever the shortcut re-opens the panel.
+  // Refresh whenever the shortcut re-opens the panel.
   useEffect(() => {
     void load();
     if (!isTauri) return;
@@ -111,12 +102,14 @@ export function QuickCapture() {
   }, [hide, save]);
 
   return (
-    <div className="flex h-screen w-screen p-3">
-      <div className="flex flex-1 flex-col gap-2.5 rounded-xl border border-white/10 bg-card p-4 shadow-2xl">
+    <div className="flex h-screen w-screen">
+      {/* Translucent tint over the native hudWindow vibrancy — the window itself
+          supplies the frost, rounding (radius 16) and drop shadow. */}
+      <div className="flex flex-1 flex-col gap-2.5 rounded-2xl border border-white/10 bg-[hsl(258_36%_13%/0.5)] p-4">
         {/* Drag handle: the header row moves the frameless window. */}
         <div
           data-tauri-drag-region=""
-          className="flex cursor-grab select-none items-center justify-between [&>*]:pointer-events-none"
+          className="flex select-none items-center justify-between [&>*]:pointer-events-none"
         >
           <span className="section-bar text-xs font-semibold uppercase tracking-wide text-primary">
             Quick capture
@@ -129,18 +122,19 @@ export function QuickCapture() {
           )}
         </div>
 
-        <Input
-          ref={titleRef}
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Title"
-          className="font-medium"
-        />
+        {source && (source.appName || source.windowTitle) && (
+          <p className="truncate text-[11px] text-muted-foreground">
+            from {source.appName || source.appId}
+            {source.windowTitle && ` · ${source.windowTitle}`}
+          </p>
+        )}
+
         <Textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          placeholder="Body"
-          className="flex-1 resize-none font-mono text-xs text-blink-code"
+          ref={fieldRef}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Captured text…"
+          className="flex-1 resize-none text-sm leading-relaxed"
         />
 
         {error && <p className="line-clamp-2 text-[11px] text-destructive">{error}</p>}
@@ -150,7 +144,7 @@ export function QuickCapture() {
             variant="ghost"
             size="sm"
             onClick={optimize}
-            disabled={optimizing || (!title.trim() && !body.trim())}
+            disabled={optimizing || !text.trim()}
             className="text-blink-bright"
           >
             <WandSparkles className="size-3.5" />
@@ -161,7 +155,7 @@ export function QuickCapture() {
             <Button
               size="sm"
               onClick={save}
-              disabled={!title.trim()}
+              disabled={!text.trim()}
               className="shadow-[0_6px_20px_-6px_hsl(258_90%_66%/0.55)]"
             >
               Save task

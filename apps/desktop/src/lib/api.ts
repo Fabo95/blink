@@ -1,6 +1,5 @@
 import type { CaptureDraft } from '@/generated/CaptureDraft';
 import type { NewTask } from '@/generated/NewTask';
-import type { OptimizedCapture } from '@/generated/OptimizedCapture';
 import type { SanitizeResult } from '@/generated/SanitizeResult';
 import type { Task } from '@/generated/Task';
 
@@ -29,11 +28,12 @@ export const api = {
   listTasks: () => invoke<Task[]>('list_tasks'),
   saveTask: (task: NewTask) => invoke<Task>('save_task', { task }),
   deleteTask: (id: string) => invoke<void>('delete_task', { id }),
+  /** Optimize a saved task's text with AI and persist it, marking it improved. */
+  improveTask: (id: string, text: string) => invoke<Task>('improve_task', { id, text }),
   /** Close the quick-capture panel and return focus to the previous app. */
   dismissCapture: () => invoke<void>('dismiss_capture'),
-  /** Ask OpenAI to clean up the capture into a crisp title + tidied body. */
-  optimizeCapture: (title: string, body: string) =>
-    invoke<OptimizedCapture>('optimize_capture', { title, body }),
+  /** Ask OpenAI to clean up the captured text. */
+  optimizeText: (text: string) => invoke<string>('optimize_text', { text }),
 };
 
 // --- Browser fallback -------------------------------------------------------
@@ -56,6 +56,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
         redactionCount: count,
         source: {
           appId: 'clipboard',
+          appName: 'Clipboard',
           windowTitle: 'Copied text',
           capturedAt: new Date().toISOString(),
         },
@@ -73,14 +74,22 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       const now = new Date().toISOString();
       const task: Task = {
         id: crypto.randomUUID(),
-        title: input.title,
-        body: input.body,
+        text: input.text,
         status: 'inbox',
+        improved: false,
         source: input.source,
         createdAt: now,
         updatedAt: now,
       };
       mockStore.unshift(task);
+      return task as T;
+    }
+    case 'improve_task': {
+      const task = mockStore.find((t) => t.id === args?.id);
+      if (!task) throw new Error('task not found');
+      // Browser mock can't reach OpenAI — just flag it improved.
+      task.improved = true;
+      task.updatedAt = new Date().toISOString();
       return task as T;
     }
     case 'delete_task': {
@@ -90,9 +99,9 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
     }
     case 'dismiss_capture':
       return undefined as T;
-    case 'optimize_capture':
+    case 'optimize_text':
       // Browser mock can't reach OpenAI — echo the input back.
-      return { title: String(args?.title ?? ''), body: String(args?.body ?? '') } as T;
+      return String(args?.text ?? '') as T;
     default:
       throw new Error(`Unknown command: ${cmd}`);
   }

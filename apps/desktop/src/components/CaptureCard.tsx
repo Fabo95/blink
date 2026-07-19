@@ -1,10 +1,8 @@
-import { suggestTitle } from '@blink/ai/suggest-title';
 import { ClipboardPaste, ShieldCheck, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import type { CaptureDraft } from '@/generated/CaptureDraft';
@@ -17,8 +15,7 @@ interface CaptureCardProps {
 
 export function CaptureCard({ onSaved }: CaptureCardProps) {
   const [draft, setDraft] = useState<CaptureDraft | null>(null);
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
+  const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [redactions, setRedactions] = useState(0);
 
@@ -27,42 +24,40 @@ export function CaptureCard({ onSaved }: CaptureCardProps) {
     try {
       const captured = await api.captureFromClipboard();
       setDraft(captured);
-      setBody(captured.text);
-      setTitle(suggestTitle(captured).title);
+      setText(captured.text);
     } finally {
       setBusy(false);
     }
   }, []);
 
-  // Keep the redaction count live as the user edits the body.
+  // Keep the redaction count live as the user edits the task text.
   useEffect(() => {
     let cancelled = false;
-    if (!body) {
+    if (!text) {
       setRedactions(0);
       return;
     }
-    api.sanitize(body).then((result) => {
+    api.sanitize(text).then((result) => {
       if (!cancelled) setRedactions(result.redactionCount);
     });
     return () => {
       cancelled = true;
     };
-  }, [body]);
+  }, [text]);
 
   const save = useCallback(async () => {
-    if (!draft || !title.trim()) return;
+    if (!draft || !text.trim()) return;
     setBusy(true);
     try {
-      const task: NewTask = { title: title.trim(), body, source: draft.source };
+      const task: NewTask = { text: text.trim(), source: draft.source };
       await api.saveTask(task);
       setDraft(null);
-      setTitle('');
-      setBody('');
+      setText('');
       onSaved();
     } finally {
       setBusy(false);
     }
-  }, [draft, title, body, onSaved]);
+  }, [draft, text, onSaved]);
 
   return (
     <Card className="panel">
@@ -85,8 +80,10 @@ export function CaptureCard({ onSaved }: CaptureCardProps) {
         ) : (
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2">
-              <Badge variant="secondary">{draft.source.appId}</Badge>
-              <Badge variant="secondary">{draft.source.windowTitle}</Badge>
+              <Badge variant="secondary">{draft.source.appName || draft.source.appId}</Badge>
+              {draft.source.windowTitle && (
+                <Badge variant="secondary">{draft.source.windowTitle}</Badge>
+              )}
               {redactions > 0 && (
                 <Badge variant="destructive" className="gap-1">
                   <ShieldCheck className="size-3" />
@@ -96,16 +93,11 @@ export function CaptureCard({ onSaved }: CaptureCardProps) {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="capture-title">Title</Label>
-              <Input id="capture-title" value={title} onChange={(e) => setTitle(e.target.value)} />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="capture-body">Body (sanitized)</Label>
+              <Label htmlFor="capture-text">Task (sanitized)</Label>
               <Textarea
-                id="capture-body"
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
+                id="capture-text"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
                 rows={5}
                 className="font-mono text-xs text-blink-code"
               />
@@ -117,7 +109,7 @@ export function CaptureCard({ onSaved }: CaptureCardProps) {
               </Button>
               <Button
                 onClick={save}
-                disabled={busy || !title.trim()}
+                disabled={busy || !text.trim()}
                 className="shadow-[0_6px_20px_-6px_hsl(258_90%_66%/0.55)]"
               >
                 <Sparkles />

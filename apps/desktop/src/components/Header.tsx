@@ -5,7 +5,10 @@ import { cn } from '@/lib/utils';
 
 export function Header() {
   return (
-    <header className="flex items-center justify-between border-b border-border/50 px-6 py-4">
+    <header
+      data-tauri-drag-region
+      className="flex select-none items-center justify-between border-b border-border/50 px-6 pb-4 pt-11 [&>*]:pointer-events-none"
+    >
       <h1 className="bg-gradient-to-br from-blink-soft to-blink-bright bg-clip-text text-base font-semibold tracking-tight text-transparent">
         {brand.name}
       </h1>

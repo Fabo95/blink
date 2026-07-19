@@ -8,7 +8,7 @@ use serde::Serialize;
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", content = "message", rename_all = "camelCase")]
 pub enum AppError {
-    /// A persistence-layer failure (poisoned lock now; DB errors once SQLCipher lands).
+    /// A persistence-layer failure (SQLCipher/keychain error or a poisoned lock).
     Store(String),
     /// An AI-optimization failure (missing key, network, or a bad model response).
     Ai(String),

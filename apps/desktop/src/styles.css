@@ -34,6 +34,22 @@
 
   * {
     border-color: hsl(var(--border));
+    /* Native-app feel: one cursor everywhere — no I-beam, hand, or grab. */
+    cursor: default;
+  }
+
+  /* Native-app feel: UI text isn't selectable. Editable fields opt back in so the
+     capture inputs still work. */
+  html {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  input,
+  textarea,
+  [contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
   }
 
   html,

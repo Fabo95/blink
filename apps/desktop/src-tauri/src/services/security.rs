@@ -6,7 +6,7 @@
 
 use regex::Regex;
 
-use crate::models::SanitizeResult;
+use crate::core::models::SanitizeResult;
 
 /// A declarative redaction rule, compiled into a matcher by [`SecurityFilter`].
 pub struct RedactionRule {
