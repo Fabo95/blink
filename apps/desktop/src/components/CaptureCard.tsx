@@ -37,7 +37,7 @@ export function CaptureCard({ onSaved }: CaptureCardProps) {
       setRedactions(0);
       return;
     }
-    api.sanitize(text).then((result) => {
+    api.sanitizeText(text).then((result) => {
       if (!cancelled) setRedactions(result.redactionCount);
     });
     return () => {
@@ -49,7 +49,7 @@ export function CaptureCard({ onSaved }: CaptureCardProps) {
     if (!draft || !text.trim()) return;
     setBusy(true);
     try {
-      const task: NewTask = { text: text.trim(), source: draft.source };
+      const task: NewTask = { text: text.trim(), improved: false, source: draft.source };
       await api.saveTask(task);
       setDraft(null);
       setText('');

@@ -24,7 +24,7 @@ export const api = {
   /** Read the clipboard + system metadata, run the DLP filter, return a draft. */
   captureFromClipboard: () => invoke<CaptureDraft>('capture_from_clipboard'),
   /** Run the local security filter over arbitrary text (live preview in the UI). */
-  sanitize: (text: string) => invoke<SanitizeResult>('sanitize', { text }),
+  sanitizeText: (text: string) => invoke<SanitizeResult>('sanitize_text', { text }),
   listTasks: () => invoke<Task[]>('list_tasks'),
   saveTask: (task: NewTask) => invoke<Task>('save_task', { task }),
   deleteTask: (id: string) => invoke<void>('delete_task', { id }),
@@ -32,8 +32,8 @@ export const api = {
   improveTask: (id: string, text: string) => invoke<Task>('improve_task', { id, text }),
   /** Close the quick-capture panel and return focus to the previous app. */
   dismissCapture: () => invoke<void>('dismiss_capture'),
-  /** Ask OpenAI to clean up the captured text. */
-  optimizeText: (text: string) => invoke<string>('optimize_text', { text }),
+  /** Ask OpenAI to improve raw captured text (returns the cleaned text). */
+  improveText: (text: string) => invoke<string>('improve_text', { text }),
 };
 
 // --- Browser fallback -------------------------------------------------------
@@ -63,7 +63,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       };
       return draft as T;
     }
-    case 'sanitize': {
+    case 'sanitize_text': {
       const { clean, count } = mockSanitize(String(args?.text ?? ''));
       return { clean, redactionCount: count, matched: [] } as T;
     }
@@ -76,7 +76,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
         id: crypto.randomUUID(),
         text: input.text,
         status: 'inbox',
-        improved: false,
+        improved: input.improved,
         source: input.source,
         createdAt: now,
         updatedAt: now,
@@ -99,7 +99,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
     }
     case 'dismiss_capture':
       return undefined as T;
-    case 'optimize_text':
+    case 'improve_text':
       // Browser mock can't reach OpenAI — echo the input back.
       return String(args?.text ?? '') as T;
     default:

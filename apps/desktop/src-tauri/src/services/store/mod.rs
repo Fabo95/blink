@@ -16,5 +16,5 @@ pub trait TaskStore: Send + Sync {
     fn insert(&self, new: NewTask) -> AppResult<Task>;
     fn delete(&self, id: &str) -> AppResult<()>;
     /// Replace a task's text and mark it as AI-improved; returns the updated task.
-    fn update_text(&self, id: &str, text: &str) -> AppResult<Task>;
+    fn mark_improved(&self, id: &str, text: &str) -> AppResult<Task>;
 }

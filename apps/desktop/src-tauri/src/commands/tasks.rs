@@ -19,14 +19,14 @@ pub fn delete_task(store: State<'_, Box<dyn TaskStore>>, id: String) -> AppResul
     store.delete(&id)
 }
 
-/// Run the AI optimizer over a task's text and persist the cleaned-up result,
-/// marking it improved so it isn't offered again.
+/// Improve a task's text with AI and persist the cleaned-up result, marking it
+/// improved so it isn't offered again.
 #[tauri::command]
 pub async fn improve_task(
     store: State<'_, Box<dyn TaskStore>>,
     id: String,
     text: String,
 ) -> AppResult<Task> {
-    let improved = crate::services::ai::optimize(text).await?;
-    store.update_text(&id, &improved)
+    let improved = crate::services::ai::improve(text).await?;
+    store.mark_improved(&id, &improved)
 }

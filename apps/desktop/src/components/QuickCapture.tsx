@@ -15,7 +15,10 @@ export function QuickCapture() {
   const [text, setText] = useState('');
   const [redactions, setRedactions] = useState(0);
   const [source, setSource] = useState<CaptureSource | null>(null);
-  const [optimizing, setOptimizing] = useState(false);
+  const [improving, setImproving] = useState(false);
+  // True once the text is AI-improved and untouched since — carried to the saved
+  // task so the inbox doesn't offer to improve it again.
+  const [improved, setImproved] = useState(false);
   const [error, setError] = useState('');
   const fieldRef = useRef<HTMLTextAreaElement>(null);
 
@@ -24,6 +27,7 @@ export function QuickCapture() {
     setText(draft.text);
     setRedactions(draft.redactionCount);
     setSource(draft.source);
+    setImproved(false);
     setError('');
     setTimeout(() => fieldRef.current?.focus(), 0);
   }, []);
@@ -31,6 +35,7 @@ export function QuickCapture() {
   const hide = useCallback(async () => {
     setText('');
     setRedactions(0);
+    setImproved(false);
     setError('');
     await api.dismissCapture();
   }, []);
@@ -38,7 +43,7 @@ export function QuickCapture() {
   const save = useCallback(async () => {
     const trimmed = text.trim();
     if (!trimmed || !source) return;
-    await api.saveTask({ text: trimmed, source });
+    await api.saveTask({ text: trimmed, improved, source });
     if (isTauri) {
       // Only the main (inbox) window cares — target it directly instead of
       // broadcasting to every window.
@@ -46,14 +51,15 @@ export function QuickCapture() {
       await emitTo('main', 'task-saved');
     }
     await hide();
-  }, [text, source, hide]);
+  }, [text, improved, source, hide]);
 
-  const optimize = useCallback(async () => {
+  const improve = useCallback(async () => {
     if (!text.trim()) return;
-    setOptimizing(true);
+    setImproving(true);
     setError('');
     try {
-      setText(await api.optimizeText(text));
+      setText(await api.improveText(text));
+      setImproved(true);
     } catch (e) {
       // Tauri rejects a command's Err with our AppError object `{ kind, message }`,
       // which isn't an Error instance — pull the message from whatever shape it is.
@@ -64,10 +70,10 @@ export function QuickCapture() {
             ? e
             : e && typeof e === 'object' && 'message' in e
               ? String((e as { message: unknown }).message)
-              : 'Optimization failed';
+              : 'Could not improve text';
       setError(message);
     } finally {
-      setOptimizing(false);
+      setImproving(false);
     }
   }, [text]);
 
@@ -132,7 +138,10 @@ export function QuickCapture() {
         <Textarea
           ref={fieldRef}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            setImproved(false);
+          }}
           placeholder="Captured text…"
           className="flex-1 resize-none text-sm leading-relaxed"
         />
@@ -143,12 +152,12 @@ export function QuickCapture() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={optimize}
-            disabled={optimizing || !text.trim()}
+            onClick={improve}
+            disabled={improving || !text.trim()}
             className="text-blink-bright"
           >
             <WandSparkles className="size-3.5" />
-            {optimizing ? 'Optimizing…' : 'Optimize with AI'}
+            {improving ? 'Improving…' : 'Improve with AI'}
           </Button>
           <div className="flex items-center gap-3">
             <span className="text-[10px] text-muted-foreground">Esc · ⌘↵</span>

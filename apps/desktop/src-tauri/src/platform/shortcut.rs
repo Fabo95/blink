@@ -4,12 +4,9 @@ use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
 
-use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
-use crate::core::state::PendingSource;
-
-use super::{frontmost, input, window};
+use super::{os, window};
 
 /// Register the capture hotkey (⌘⇧B / Ctrl+Shift+B). When pressed it records the
 /// source app/window, copies the current selection, then opens the quick-capture
@@ -32,13 +29,13 @@ pub fn register_capture_shortcut(app: &mut tauri::App) -> Result<(), Box<dyn std
                     // copy its selection — both must happen before our panel shows.
                     let capture_handle = app.clone();
                     let _ = app.run_on_main_thread(move || {
-                        stash_frontmost_source(&capture_handle);
-                        input::copy_selection();
+                        os::record_source(&capture_handle);
+                        os::copy_selection();
                     });
                     // Give the copy a moment to reach the clipboard.
                     thread::sleep(Duration::from_millis(140));
                     let handle = app.clone();
-                    let _ = app.run_on_main_thread(move || window::open_capture_panel(&handle));
+                    let _ = app.run_on_main_thread(move || window::open_capture_window(&handle));
                 });
             })
             .build(),
@@ -50,12 +47,4 @@ pub fn register_capture_shortcut(app: &mut tauri::App) -> Result<(), Box<dyn std
     }
 
     Ok(())
-}
-
-/// Record the frontmost app/window as the pending capture source, before our panel
-/// takes focus.
-fn stash_frontmost_source(app: &AppHandle) {
-    if let Some(state) = app.try_state::<PendingSource>() {
-        state.set(frontmost::detect());
-    }
 }

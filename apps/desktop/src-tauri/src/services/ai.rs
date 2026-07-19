@@ -1,4 +1,4 @@
-//! OpenAI client for the "Optimize with AI" action. The API key comes from the
+//! OpenAI client for the "Improve with AI" action. The API key comes from the
 //! `OPENAI_API_KEY` environment variable and never leaves the native layer.
 
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,7 @@ imperative sentence starting with a verb. Keep only what's needed to act on it, 
 else. Return ONLY that one sentence — no preamble, no quotes, no markdown, no labels.";
 
 /// Send the captured text to OpenAI and return a cleaned-up single action item.
-pub async fn optimize(text: String) -> AppResult<String> {
+pub async fn improve(text: String) -> AppResult<String> {
     let api_key = std::env::var("OPENAI_API_KEY")
         .map_err(|_| AppError::Ai("OPENAI_API_KEY is not set".to_string()))?;
 

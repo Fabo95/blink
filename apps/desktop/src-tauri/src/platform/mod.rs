@@ -1,11 +1,19 @@
-//! OS-specific integration: the global capture hotkey, input simulation, capture
-//! window placement, and frontmost-source detection. The public entry points are
-//! no-ops on platforms without a desktop shell.
+//! OS integration. Cross-platform orchestration — the capture hotkey and its
+//! pipeline, capture-window placement — lives here at the root. The OS-specific
+//! pieces (source detection, copy simulation, run-event handling) live in per-OS
+//! modules selected at compile time. To support a new platform, add a `windows` /
+//! `ios` module exposing the same functions and one `cfg` line below.
 
-pub mod frontmost;
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "macos")]
+use macos as os;
 
-#[cfg(desktop)]
-mod input;
+#[cfg(not(target_os = "macos"))]
+mod fallback;
+#[cfg(not(target_os = "macos"))]
+use fallback as os;
+
 #[cfg(desktop)]
 mod shortcut;
 #[cfg(desktop)]
@@ -25,8 +33,5 @@ pub fn init(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
 /// React to a Tauri run-loop event (e.g. dock-icon reopen on macOS).
 pub fn on_run_event(app: &AppHandle, event: &RunEvent) {
-    #[cfg(desktop)]
-    window::on_run_event(app, event);
-    #[cfg(not(desktop))]
-    let _ = (app, event);
+    os::on_run_event(app, event);
 }

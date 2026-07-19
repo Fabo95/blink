@@ -1,10 +1,10 @@
-//! Capture-panel placement and run-loop window handling.
+//! Capture-window placement (cross-platform).
 
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, RunEvent};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize};
 
 /// Show the capture panel centered on the active screen and tell it to read the
 /// clipboard.
-pub fn open_capture_panel(app: &AppHandle) {
+pub fn open_capture_window(app: &AppHandle) {
     let Some(window) = app.get_webview_window("capture") else {
         return;
     };
@@ -34,18 +34,4 @@ pub fn open_capture_panel(app: &AppHandle) {
         let _ = main.hide();
     }
     let _ = app.emit_to("capture", "capture-open", ());
-}
-
-/// Dock-icon click re-opens the inbox — the capture flow keeps the main window
-/// hidden, so this brings it back (macOS).
-pub fn on_run_event(app: &AppHandle, event: &RunEvent) {
-    #[cfg(target_os = "macos")]
-    if let RunEvent::Reopen { .. } = event {
-        if let Some(main) = app.get_webview_window("main") {
-            let _ = main.show();
-            let _ = main.set_focus();
-        }
-    }
-    #[cfg(not(target_os = "macos"))]
-    let _ = (app, event);
 }

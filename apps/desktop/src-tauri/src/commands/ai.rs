@@ -1,7 +1,7 @@
 use crate::core::error::AppResult;
 
-/// Ask OpenAI to clean up the captured text into a single action item.
+/// Improve raw text with AI and return the cleaned-up result (no persistence).
 #[tauri::command]
-pub async fn optimize_text(text: String) -> AppResult<String> {
-    crate::services::ai::optimize(text).await
+pub async fn improve_text(text: String) -> AppResult<String> {
+    crate::services::ai::improve(text).await
 }

@@ -24,11 +24,14 @@ pub fn capture_from_clipboard(
         redaction_count: result.redaction_count,
         // Set by the ⌘⇧B handler while the source app was still frontmost. The
         // main-window "Read clipboard" button has no source app → the fallback.
-        source: source.peek().map(into_capture_source).unwrap_or_else(clipboard_source),
+        source: source
+            .peek()
+            .map(capture_source_from)
+            .unwrap_or_else(fallback_capture_source),
     }
 }
 
-fn into_capture_source(front: FrontmostSource) -> CaptureSource {
+fn capture_source_from(front: FrontmostSource) -> CaptureSource {
     CaptureSource {
         app_id: front.app_id,
         app_name: front.app_name,
@@ -37,7 +40,7 @@ fn into_capture_source(front: FrontmostSource) -> CaptureSource {
     }
 }
 
-fn clipboard_source() -> CaptureSource {
+fn fallback_capture_source() -> CaptureSource {
     CaptureSource {
         app_id: "clipboard".to_string(),
         app_name: "Clipboard".to_string(),
@@ -47,7 +50,7 @@ fn clipboard_source() -> CaptureSource {
 }
 
 #[tauri::command]
-pub fn sanitize(filter: State<'_, SecurityFilter>, text: String) -> SanitizeResult {
+pub fn sanitize_text(filter: State<'_, SecurityFilter>, text: String) -> SanitizeResult {
     filter.sanitize(&text)
 }
 

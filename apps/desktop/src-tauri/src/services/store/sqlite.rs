@@ -73,7 +73,7 @@ impl TaskStore for SqliteTaskStore {
             id: Uuid::new_v4().to_string(),
             text: new.text,
             status: "inbox".to_string(),
-            improved: false,
+            improved: new.improved,
             source: new.source,
             created_at: now.clone(),
             updated_at: now,
@@ -107,7 +107,7 @@ impl TaskStore for SqliteTaskStore {
         Ok(())
     }
 
-    fn update_text(&self, id: &str, text: &str) -> AppResult<Task> {
+    fn mark_improved(&self, id: &str, text: &str) -> AppResult<Task> {
         let now = Utc::now().to_rfc3339();
         let conn = self.conn.lock().map_err(lock_err)?;
         let changed = conn
@@ -167,7 +167,7 @@ fn load_or_create_db_key() -> AppResult<String> {
     match entry.get_password() {
         Ok(key) => Ok(key),
         Err(keyring::Error::NoEntry) => {
-            let key = generate_key();
+            let key = generate_db_key();
             entry
                 .set_password(&key)
                 .map_err(|e| AppError::Store(format!("could not store db key: {e}")))?;
@@ -179,6 +179,6 @@ fn load_or_create_db_key() -> AppResult<String> {
 
 // Two v4 UUIDs → 64 hex chars (~244 bits of entropy). SQLCipher stretches this
 // passphrase with PBKDF2, so no separate CSPRNG dependency is needed.
-fn generate_key() -> String {
+fn generate_db_key() -> String {
     format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())
 }

@@ -1,12 +1,11 @@
-//! Frontmost-application + focused-window detection (macOS: AppKit + the
-//! Accessibility API). Returns `None` on every other platform.
+//! Frontmost-application + focused-window detection via AppKit + the Accessibility
+//! API.
 
 use crate::core::state::FrontmostSource;
 
-/// Read the frontmost application and its focused window title. Returns `None` on
-/// non-macOS platforms or if nothing is frontmost.
-#[cfg(target_os = "macos")]
-pub fn detect() -> Option<FrontmostSource> {
+/// Read the frontmost application and its focused window title, or `None` if
+/// nothing is frontmost.
+pub fn detect_source() -> Option<FrontmostSource> {
     use objc2_app_kit::NSWorkspace;
 
     let app = NSWorkspace::sharedWorkspace().frontmostApplication()?;
@@ -21,15 +20,9 @@ pub fn detect() -> Option<FrontmostSource> {
     })
 }
 
-#[cfg(not(target_os = "macos"))]
-pub fn detect() -> Option<FrontmostSource> {
-    None
-}
-
 /// The focused window's title via the Accessibility API. Needs the same
 /// Accessibility permission the ⌘C copy-simulation already requires; returns
 /// `None` if it isn't granted, so capture still works without a window title.
-#[cfg(target_os = "macos")]
 fn focused_window_title(pid: i32) -> Option<String> {
     use accessibility_sys::{
         kAXFocusedWindowAttribute, kAXTitleAttribute, AXUIElementCreateApplication, AXUIElementRef,
@@ -56,7 +49,6 @@ fn focused_window_title(pid: i32) -> Option<String> {
 }
 
 /// Copy an Accessibility attribute, returning the owned CFTypeRef (caller releases).
-#[cfg(target_os = "macos")]
 unsafe fn copy_attr(
     element: accessibility_sys::AXUIElementRef,
     attribute: &'static str,
