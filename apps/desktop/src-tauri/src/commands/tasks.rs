@@ -19,6 +19,15 @@ pub fn delete_task(repository: State<'_, Repository>, id: String) -> AppResult<(
     repository.tasks.delete(&id)
 }
 
+#[tauri::command]
+pub fn set_task_completed(
+    repository: State<'_, Repository>,
+    id: String,
+    completed: bool,
+) -> AppResult<Task> {
+    repository.tasks.set_completed(&id, completed)
+}
+
 /// Improve a task's text with AI and persist the cleaned-up result, marking it
 /// improved so it isn't offered again.
 #[tauri::command]

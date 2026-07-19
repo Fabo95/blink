@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use chrono::Utc;
-use rusqlite::params;
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_rusqlite::{from_rows, to_params_named};
 use uuid::Uuid;
@@ -29,7 +29,7 @@ impl TaskRepository {
     pub fn list(&self) -> AppResult<Vec<Task>> {
         let conn = self.db.lock()?;
         let mut stmt = conn
-            .prepare("SELECT * FROM tasks ORDER BY created_at DESC")
+            .prepare("SELECT * FROM tasks ORDER BY status = 'done', created_at DESC")
             .map_err(store_err)?;
         let rows = stmt.query([]).map_err(store_err)?;
         from_rows::<TaskRow>(rows)
@@ -80,16 +80,38 @@ impl TaskRepository {
         if changed == 0 {
             return Err(AppError::Store(format!("task {id} not found")));
         }
-        let mut stmt = conn
-            .prepare("SELECT * FROM tasks WHERE id = ?1")
-            .map_err(store_err)?;
-        let rows = stmt.query([id]).map_err(store_err)?;
-        let row = from_rows::<TaskRow>(rows)
-            .next()
-            .ok_or_else(|| AppError::Store(format!("task {id} not found")))?
-            .map_err(serde_err)?;
-        Ok(Task::from(row))
+        fetch_one(&conn, id)
     }
+
+    /// Mark a task done (or move it back to the inbox); returns the updated task.
+    pub fn set_completed(&self, id: &str, completed: bool) -> AppResult<Task> {
+        let status = if completed { "done" } else { "inbox" };
+        let now = Utc::now().to_rfc3339();
+        let conn = self.db.lock()?;
+        let changed = conn
+            .execute(
+                "UPDATE tasks SET status = ?1, updated_at = ?2 WHERE id = ?3",
+                params![status, now, id],
+            )
+            .map_err(store_err)?;
+        if changed == 0 {
+            return Err(AppError::Store(format!("task {id} not found")));
+        }
+        fetch_one(&conn, id)
+    }
+}
+
+/// Fetch a single task by id — used after an update to return the fresh row.
+fn fetch_one(conn: &Connection, id: &str) -> AppResult<Task> {
+    let mut stmt = conn
+        .prepare("SELECT * FROM tasks WHERE id = ?1")
+        .map_err(store_err)?;
+    let rows = stmt.query([id]).map_err(store_err)?;
+    let row = from_rows::<TaskRow>(rows)
+        .next()
+        .ok_or_else(|| AppError::Store(format!("task {id} not found")))?
+        .map_err(serde_err)?;
+    Ok(Task::from(row))
 }
 
 /// The flat, storage-shaped mirror of [`Task`] (the nested `source` fanned out into

@@ -28,6 +28,9 @@ export const api = {
   listTasks: () => invoke<Task[]>('list_tasks'),
   saveTask: (task: NewTask) => invoke<Task>('save_task', { task }),
   deleteTask: (id: string) => invoke<void>('delete_task', { id }),
+  /** Mark a task done (or move it back to the inbox). */
+  setTaskCompleted: (id: string, completed: boolean) =>
+    invoke<Task>('set_task_completed', { id, completed }),
   /** Optimize a saved task's text with AI and persist it, marking it improved. */
   improveTask: (id: string, text: string) => invoke<Task>('improve_task', { id, text }),
   /** Close the quick-capture panel and return focus to the previous app. */
@@ -101,6 +104,13 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       const idx = mockStore.findIndex((t) => t.id === args?.id);
       if (idx >= 0) mockStore.splice(idx, 1);
       return undefined as T;
+    }
+    case 'set_task_completed': {
+      const task = mockStore.find((t) => t.id === args?.id);
+      if (!task) throw new Error('task not found');
+      task.status = args?.completed ? 'done' : 'inbox';
+      task.updatedAt = new Date().toISOString();
+      return task as T;
     }
     case 'dismiss_capture':
       return undefined as T;
