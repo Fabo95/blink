@@ -34,11 +34,16 @@ export const api = {
   dismissCapture: () => invoke<void>('dismiss_capture'),
   /** Ask OpenAI to improve raw captured text (returns the cleaned text). */
   improveText: (text: string) => invoke<string>('improve_text', { text }),
+  /** The current global capture hotkey (Tauri accelerator syntax). */
+  getCaptureShortcut: () => invoke<string>('get_capture_shortcut'),
+  /** Bind a new capture hotkey; rejects if invalid or already taken. */
+  setCaptureShortcut: (shortcut: string) => invoke<void>('set_capture_shortcut', { shortcut }),
 };
 
 // --- Browser fallback -------------------------------------------------------
 
 const mockStore: Task[] = [];
+let mockShortcut = 'CommandOrControl+Shift+B';
 
 async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   switch (cmd) {
@@ -102,6 +107,11 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
     case 'improve_text':
       // Browser mock can't reach OpenAI — echo the input back.
       return String(args?.text ?? '') as T;
+    case 'get_capture_shortcut':
+      return mockShortcut as T;
+    case 'set_capture_shortcut':
+      mockShortcut = String(args?.shortcut ?? '');
+      return undefined as T;
     default:
       throw new Error(`Unknown command: ${cmd}`);
   }

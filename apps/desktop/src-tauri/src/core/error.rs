@@ -12,6 +12,8 @@ pub enum AppError {
     Store(String),
     /// An AI-optimization failure (missing key, network, or a bad model response).
     Ai(String),
+    /// A capture-shortcut failure (invalid shortcut or the OS rejected it).
+    Shortcut(String),
 }
 
 impl fmt::Display for AppError {
@@ -19,6 +21,7 @@ impl fmt::Display for AppError {
         match self {
             AppError::Store(msg) => write!(f, "store error: {msg}"),
             AppError::Ai(msg) => write!(f, "ai error: {msg}"),
+            AppError::Shortcut(msg) => write!(f, "shortcut error: {msg}"),
         }
     }
 }

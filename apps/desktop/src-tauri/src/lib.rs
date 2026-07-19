@@ -1,14 +1,14 @@
 mod commands;
 mod core;
 mod platform;
+mod repository;
 mod services;
 
 use tauri::Manager;
 
 use crate::core::state::PendingSource;
+use crate::repository::Repository;
 use crate::services::security::SecurityFilter;
-use crate::services::store::sqlite::SqliteTaskStore;
-use crate::services::store::TaskStore;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -26,17 +26,16 @@ pub fn run() {
         .manage(PendingSource::default())
         .setup(|app| {
             // The encrypted DB lives in the per-user app data dir; create it on
-            // first run. The store is a trait object, so swapping SQLCipher for a
-            // synced store later touches only this block.
+            // first run. The Repository opens the shared connection and its entity
+            // repositories, so future tables (settings, …) reuse the same `Db`.
             let data_dir = app
                 .path()
                 .app_data_dir()
                 .map_err(|e| format!("no app data dir: {e}"))?;
             std::fs::create_dir_all(&data_dir)
                 .map_err(|e| format!("could not create data dir: {e}"))?;
-            let store: Box<dyn TaskStore> =
-                Box::new(SqliteTaskStore::open(&data_dir.join("blink.db"))?);
-            app.manage(store);
+
+            app.manage(Repository::open(&data_dir.join("blink.db"))?);
 
             platform::init(app)?;
             Ok(())
@@ -50,6 +49,8 @@ pub fn run() {
             commands::tasks::save_task,
             commands::tasks::delete_task,
             commands::tasks::improve_task,
+            commands::shortcut::get_capture_shortcut,
+            commands::shortcut::set_capture_shortcut,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Blink")

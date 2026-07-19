@@ -3,4 +3,5 @@
 
 pub mod ai;
 pub mod capture;
+pub mod shortcut;
 pub mod tasks;

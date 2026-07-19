@@ -1,50 +1,87 @@
-//! The system-wide capture hotkey and the pipeline it drives.
+//! The capture hotkey, end to end: its persisted setting (via the [`Repository`]),
+//! OS registration, and the pipeline it drives. This module owns the whole feature.
 
 use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
 
+use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+
+use crate::core::error::{AppError, AppResult};
+use crate::repository::Repository;
 
 use super::{os, window};
 
-/// Register the capture hotkey (⌘⇧B / Ctrl+Shift+B). When pressed it records the
-/// source app/window, copies the current selection, then opens the quick-capture
-/// panel — the input simulation and window ops run on the main thread (macOS),
-/// while the delays run on a background thread so the UI never blocks.
-pub fn register_capture_shortcut(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    let capture_shortcut = Shortcut::from_str("CommandOrControl+Shift+B")?;
+const SETTING_KEY: &str = "capture_shortcut";
+const DEFAULT: &str = "CommandOrControl+Shift+B";
 
+/// Register the global-shortcut listener: a handler that starts the capture flow on
+/// any pressed shortcut. Only the capture hotkey is ever bound, so it needn't match
+/// a specific one.
+pub fn register_listener(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.handle().plugin(
         tauri_plugin_global_shortcut::Builder::new()
-            .with_handler(move |app, shortcut, event| {
-                if shortcut != &capture_shortcut || event.state() != ShortcutState::Pressed {
-                    return;
+            .with_handler(|app, _shortcut, event| {
+                if event.state() == ShortcutState::Pressed {
+                    start_capture(app.clone());
                 }
-                let app = app.clone();
-                thread::spawn(move || {
-                    // Let the user release the hotkey keys before we send ⌘C.
-                    thread::sleep(Duration::from_millis(60));
-                    // Record the source app/window while it's still frontmost, then
-                    // copy its selection — both must happen before our panel shows.
-                    let capture_handle = app.clone();
-                    let _ = app.run_on_main_thread(move || {
-                        os::record_source(&capture_handle);
-                        os::copy_selection();
-                    });
-                    // Give the copy a moment to reach the clipboard.
-                    thread::sleep(Duration::from_millis(140));
-                    let handle = app.clone();
-                    let _ = app.run_on_main_thread(move || window::open_capture_window(&handle));
-                });
             })
             .build(),
     )?;
-
-    // Don't crash if the combo is already taken by another app — just log it.
-    if let Err(err) = app.global_shortcut().register(capture_shortcut) {
-        eprintln!("Blink: could not register capture shortcut: {err}");
-    }
-
     Ok(())
+}
+
+/// Bind the configured hotkey (the saved one, or the default) — called once at
+/// startup, after the handler.
+pub fn bind_current(app: &AppHandle) -> AppResult<()> {
+    bind(app, &current(app)?)
+}
+
+/// The current capture hotkey: the user's saved one, or the default.
+pub fn current(app: &AppHandle) -> AppResult<String> {
+    Ok(app
+        .state::<Repository>()
+        .settings
+        .get(SETTING_KEY)?
+        .unwrap_or_else(|| DEFAULT.to_string()))
+}
+
+/// Change the hotkey: bind the new shortcut and persist it. Binds first, so an
+/// invalid or already-taken shortcut errors before it's saved.
+pub fn set(app: &AppHandle, shortcut: &str) -> AppResult<()> {
+    bind(app, shortcut)?;
+    app.state::<Repository>().settings.set(SETTING_KEY, shortcut)
+}
+
+/// Register `shortcut` (a Tauri accelerator string) with the OS as the one and only
+/// capture hotkey, replacing any previous binding.
+fn bind(app: &AppHandle, shortcut: &str) -> AppResult<()> {
+    let parsed = Shortcut::from_str(shortcut)
+        .map_err(|e| AppError::Shortcut(format!("invalid shortcut '{shortcut}': {e}")))?;
+    let manager = app.global_shortcut();
+    let _ = manager.unregister_all();
+    manager
+        .register(parsed)
+        .map_err(|e| AppError::Shortcut(format!("could not register '{shortcut}': {e}")))?;
+    Ok(())
+}
+
+/// Run the capture flow: record the source + copy the selection, then open the
+/// panel. Input/window ops run on the main thread (macOS); the delays run on a
+/// worker thread so the UI never blocks.
+fn start_capture(app: AppHandle) {
+    thread::spawn(move || {
+        // Let the user release the hotkey keys before we send ⌘C.
+        thread::sleep(Duration::from_millis(60));
+        let capture_handle = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            os::record_source(&capture_handle);
+            os::copy_selection();
+        });
+        // Give the copy a moment to reach the clipboard.
+        thread::sleep(Duration::from_millis(140));
+        let handle = app.clone();
+        let _ = app.run_on_main_thread(move || window::open_capture_window(&handle));
+    });
 }
