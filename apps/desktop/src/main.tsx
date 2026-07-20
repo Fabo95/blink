@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from '@/App';
-import { QuickCapture } from '@/components/QuickCapture';
+import { CopyCapture } from '@/components/CopyCapture';
 import { isTauri } from '@/lib/api';
 import '@/styles.css';
 
@@ -15,11 +15,11 @@ async function main() {
     const { getCurrentWindow } = await import('@tauri-apps/api/window');
     label = getCurrentWindow().label;
   }
-  const isCapture = label === 'capture';
-  if (isCapture) document.documentElement.classList.add('capture-window');
+  const isCopyCapture = label === 'copy-capture';
+  if (isCopyCapture) document.documentElement.classList.add('copy-capture-window');
 
   ReactDOM.createRoot(root).render(
-    <React.StrictMode>{isCapture ? <QuickCapture /> : <App />}</React.StrictMode>,
+    <React.StrictMode>{isCopyCapture ? <CopyCapture /> : <App />}</React.StrictMode>,
   );
 }
 

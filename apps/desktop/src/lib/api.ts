@@ -21,8 +21,8 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 }
 
 export const api = {
-  /** Read the clipboard + system metadata, run the DLP filter, return a draft. */
-  captureFromClipboard: () => invoke<CaptureDraft>('capture_from_clipboard'),
+  /** Copy-capture: read the clipboard + system metadata, run the DLP filter, return a draft. */
+  readCopyCapture: () => invoke<CaptureDraft>('read_copy_capture'),
   listTasks: () => invoke<Task[]>('list_tasks'),
   saveTask: (task: NewTask) => invoke<Task>('save_task', { task }),
   deleteTask: (id: string) => invoke<void>('delete_task', { id }),
@@ -31,8 +31,8 @@ export const api = {
     invoke<Task>('set_task_completed', { id, completed }),
   /** Optimize a saved task's text with AI and persist it, marking it improved. */
   improveTask: (id: string, text: string) => invoke<Task>('improve_task', { id, text }),
-  /** Close the quick-capture panel and return focus to the previous app. */
-  dismissCapture: () => invoke<void>('dismiss_capture'),
+  /** Close the copy-capture panel and return focus to the previous app. */
+  dismissCopyCapture: () => invoke<void>('dismiss_copy_capture'),
   /** Ask OpenAI to improve raw captured text (returns the cleaned text). */
   improveText: (text: string) => invoke<string>('improve_text', { text }),
   /** The current global capture hotkey (Tauri accelerator syntax). */
@@ -48,7 +48,7 @@ let mockShortcut = 'CommandOrControl+Shift+B';
 
 async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   switch (cmd) {
-    case 'capture_from_clipboard': {
+    case 'read_copy_capture': {
       let text = '';
       try {
         text = await navigator.clipboard.readText();
@@ -107,7 +107,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       task.updatedAt = new Date().toISOString();
       return task as T;
     }
-    case 'dismiss_capture':
+    case 'dismiss_copy_capture':
       return undefined as T;
     case 'improve_text':
       // Browser mock can't reach OpenAI — echo the input back.

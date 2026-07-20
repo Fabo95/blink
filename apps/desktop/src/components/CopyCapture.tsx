@@ -7,11 +7,12 @@ import type { CaptureSource } from '@/generated/CaptureSource';
 import { api, isTauri } from '@/lib/api';
 
 /**
- * The floating quick-capture panel (a separate frameless window). The global
- * ⌘⇧B shortcut positions it by the cursor, shows it, and emits `capture-open`;
- * this reads the clipboard into a single field and saves it as the task on ⌘↵.
+ * The floating copy-capture panel (a separate frameless window). The global
+ * capture shortcut positions it, shows it, and emits `copy-capture-open`; this
+ * reads the clipboard into a single field and saves it as the task on ⌘↵.
+ * Copy is the first capture method — voice/manual will be sibling panels.
  */
-export function QuickCapture() {
+export function CopyCapture() {
   const [text, setText] = useState('');
   const [redactions, setRedactions] = useState(0);
   const [source, setSource] = useState<CaptureSource | null>(null);
@@ -23,7 +24,7 @@ export function QuickCapture() {
   const fieldRef = useRef<HTMLTextAreaElement>(null);
 
   const load = useCallback(async () => {
-    const draft = await api.captureFromClipboard();
+    const draft = await api.readCopyCapture();
     setText(draft.text);
     setRedactions(draft.redactionCount);
     setSource(draft.source);
@@ -37,7 +38,7 @@ export function QuickCapture() {
     setRedactions(0);
     setImproved(false);
     setError('');
-    await api.dismissCapture();
+    await api.dismissCopyCapture();
   }, []);
 
   const save = useCallback(async () => {
@@ -83,7 +84,7 @@ export function QuickCapture() {
     if (!isTauri) return;
     let unlisten: (() => void) | undefined;
     import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('capture-open', () => {
+      listen('copy-capture-open', () => {
         void load();
       }).then((fn) => {
         unlisten = fn;
@@ -118,7 +119,7 @@ export function QuickCapture() {
           className="flex select-none items-center justify-between [&>*]:pointer-events-none"
         >
           <span className="section-bar text-xs font-semibold uppercase tracking-wide text-primary">
-            Quick capture
+            Copy capture
           </span>
           {redactions > 0 && (
             <Badge variant="destructive" className="gap-1">

@@ -58,7 +58,7 @@ pub struct Task {
 pub struct NewTask {
     pub text: String,
     /// True when the text was already AI-optimized before saving (e.g. via the
-    /// quick-capture "Optimize with AI" action), so the inbox won't offer it again.
+    /// copy-capture "Optimize with AI" action), so the inbox won't offer it again.
     pub improved: bool,
     pub source: CaptureSource,
 }

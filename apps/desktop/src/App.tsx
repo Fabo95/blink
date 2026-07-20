@@ -16,7 +16,7 @@ export function App() {
     void refresh();
   }, [refresh]);
 
-  // Refresh the inbox when the quick-capture popup saves a task.
+  // Refresh the inbox when the copy-capture popup saves a task.
   useEffect(() => {
     if (!isTauri) return;
     let unlisten: (() => void) | undefined;

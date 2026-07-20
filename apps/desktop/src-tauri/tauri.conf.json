@@ -25,8 +25,8 @@
         "hiddenTitle": true
       },
       {
-        "label": "capture",
-        "title": "Blink Capture",
+        "label": "copy-capture",
+        "title": "Blink Copy Capture",
         "width": 480,
         "height": 300,
         "resizable": false,

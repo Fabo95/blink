@@ -1,6 +1,6 @@
 # Blink
 
-Enterprise-ready, local-first task ingestion. Capture rough text (clipboard, quick-capture
+Enterprise-ready, local-first task ingestion. Capture rough text (clipboard via the copy-capture
 hotkey), sanitize it on-device, optionally clean it up with AI, and store it as tasks in a
 local encrypted database — with a planned self-hosted, zero-knowledge sync tier. macOS-first
 desktop app, dark-violet theme.
@@ -35,7 +35,7 @@ packages/
 ```
 main.rs             binary entry → blink_lib::run()
 lib.rs              composition root: dotenv, manage state, invoke_handler, run loop
-commands/           IPC layer — one #[tauri::command] module per feature (ai, capture,
+commands/           IPC layer — one #[tauri::command] module per feature (ai, copy_capture,
                     tasks, shortcut). Thin: they delegate to services/repository/platform.
 core/               shared types: error (AppError), models (ts-rs structs), state
                     (FrontmostSource, PendingSource)
@@ -82,12 +82,15 @@ Run from the repo root unless noted.
   `Arc<Db>` to each entity repository. Add a table = a migration in `migrations.rs` + a
   `*Repository` file + a field on `Repository`. Row↔struct mapping uses `serde_rusqlite`
   (`SELECT *` maps by column name); a flat `TaskRow` mirrors the nested `Task` for storage.
-- **Capture flow**: the ⌘⇧B global shortcut (owned by `platform/shortcut.rs`) records the
+- **Copy-capture flow**: the ⌘⇧B global shortcut (owned by `platform/shortcut.rs`) records the
   frontmost app/window as the source, simulates ⌘C to copy the selection, then opens a second
-  frameless "capture" window. `main.tsx` branches on `getCurrentWindow().label` to render
-  `QuickCapture` vs `App`. The capture is a **single text field** (no title/body split); it's
+  frameless "copy-capture" window. `main.tsx` branches on `getCurrentWindow().label` to render
+  `CopyCapture` vs `App`. The capture is a **single text field** (no title/body split); it's
   saved as one `Task.text`. The main window's `CaptureCard` is now just info + the editable
-  shortcut — capture happens through the popup.
+  shortcut — capture happens through the popup. Copy is the first capture method; voice/manual
+  are planned as sibling windows (`voice-capture`, …) with their own components. Generic pieces
+  (`CaptureSource`/`CaptureDraft`, the capture hotkey, the source detection) stay unprefixed and
+  are meant to be reused across methods.
 - **Source detection** (`platform/macos/frontmost.rs`): `NSWorkspace` for the frontmost app +
   the Accessibility API for its window title, captured *before* our panel steals focus and
   stashed in `PendingSource`. Reuses the Accessibility permission ⌘C already needs.

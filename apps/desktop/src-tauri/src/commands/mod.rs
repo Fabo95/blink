@@ -2,6 +2,6 @@
 //! One module per feature group.
 
 pub mod ai;
-pub mod capture;
+pub mod copy_capture;
 pub mod shortcut;
 pub mod tasks;

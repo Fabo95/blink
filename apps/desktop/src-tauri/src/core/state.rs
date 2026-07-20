@@ -11,7 +11,7 @@ pub struct FrontmostSource {
 }
 
 /// Set by the capture-hotkey handler *before* our panel steals focus, then read by
-/// the `capture_from_clipboard` command. Reads are non-destructive (`peek`) because
+/// the `read_copy_capture` command. Reads are non-destructive (`peek`) because
 /// the panel may query more than once per open; the stash is `clear`ed on dismiss so
 /// a stale source can't leak into a later, unrelated capture.
 #[derive(Default)]

@@ -1,11 +1,11 @@
-//! Capture-window placement (cross-platform).
+//! Copy-capture window placement (cross-platform).
 
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize};
 
-/// Show the capture panel centered on the active screen and tell it to read the
+/// Show the copy-capture panel centered on the active screen and tell it to read the
 /// clipboard.
-pub fn open_capture_window(app: &AppHandle) {
-    let Some(window) = app.get_webview_window("capture") else {
+pub fn open_copy_capture_window(app: &AppHandle) {
+    let Some(window) = app.get_webview_window("copy-capture") else {
         return;
     };
 
@@ -33,5 +33,5 @@ pub fn open_capture_window(app: &AppHandle) {
     if let Some(main) = app.get_webview_window("main") {
         let _ = main.hide();
     }
-    let _ = app.emit_to("capture", "capture-open", ());
+    let _ = app.emit_to("copy-capture", "copy-capture-open", ());
 }

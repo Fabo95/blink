@@ -62,19 +62,140 @@
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
     margin: 0;
-    background-image:
-      radial-gradient(900px 520px at 50% -12%, rgba(139, 92, 246, 0.2), transparent 62%),
-      radial-gradient(760px 520px at 108% 108%, rgba(124, 86, 230, 0.08), transparent 60%);
-    background-attachment: fixed;
     font-family: Inter, system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
 
-  /* The frameless quick-capture window is transparent — only its rounded card
-     paints, so it floats with proper corners + shadow. */
-  html.capture-window,
-  html.capture-window body {
+  body::before,
+  body::after {
+    content: "";
+    position: fixed;
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  /* The roaming "creature": a blurred violet blob that wanders the window while
+     its outline wobbles and its brightness breathes. The three motions run on
+     separate, mismatched clocks (62s / 17s / 11s) that never re-sync, so nothing
+     looks scheduled — position, shape and glow drift independently, the way a
+     living thing does. Per-stop easing makes it glide and lurch rather than move
+     at a constant rate. It's a soft blob, so sliding off an edge just fades. */
+  body::before {
+    top: 50%;
+    left: 50%;
+    width: 44vmin;
+    height: 44vmin;
+    margin: -22vmin 0 0 -22vmin;
+    background: rgba(139, 92, 246, 0.38);
+    border-radius: 42% 58% 63% 37% / 41% 44% 56% 59%;
+    filter: blur(75px);
+    will-change: transform, border-radius, opacity;
+    animation:
+      aurora-roam 62s ease-in-out infinite,
+      aurora-morph 17s ease-in-out infinite,
+      aurora-breathe 11s ease-in-out infinite alternate;
+  }
+
+  /* Faint, near-still ambient tint the creature passes over. */
+  body::after {
+    inset: -30%;
+    background-image: radial-gradient(
+      760px 520px at 88% 90%,
+      rgba(124, 86, 230, 0.08),
+      transparent 60%
+    );
+    animation: aurora-ambient 46s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+
+  /* Wander every region; first and last stops match for a seamless loop. The
+     translate is in vw/vh so it spans the window regardless of blob size. */
+  @keyframes aurora-roam {
+    0% {
+      transform: translate3d(-34vw, -26vh, 0) scale(1);
+      animation-timing-function: cubic-bezier(0.5, 0.05, 0.5, 0.95);
+    }
+    12% {
+      transform: translate3d(28vw, -30vh, 0) scale(1.1);
+      animation-timing-function: cubic-bezier(0.3, 0, 0.2, 1);
+    }
+    25% {
+      transform: translate3d(38vw, -4vh, 0) scale(1);
+    }
+    38% {
+      transform: translate3d(24vw, 28vh, 0) scale(1.12);
+      animation-timing-function: cubic-bezier(0.6, 0, 0.4, 1);
+    }
+    52% {
+      transform: translate3d(-8vw, 34vh, 0) scale(1.04);
+    }
+    66% {
+      transform: translate3d(-36vw, 18vh, 0) scale(1.1);
+      animation-timing-function: cubic-bezier(0.4, 0, 0.3, 1);
+    }
+    80% {
+      transform: translate3d(-30vw, -10vh, 0) scale(1);
+    }
+    90% {
+      transform: translate3d(-6vw, -28vh, 0) scale(1.06);
+    }
+    100% {
+      transform: translate3d(-34vw, -26vh, 0) scale(1);
+    }
+  }
+
+  /* Amoeba-like outline wobble — asymmetric border-radius drifting over time. */
+  @keyframes aurora-morph {
+    0%,
+    100% {
+      border-radius: 42% 58% 63% 37% / 41% 44% 56% 59%;
+    }
+    25% {
+      border-radius: 62% 38% 42% 58% / 56% 62% 38% 44%;
+    }
+    50% {
+      border-radius: 38% 62% 58% 42% / 62% 44% 56% 38%;
+    }
+    75% {
+      border-radius: 55% 45% 38% 62% / 42% 58% 62% 38%;
+    }
+  }
+
+  @keyframes aurora-breathe {
+    from {
+      opacity: 0.72;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes aurora-ambient {
+    from {
+      transform: translate3d(2%, 2%, 0) scale(1.06);
+    }
+    to {
+      transform: translate3d(-2%, -1%, 0) scale(1);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    body::before,
+    body::after {
+      animation: none;
+    }
+  }
+
+  /* The frameless copy-capture window is transparent — only its rounded card
+     paints, so it floats with proper corners + shadow. No aurora there. */
+  html.copy-capture-window,
+  html.copy-capture-window body {
     background: transparent;
+  }
+
+  html.copy-capture-window body::before,
+  html.copy-capture-window body::after {
+    display: none;
   }
 
   /* Glass panel: a subtle top sheen + violet-tinted hairline + soft float. */
