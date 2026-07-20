@@ -4,6 +4,8 @@ import {
   Circle,
   Inbox,
   Loader2,
+  MoreHorizontal,
+  Pencil,
   Trash2,
   WandSparkles,
 } from 'lucide-react';
@@ -11,6 +13,14 @@ import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Textarea } from '@/components/ui/textarea';
 import type { Task } from '@/generated/Task';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -23,6 +33,8 @@ interface TaskListProps {
 export function TaskList({ tasks, onChanged }: TaskListProps) {
   const [improvingId, setImprovingId] = useState<string | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
   const [error, setError] = useState('');
 
   const active = tasks.filter((t) => t.status !== 'done');
@@ -42,7 +54,7 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
   };
 
   const toggleComplete = async (task: Task) => {
-    await api.setTaskCompleted(task.id, task.status !== 'done');
+    await api.updateTask(task.id, { completed: task.status !== 'done' });
     onChanged();
   };
 
@@ -51,9 +63,36 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
     onChanged();
   };
 
+  const startEdit = (task: Task) => {
+    setEditingId(task.id);
+    setDraft(task.text);
+    setError('');
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setDraft('');
+  };
+
+  const saveEdit = async (task: Task) => {
+    const trimmed = draft.trim();
+    if (!trimmed || trimmed === task.text) {
+      cancelEdit();
+      return;
+    }
+    try {
+      await api.updateTask(task.id, { text: trimmed });
+      cancelEdit();
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : typeof e === 'string' ? e : 'Could not save edit');
+    }
+  };
+
   const renderTask = (task: Task) => {
     const busy = improvingId === task.id;
     const done = task.status === 'done';
+    const editing = editingId === task.id;
     return (
       <li key={task.id} className="group rounded-lg border bg-secondary/40 px-4 py-3">
         <div className="flex items-start gap-3">
@@ -75,44 +114,85 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
             >
               {task.source.appName || task.source.appId}
             </Badge>
-            <p
-              className={cn(
-                'break-words text-sm font-medium',
-                done && 'text-muted-foreground line-through',
-              )}
-            >
-              {task.text}
-            </p>
-          </div>
-          {/* shrink-0 keeps the actions full-size no matter how wide the text is */}
-          <div
-            className={cn(
-              'flex shrink-0 items-center gap-1 opacity-0 transition group-hover:opacity-100',
-              busy && 'opacity-100',
-            )}
-          >
-            {!task.improved && !done && (
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Improve with AI"
-                disabled={busy}
-                className="text-blink-bright"
-                onClick={() => improve(task)}
+            {editing ? (
+              <div className="space-y-2">
+                <Textarea
+                  autoFocus
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      e.preventDefault();
+                      cancelEdit();
+                    } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      void saveEdit(task);
+                    }
+                  }}
+                  className="min-h-16 resize-none text-sm leading-relaxed"
+                />
+                <div className="flex items-center gap-2">
+                  <span className="mr-auto text-[10px] text-muted-foreground">Esc · ⌘↵</span>
+                  <Button variant="ghost" size="sm" onClick={cancelEdit}>
+                    Cancel
+                  </Button>
+                  <Button size="sm" disabled={!draft.trim()} onClick={() => saveEdit(task)}>
+                    Save
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <p
+                className={cn(
+                  'break-words text-sm font-medium',
+                  done && 'text-muted-foreground line-through',
+                )}
               >
-                {busy ? <Loader2 className="animate-spin" /> : <WandSparkles />}
-              </Button>
+                {task.text}
+              </p>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Delete task"
-              className="hover:text-destructive"
-              onClick={() => remove(task)}
-            >
-              <Trash2 />
-            </Button>
           </div>
+          {!editing && (
+            // shrink-0 keeps the trigger put no matter how wide the text is; it stays
+            // hidden until the row is hovered (or the menu is open, or a task is busy).
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Task actions"
+                  className={cn(
+                    'size-7 shrink-0 text-muted-foreground opacity-0 transition group-hover:opacity-100 data-[state=open]:opacity-100',
+                    busy && 'opacity-100',
+                  )}
+                >
+                  {busy ? <Loader2 className="animate-spin" /> : <MoreHorizontal />}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                {!done && (
+                  <DropdownMenuItem onSelect={() => startEdit(task)}>
+                    <Pencil />
+                    Edit
+                  </DropdownMenuItem>
+                )}
+                {!task.improved && !done && (
+                  <DropdownMenuItem disabled={busy} onSelect={() => void improve(task)}>
+                    <WandSparkles />
+                    Improve with AI
+                  </DropdownMenuItem>
+                )}
+                {!done && <DropdownMenuSeparator />}
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onSelect={() => void remove(task)}
+                >
+                  <Trash2 />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </li>
     );

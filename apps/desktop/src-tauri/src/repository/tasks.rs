@@ -83,20 +83,40 @@ impl TaskRepository {
         fetch_one(&conn, id)
     }
 
-    /// Mark a task done (or move it back to the inbox); returns the updated task.
-    pub fn set_completed(&self, id: &str, completed: bool) -> AppResult<Task> {
-        let status = if completed { "done" } else { "inbox" };
+    /// Patch a task's mutable fields in one call. A text edit also clears the
+    /// `improved` flag — hand-edited text is no longer the AI-clean version, so the
+    /// inbox may offer to improve again. AI improvement has its own path
+    /// ([`mark_improved`](Self::mark_improved)) because it *computes* the new text
+    /// rather than accepting it from the caller.
+    pub fn update(&self, id: &str, text: Option<&str>, completed: Option<bool>) -> AppResult<Task> {
         let now = Utc::now().to_rfc3339();
         let conn = self.db.lock()?;
-        let changed = conn
-            .execute(
-                "UPDATE tasks SET status = ?1, updated_at = ?2 WHERE id = ?3",
-                params![status, now, id],
-            )
-            .map_err(store_err)?;
-        if changed == 0 {
-            return Err(AppError::Store(format!("task {id} not found")));
+
+        if let Some(text) = text {
+            let changed = conn
+                .execute(
+                    "UPDATE tasks SET text = ?1, improved = 0, updated_at = ?2 WHERE id = ?3",
+                    params![text, now, id],
+                )
+                .map_err(store_err)?;
+            if changed == 0 {
+                return Err(AppError::Store(format!("task {id} not found")));
+            }
         }
+
+        if let Some(completed) = completed {
+            let status = if completed { "done" } else { "inbox" };
+            let changed = conn
+                .execute(
+                    "UPDATE tasks SET status = ?1, updated_at = ?2 WHERE id = ?3",
+                    params![status, now, id],
+                )
+                .map_err(store_err)?;
+            if changed == 0 {
+                return Err(AppError::Store(format!("task {id} not found")));
+            }
+        }
+
         fetch_one(&conn, id)
     }
 }

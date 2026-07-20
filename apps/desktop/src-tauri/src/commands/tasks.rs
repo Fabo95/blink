@@ -19,13 +19,16 @@ pub fn delete_task(repository: State<'_, Repository>, id: String) -> AppResult<(
     repository.tasks.delete(&id)
 }
 
+/// Patch a task's mutable fields — its text (which also clears the improved flag)
+/// and/or its completion. AI improvement is its own async command.
 #[tauri::command]
-pub fn set_task_completed(
+pub fn update_task(
     repository: State<'_, Repository>,
     id: String,
-    completed: bool,
+    text: Option<String>,
+    completed: Option<bool>,
 ) -> AppResult<Task> {
-    repository.tasks.set_completed(&id, completed)
+    repository.tasks.update(&id, text.as_deref(), completed)
 }
 
 /// Improve a task's text with AI and persist the cleaned-up result, marking it

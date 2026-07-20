@@ -47,7 +47,7 @@ pub fn run() {
             commands::tasks::list_tasks,
             commands::tasks::save_task,
             commands::tasks::delete_task,
-            commands::tasks::set_task_completed,
+            commands::tasks::update_task,
             commands::tasks::improve_task,
             commands::shortcut::get_capture_shortcut,
             commands::shortcut::set_capture_shortcut,
