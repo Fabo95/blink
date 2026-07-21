@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { api } from '@/lib/api';
+import { api, type CaptureMethod } from '@/lib/api';
 import { display, toShortcut } from '@/lib/shortcut';
 import { cn } from '@/lib/utils';
 
 interface ShortcutRecorderProps {
+  method: CaptureMethod;
   value: string;
   onChange: (shortcut: string) => void;
 }
 
-/** A compact button showing the capture hotkey; click it, then press a combo to change it. */
-export function ShortcutRecorder({ value, onChange }: ShortcutRecorderProps) {
+/** A compact button showing a method's hotkey; click it, then press a combo to change it. */
+export function ShortcutRecorder({ method, value, onChange }: ShortcutRecorderProps) {
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState('');
 
@@ -26,7 +27,7 @@ export function ShortcutRecorder({ value, onChange }: ShortcutRecorderProps) {
       if (!recorded) return; // still waiting for a non-modifier key
       stop();
       try {
-        await api.setCaptureShortcut(recorded);
+        await api.setCaptureShortcut(method, recorded);
         onChange(recorded);
         setError('');
       } catch (err) {
@@ -43,7 +44,7 @@ export function ShortcutRecorder({ value, onChange }: ShortcutRecorderProps) {
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [recording, stop, onChange]);
+  }, [recording, stop, onChange, method]);
 
   return (
     <Button

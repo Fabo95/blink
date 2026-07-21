@@ -41,6 +41,24 @@
           "state": "active",
           "radius": 16
         }
+      },
+      {
+        "label": "manual-capture",
+        "title": "Blink Manual Capture",
+        "width": 480,
+        "height": 260,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "theme": "Dark",
+        "windowEffects": {
+          "effects": ["hudWindow"],
+          "state": "active",
+          "radius": 16
+        }
       }
     ],
     "security": {

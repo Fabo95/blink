@@ -36,7 +36,7 @@ packages/
 main.rs             binary entry → blink_lib::run()
 lib.rs              composition root: dotenv, manage state, invoke_handler, run loop
 commands/           IPC layer — one #[tauri::command] module per feature (ai, copy_capture,
-                    tasks, shortcut). Thin: they delegate to services/repository/platform.
+                    manual_capture, tasks, shortcut). Thin: delegate to services/repository/platform.
 core/               shared types: error (AppError), models (ts-rs structs), state
                     (FrontmostSource, PendingSource)
 services/           logic: ai (OpenAI client), security (DLP redaction filter)
@@ -82,21 +82,27 @@ Run from the repo root unless noted.
   `Arc<Db>` to each entity repository. Add a table = a migration in `migrations.rs` + a
   `*Repository` file + a field on `Repository`. Row↔struct mapping uses `serde_rusqlite`
   (`SELECT *` maps by column name); a flat `TaskRow` mirrors the nested `Task` for storage.
-- **Copy-capture flow**: the ⌘⇧B global shortcut (owned by `platform/shortcut.rs`) records the
-  frontmost app/window as the source, simulates ⌘C to copy the selection, then opens a second
-  frameless "copy-capture" window. `main.tsx` branches on `getCurrentWindow().label` to render
-  `CopyCapture` vs `App`. The capture is a **single text field** (no title/body split); it's
-  saved as one `Task.text`. The main window's `CaptureCard` is now just info + the editable
-  shortcut — capture happens through the popup. Copy is the first capture method; voice/manual
-  are planned as sibling windows (`voice-capture`, …) with their own components. Generic pieces
-  (`CaptureSource`/`CaptureDraft`, the capture hotkey, the source detection) stay unprefixed and
-  are meant to be reused across methods.
+- **Capture methods**: each is a variant of `platform::shortcut::CaptureMethod`, and owns a
+  global hotkey + a frameless window + a component. `main.tsx` branches on
+  `getCurrentWindow().label` to render the right one; every panel is a **single text field**
+  saved as one `Task.text`.
+  - **Copy** (`⌘⇧B`, `copy-capture` window, `CopyCapture`): records the frontmost app/window as
+    the source, simulates ⌘C to copy the selection, sanitizes, then opens the panel.
+  - **Manual** (`⌘⇧M`, `manual-capture` window, `ManualCapture`): no clipboard/source — opens a
+    blank panel to type into; saved with a synthetic `manual` source.
+  - Adding a method = a `CaptureMethod` variant (+ its `start`/window/`setting_key`/default) +
+    a window in `tauri.conf.json` + a capability entry + a component routed in `main.tsx`. Shared
+    pieces (`CaptureSource`, the `save_task`/`improve_text` commands, `centered` window helper)
+    are reused, not duplicated.
 - **Source detection** (`platform/macos/frontmost.rs`): `NSWorkspace` for the frontmost app +
   the Accessibility API for its window title, captured *before* our panel steals focus and
-  stashed in `PendingSource`. Reuses the Accessibility permission ⌘C already needs.
-- **Custom shortcut**: the capture hotkey is user-configurable (default
-  `CommandOrControl+Shift+B`), persisted in the `settings` table, bound on startup and
-  re-bound on change. UI is the `ShortcutRecorder` in the capture card.
+  stashed in `PendingSource`. Reuses the Accessibility permission ⌘C already needs. Copy-only.
+- **Capture shortcuts**: one hotkey **per method**, keyed by `CaptureMethod` and persisted in
+  the `settings` table (`copy_capture_shortcut` / `manual_capture_shortcut`; defaults `⌘⇧B` /
+  `⌘⇧M`). A single global-shortcut handler is registered; since it fires for every bound hotkey,
+  it resolves the pressed shortcut back to its method (`method_of`) and dispatches. `set` refuses
+  a combo already owned by another method. UI is one `ShortcutRecorder` per method in the capture
+  card; the commands `get/set_capture_shortcut` take a `method` arg.
 - **AI "improve"**: `services/ai.rs` calls OpenAI. `improve_text` (returns cleaned text, used
   by the popup preview) vs `improve_task` (persists + sets the `improved` flag so the inbox
   won't offer it again). The verb is **improve** everywhere.

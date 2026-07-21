@@ -12,6 +12,9 @@ import type { Task } from '@/generated/Task';
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
+/** A way to capture a task; each has its own global hotkey and window. */
+export type CaptureMethod = 'copy' | 'manual';
+
 async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (isTauri) {
     const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
@@ -32,18 +35,25 @@ export const api = {
   improveTask: (id: string, text: string) => invoke<Task>('improve_task', { id, text }),
   /** Close the copy-capture panel and return focus to the previous app. */
   dismissCopyCapture: () => invoke<void>('dismiss_copy_capture'),
+  /** Close the manual-capture panel and return focus to the previous app. */
+  dismissManualCapture: () => invoke<void>('dismiss_manual_capture'),
   /** Ask OpenAI to improve raw captured text (returns the cleaned text). */
   improveText: (text: string) => invoke<string>('improve_text', { text }),
-  /** The current global capture hotkey (Tauri accelerator syntax). */
-  getCaptureShortcut: () => invoke<string>('get_capture_shortcut'),
-  /** Bind a new capture hotkey; rejects if invalid or already taken. */
-  setCaptureShortcut: (shortcut: string) => invoke<void>('set_capture_shortcut', { shortcut }),
+  /** The current global hotkey for a capture method (Tauri accelerator syntax). */
+  getCaptureShortcut: (method: CaptureMethod) =>
+    invoke<string>('get_capture_shortcut', { method }),
+  /** Bind a new hotkey for a capture method; rejects if invalid or already in use. */
+  setCaptureShortcut: (method: CaptureMethod, shortcut: string) =>
+    invoke<void>('set_capture_shortcut', { method, shortcut }),
 };
 
 // --- Browser fallback -------------------------------------------------------
 
 const mockStore: Task[] = [];
-let mockShortcut = 'CommandOrControl+Shift+B';
+const mockShortcuts: Record<CaptureMethod, string> = {
+  copy: 'CommandOrControl+Shift+B',
+  manual: 'CommandOrControl+Shift+M',
+};
 
 async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   switch (cmd) {
@@ -115,15 +125,18 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       return task as T;
     }
     case 'dismiss_copy_capture':
+    case 'dismiss_manual_capture':
       return undefined as T;
     case 'improve_text':
       // Browser mock can't reach OpenAI — echo the input back.
       return String(args?.text ?? '') as T;
     case 'get_capture_shortcut':
-      return mockShortcut as T;
-    case 'set_capture_shortcut':
-      mockShortcut = String(args?.shortcut ?? '');
+      return mockShortcuts[args?.method === 'manual' ? 'manual' : 'copy'] as T;
+    case 'set_capture_shortcut': {
+      const method: CaptureMethod = args?.method === 'manual' ? 'manual' : 'copy';
+      mockShortcuts[method] = String(args?.shortcut ?? '');
       return undefined as T;
+    }
     default:
       throw new Error(`Unknown command: ${cmd}`);
   }

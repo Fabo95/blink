@@ -2,10 +2,11 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from '@/App';
 import { CopyCapture } from '@/components/CopyCapture';
+import { ManualCapture } from '@/components/ManualCapture';
 import { isTauri } from '@/lib/api';
 import '@/styles.css';
 
-// The same bundle serves both windows; render by window label.
+// The same bundle serves every window; render by window label.
 async function main() {
   const root = document.getElementById('root');
   if (!root) throw new Error('Missing #root element');
@@ -15,11 +16,15 @@ async function main() {
     const { getCurrentWindow } = await import('@tauri-apps/api/window');
     label = getCurrentWindow().label;
   }
-  const isCopyCapture = label === 'copy-capture';
-  if (isCopyCapture) document.documentElement.classList.add('copy-capture-window');
+
+  // Every capture panel is a frameless, transparent window — they share the styling
+  // that strips the window background and the aurora.
+  const captureView =
+    label === 'copy-capture' ? <CopyCapture /> : label === 'manual-capture' ? <ManualCapture /> : null;
+  if (captureView) document.documentElement.classList.add('capture-window');
 
   ReactDOM.createRoot(root).render(
-    <React.StrictMode>{isCopyCapture ? <CopyCapture /> : <App />}</React.StrictMode>,
+    <React.StrictMode>{captureView ?? <App />}</React.StrictMode>,
   );
 }
 

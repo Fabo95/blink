@@ -3,5 +3,6 @@
 
 pub mod ai;
 pub mod copy_capture;
+pub mod manual_capture;
 pub mod shortcut;
 pub mod tasks;

@@ -1,18 +1,32 @@
-//! Copy-capture window placement (cross-platform).
+//! Capture-window placement (cross-platform) — shared by every capture method's panel.
 
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize};
 
-/// Show the copy-capture panel centered on the active screen and tell it to read the
-/// clipboard.
+/// Show the copy-capture panel and tell it to read the clipboard.
 pub fn open_copy_capture_window(app: &AppHandle) {
-    let Some(window) = app.get_webview_window("copy-capture") else {
-        return;
+    if show_centered(app, "copy-capture") {
+        let _ = app.emit_to("copy-capture", "copy-capture-open", ());
+    }
+}
+
+/// Show the manual-capture panel and tell it to reset for a fresh entry.
+pub fn open_manual_capture_window(app: &AppHandle) {
+    if show_centered(app, "manual-capture") {
+        let _ = app.emit_to("manual-capture", "manual-capture-open", ());
+    }
+}
+
+/// Center the labelled capture window on the active screen, show + focus it, and hide
+/// the inbox so only the panel is up. Returns whether the window exists.
+fn show_centered(app: &AppHandle, label: &str) -> bool {
+    let Some(window) = app.get_webview_window(label) else {
+        return false;
     };
 
     let size = window.outer_size().unwrap_or(PhysicalSize::new(480, 300));
 
-    // Center on the monitor under the cursor (the active screen), falling back to
-    // the primary monitor.
+    // Center on the monitor under the cursor (the active screen), falling back to the
+    // primary monitor.
     let monitor = app
         .cursor_position()
         .ok()
@@ -33,5 +47,5 @@ pub fn open_copy_capture_window(app: &AppHandle) {
     if let Some(main) = app.get_webview_window("main") {
         let _ = main.hide();
     }
-    let _ = app.emit_to("copy-capture", "copy-capture-open", ());
+    true
 }

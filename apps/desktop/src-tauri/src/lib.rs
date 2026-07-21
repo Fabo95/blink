@@ -43,6 +43,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::copy_capture::read_copy_capture,
             commands::copy_capture::dismiss_copy_capture,
+            commands::manual_capture::dismiss_manual_capture,
             commands::ai::improve_text,
             commands::tasks::list_tasks,
             commands::tasks::save_task,

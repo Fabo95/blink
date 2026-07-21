@@ -18,12 +18,10 @@ mod window;
 /// React to a Tauri run-loop event (e.g. dock-icon reopen on macOS).
 pub use os::on_run_event;
 
-/// Register the capture-shortcut listener and bind the saved (or default) hotkey.
+/// Register the capture-shortcut listener and bind every method's saved (or default)
+/// hotkey. A bad saved value is logged per method inside `bind_all`, never fatal.
 pub fn init(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     shortcut::register_listener(app)?;
-    // Non-fatal: a bad saved value shouldn't stop the app from starting.
-    if let Err(err) = shortcut::bind_current(app.handle()) {
-        eprintln!("Blink: {err}");
-    }
+    shortcut::bind_all(app.handle());
     Ok(())
 }

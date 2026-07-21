@@ -186,15 +186,15 @@
     }
   }
 
-  /* The frameless copy-capture window is transparent — only its rounded card
-     paints, so it floats with proper corners + shadow. No aurora there. */
-  html.copy-capture-window,
-  html.copy-capture-window body {
+  /* The frameless capture panels (copy / manual) are transparent — only their
+     rounded card paints, so they float with proper corners + shadow. No aurora. */
+  html.capture-window,
+  html.capture-window body {
     background: transparent;
   }
 
-  html.copy-capture-window body::before,
-  html.copy-capture-window body::after {
+  html.capture-window body::before,
+  html.capture-window body::after {
     display: none;
   }
 
