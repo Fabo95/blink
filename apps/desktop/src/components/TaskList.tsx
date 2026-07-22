@@ -261,7 +261,7 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
               setDraftImproved(false);
             }}
             placeholder="Task"
-            className="min-h-[68px] resize-none border-0 bg-transparent p-0 text-sm font-medium leading-relaxed shadow-none focus-visible:ring-0"
+            className="min-h-[68px] resize-none text-sm leading-relaxed"
           />
           <div className="my-3 h-px bg-border" />
           <div className="space-y-2">

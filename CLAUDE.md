@@ -9,8 +9,8 @@ desktop app, dark-violet theme.
 
 - **Monorepo**: pnpm workspaces + Turborepo. Node ≥20, `pnpm@11`.
 - **Desktop app** (`apps/desktop`): Tauri v2 (Rust core) + React 19 + Vite 8 (rolldown) +
-  Tailwind v4 + shadcn/ui + TypeScript 7. Local store: SQLite via **SQLCipher** (AES-256 at
-  rest), key in the OS keychain.
+  Tailwind v4 + shadcn/ui (Radix) + `react-hotkeys-hook` + TypeScript 7. Local store: SQLite via
+  **SQLCipher** (AES-256 at rest), key in the OS keychain.
 - **Sync server** (`apps/sync-server`): Fastify 5 + zod 4 + Drizzle ORM + Postgres 17 (planned
   Phase 2; not yet wired to the client).
 - **Tooling**: Biome (format + lint), not Prettier/ESLint.
@@ -85,16 +85,18 @@ Run from the repo root unless noted.
   (`SELECT *` maps by column name); a flat `TaskRow` mirrors the nested `Task` for storage.
 - **Capture methods**: each is a variant of `platform::shortcut::CaptureMethod`, and owns a
   global hotkey + a frameless window + a component. `main.tsx` branches on
-  `getCurrentWindow().label` to render the right one; every panel is a **single text field**
-  saved as one `Task.text`.
-  - **Copy** (`⌘⇧B`, `copy-capture` window, `CopyCapture`): records the frontmost app/window as
-    the source, simulates ⌘C to copy the selection, sanitizes, then opens the panel.
-  - **Manual** (`⌘⇧M`, `manual-capture` window, `ManualCapture`): no clipboard/source — opens a
-    blank panel to type into; saved with a synthetic `manual` source.
+  `getCurrentWindow().label` to render the right one. Both windows render the shared
+  `CapturePanel` (text field + optional link; keyboard-first — `⌘↵` save / `⌘I` improve / `Esc`
+  cancel, **no buttons**), saved as one `Task`; `CopyCapture`/`ManualCapture` are thin config
+  wrappers over it.
+  - **Copy** (`⌘⇧B`, `copy-capture` window): records the frontmost app/window as the source,
+    simulates ⌘C to copy the selection, sanitizes, then opens the panel pre-filled.
+  - **Manual** (`⌘⇧M`, `manual-capture` window): no clipboard/source — a blank panel to type
+    into; saved with a synthetic `manual` source.
   - Adding a method = a `CaptureMethod` variant (+ its `start`/window/`setting_key`/default) +
-    a window in `tauri.conf.json` + a capability entry + a component routed in `main.tsx`. Shared
-    pieces (`CaptureSource`, the `save_task`/`improve_text` commands, `centered` window helper)
-    are reused, not duplicated.
+    a window in `tauri.conf.json` + a capability entry + a `CaptureKind` routed in `main.tsx`.
+    Shared pieces (`CaptureSource`, `CapturePanel`, the `save_task`/`improve_text` commands, the
+    `show_centered` window helper) are reused, not duplicated.
 - **Source detection** (`platform/os/macos/frontmost.rs`): `NSWorkspace` for the frontmost app +
   the Accessibility API for its window title, captured *before* our panel steals focus and
   stashed in `PendingSource`. Reuses the Accessibility permission ⌘C already needs. Copy-only.
@@ -104,9 +106,23 @@ Run from the repo root unless noted.
   it resolves the pressed shortcut back to its method (`method_of`) and dispatches. `set` refuses
   a combo already owned by another method. UI is one `ShortcutRecorder` per method in the capture
   card; the commands `get/set_capture_shortcut` take a `method` arg.
-- **AI "improve"**: `services/ai.rs` calls OpenAI. `improve_text` (returns cleaned text, used
-  by the popup preview) vs `improve_task` (persists + sets the `improved` flag so the inbox
-  won't offer it again). The verb is **improve** everywhere.
+- **Inbox is keyboard-first** (`TaskList`): two cards — **Inbox** (active) and **Completed**
+  (done). A virtual cursor (`useListCursor`, built on `react-hotkeys-hook`) spans both: `↑↓`/`jk`
+  move it, `⏎` completes/restores the focused task, `e` edits, `o` opens its link, `⌫` deletes
+  (confirm `AlertDialog`), `c` toggles the Completed section, `Esc` unselects. Editing is an
+  in-row **Popover** (text/source/link fields; `⌘↵` save, `⌘I` improve, `Esc` cancel). There are
+  **no action buttons** — every action is a shortcut, always shown via a `ShortcutHint`; rows also
+  click-to-select and double-click-to-complete. `useListCursor` ignores keys originating inside a
+  `[role=dialog|menu|alertdialog]`, so an open overlay keeps its own keys.
+- **Task edits** go through the `update_task` command → a `TaskPatch` (any of `text` / `completed`
+  / `link` / `source` / `improved`); the frontend sends only changed fields. An optional `link`
+  (http(s)) is opened by the `open_link` command (`platform::os::open_url`) from the `o` shortcut
+  or the row's link chip; its column was added in migration 3.
+- **AI "improve"**: `services/ai.rs::improve` is exposed as the `improve_text` command — it
+  returns cleaned text, no persistence. Both the capture panels and the inbox editor call it on
+  `⌘I`, replace the field, and set an `improved` flag that gates re-improving (once per version,
+  cleared when the text changes) and is persisted on save via `update_task`. The verb is
+  **improve** everywhere. (`improve_task`/`mark_improved` predate this flow and are now unused.)
 - **macOS specifics**: input simulation and window ops must run on the main thread
   (`run_on_main_thread`). Transparency needs `macOSPrivateApi`. The capture window uses native
   `hudWindow` vibrancy; the main window has an overlay title bar (`titleBarStyle: Overlay`).
