@@ -29,10 +29,21 @@ export const api = {
   listTasks: () => invoke<Task[]>('list_tasks'),
   saveTask: (task: NewTask) => invoke<Task>('save_task', { task }),
   deleteTask: (id: string) => invoke<void>('delete_task', { id }),
-  updateTask: (id: string, patch: { text?: string; completed?: boolean }) =>
-    invoke<Task>('update_task', { id, text: patch.text, completed: patch.completed }),
+  updateTask: (
+    id: string,
+    patch: { text?: string; completed?: boolean; link?: string; source?: string },
+  ) =>
+    invoke<Task>('update_task', {
+      id,
+      text: patch.text,
+      completed: patch.completed,
+      link: patch.link,
+      source: patch.source,
+    }),
   /** Optimize a saved task's text with AI and persist it, marking it improved. */
   improveTask: (id: string, text: string) => invoke<Task>('improve_task', { id, text }),
+  /** Open a task's link in the default browser (http/https only). */
+  openLink: (url: string) => invoke<void>('open_link', { url }),
   /** Close the copy-capture panel and return focus to the previous app. */
   dismissCopyCapture: () => invoke<void>('dismiss_copy_capture'),
   /** Close the manual-capture panel and return focus to the previous app. */
@@ -89,6 +100,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
         text: input.text,
         status: 'inbox',
         improved: input.improved,
+        link: input.link,
         source: input.source,
         createdAt: now,
         updatedAt: now,
@@ -114,12 +126,20 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       if (!task) throw new Error('task not found');
       const nextText = args?.text;
       const nextCompleted = args?.completed;
+      const nextLink = args?.link;
+      const nextSource = args?.source;
       if (typeof nextText === 'string') {
         task.text = nextText;
         task.improved = false;
       }
       if (typeof nextCompleted === 'boolean') {
         task.status = nextCompleted ? 'done' : 'inbox';
+      }
+      if (typeof nextLink === 'string') {
+        task.link = nextLink.trim() ? nextLink.trim() : null;
+      }
+      if (typeof nextSource === 'string') {
+        task.source = { ...task.source, appName: nextSource };
       }
       task.updatedAt = new Date().toISOString();
       return task as T;
@@ -130,6 +150,9 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
     case 'improve_text':
       // Browser mock can't reach OpenAI — echo the input back.
       return String(args?.text ?? '') as T;
+    case 'open_link':
+      window.open(String(args?.url ?? ''), '_blank', 'noopener');
+      return undefined as T;
     case 'get_capture_shortcut':
       return mockShortcuts[args?.method === 'manual' ? 'manual' : 'copy'] as T;
     case 'set_capture_shortcut': {

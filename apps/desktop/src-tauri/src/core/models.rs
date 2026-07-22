@@ -47,6 +47,8 @@ pub struct Task {
     pub status: String,
     /// Whether the text has already been cleaned up by the AI optimizer.
     pub improved: bool,
+    /// An optional web link attached to the task (opened from the inbox).
+    pub link: Option<String>,
     pub source: CaptureSource,
     pub created_at: String,
     pub updated_at: String,
@@ -60,5 +62,7 @@ pub struct NewTask {
     /// True when the text was already AI-optimized before saving (e.g. via the
     /// copy-capture "Optimize with AI" action), so the inbox won't offer it again.
     pub improved: bool,
+    /// An optional web link entered in the capture panel.
+    pub link: Option<String>,
     pub source: CaptureSource,
 }

@@ -36,16 +36,17 @@ packages/
 main.rs             binary entry → blink_lib::run()
 lib.rs              composition root: dotenv, manage state, invoke_handler, run loop
 commands/           IPC layer — one #[tauri::command] module per feature (ai, copy_capture,
-                    manual_capture, tasks, shortcut). Thin: delegate to services/repository/platform.
+                    manual_capture, link, tasks, shortcut). Thin: delegate to services/repository/platform.
 core/               shared types: error (AppError), models (ts-rs structs), state
                     (FrontmostSource, PendingSource)
 services/           logic: ai (OpenAI client), security (DLP redaction filter)
 repository/         persistence facade: Repository owns the shared Db (SQLCipher) and exposes
                     entity repos — TaskRepository, SettingsRepository. Plus db.rs (open +
                     keychain key + error helpers), migrations.rs (rusqlite_migration schema)
-platform/           OS glue. macos/ (frontmost detection, ⌘C input) with a fallback for other
-                    OSes; shortcut.rs (the whole capture-hotkey feature); window.rs (capture
-                    panel placement); shortcut on mobile is a do-nothing stub
+platform/           OS glue. os/ = native primitives behind one interface, impl picked by
+                    target (os/macos/ = frontmost detection + ⌘C input + open_url; os/fallback.rs
+                    for other OSes); shortcut.rs (the capture-hotkey feature); window.rs (capture
+                    panel placement). shortcut/window are cross-platform, built on os::
 ```
 
 ## Commands
@@ -94,7 +95,7 @@ Run from the repo root unless noted.
     a window in `tauri.conf.json` + a capability entry + a component routed in `main.tsx`. Shared
     pieces (`CaptureSource`, the `save_task`/`improve_text` commands, `centered` window helper)
     are reused, not duplicated.
-- **Source detection** (`platform/macos/frontmost.rs`): `NSWorkspace` for the frontmost app +
+- **Source detection** (`platform/os/macos/frontmost.rs`): `NSWorkspace` for the frontmost app +
   the Accessibility API for its window title, captured *before* our panel steals focus and
   stashed in `PendingSource`. Reuses the Accessibility permission ⌘C already needs. Copy-only.
 - **Capture shortcuts**: one hotkey **per method**, keyed by `CaptureMethod` and persisted in

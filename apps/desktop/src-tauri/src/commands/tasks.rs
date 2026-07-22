@@ -2,7 +2,7 @@ use tauri::State;
 
 use crate::core::error::AppResult;
 use crate::core::models::{NewTask, Task};
-use crate::repository::Repository;
+use crate::repository::{Repository, TaskPatch};
 
 #[tauri::command]
 pub fn list_tasks(repository: State<'_, Repository>) -> AppResult<Vec<Task>> {
@@ -19,16 +19,27 @@ pub fn delete_task(repository: State<'_, Repository>, id: String) -> AppResult<(
     repository.tasks.delete(&id)
 }
 
-/// Patch a task's mutable fields — its text (which also clears the improved flag)
-/// and/or its completion. AI improvement is its own async command.
+/// Patch a task's mutable fields — text (which also clears the improved flag),
+/// completion, link (empty clears it), and/or the displayed source label. Any omitted
+/// field is left untouched. AI improvement is its own async command.
 #[tauri::command]
 pub fn update_task(
     repository: State<'_, Repository>,
     id: String,
     text: Option<String>,
     completed: Option<bool>,
+    link: Option<String>,
+    source: Option<String>,
 ) -> AppResult<Task> {
-    repository.tasks.update(&id, text.as_deref(), completed)
+    repository.tasks.update(
+        &id,
+        TaskPatch {
+            text,
+            completed,
+            link,
+            source_name: source,
+        },
+    )
 }
 
 /// Improve a task's text with AI and persist the cleaned-up result, marking it

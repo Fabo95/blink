@@ -1,10 +1,12 @@
-import { ShieldCheck, WandSparkles } from 'lucide-react';
+import { Link2, ShieldCheck, WandSparkles } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import type { CaptureSource } from '@/generated/CaptureSource';
 import { api, isTauri } from '@/lib/api';
+import { normalizeLink } from '@/lib/link';
 
 /** The initial content a capture method drops into the panel when it opens. */
 export interface CaptureContent {
@@ -35,6 +37,7 @@ export interface CaptureKind {
  */
 export function CapturePanel({ kind }: { kind: CaptureKind }) {
   const [text, setText] = useState('');
+  const [link, setLink] = useState('');
   const [source, setSource] = useState<CaptureSource | null>(null);
   const [redactions, setRedactions] = useState(0);
   const [improving, setImproving] = useState(false);
@@ -47,6 +50,7 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
   const load = useCallback(async () => {
     const content = await kind.load();
     setText(content.text);
+    setLink('');
     setSource(content.source);
     setRedactions(content.redactionCount);
     setImproved(false);
@@ -56,6 +60,7 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
 
   const hide = useCallback(async () => {
     setText('');
+    setLink('');
     setRedactions(0);
     setImproved(false);
     setError('');
@@ -65,14 +70,15 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
   const save = useCallback(async () => {
     const trimmed = text.trim();
     if (!trimmed || !source) return;
-    await api.saveTask({ text: trimmed, improved, source });
+    // Accept a bare domain (`github.com`) — default it to https so it opens later.
+    await api.saveTask({ text: trimmed, improved, link: normalizeLink(link), source });
     if (isTauri) {
       // Only the main (inbox) window cares — target it directly.
       const { emitTo } = await import('@tauri-apps/api/event');
       await emitTo('main', 'task-saved');
     }
     await hide();
-  }, [text, improved, source, hide]);
+  }, [text, improved, link, source, hide]);
 
   const improve = useCallback(async () => {
     if (!text.trim()) return;
@@ -157,6 +163,20 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
             {source.windowTitle && ` · ${source.windowTitle}`}
           </p>
         )}
+
+        {/* Optional link — carried onto the task and openable from the inbox. The
+            wrapper mirrors the textarea's field styling (border, shadow, focus ring)
+            so the two inputs render identically; the inner Input is stripped bare. */}
+        <div className="flex h-9 items-center gap-2 rounded-md border border-input bg-transparent px-3 shadow-sm transition-colors focus-within:ring-1 focus-within:ring-ring">
+          <Link2 className="size-3.5 shrink-0 text-muted-foreground" />
+          <Input
+            type="url"
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
+            placeholder="Add a link (optional)"
+            className="h-auto flex-1 border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+          />
+        </div>
 
         <Textarea
           ref={fieldRef}

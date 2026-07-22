@@ -9,7 +9,7 @@ pub(super) fn migrations() -> Migrations<'static> {
             "CREATE TABLE IF NOT EXISTS tasks (
                 id           TEXT PRIMARY KEY,
                 text         TEXT NOT NULL,
-                status       TEXT NOT NULL,
+           ^     status       TEXT NOT NULL,
                 app_id       TEXT NOT NULL,
                 app_name     TEXT NOT NULL,
                 window_title TEXT NOT NULL,
@@ -25,5 +25,6 @@ pub(super) fn migrations() -> Migrations<'static> {
                 value TEXT NOT NULL
             );",
         ),
+        M::up("ALTER TABLE tasks ADD COLUMN link TEXT;"),
     ])
 }

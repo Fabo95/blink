@@ -13,7 +13,7 @@ use crate::core::error::AppResult;
 
 pub use db::Db;
 pub use settings::SettingsRepository;
-pub use tasks::TaskRepository;
+pub use tasks::{TaskPatch, TaskRepository};
 
 /// The data-access facade: opens the shared [`Db`] once and hands it to an entity
 /// repository per table. Adding a table = add a field here + its `*Repository`.

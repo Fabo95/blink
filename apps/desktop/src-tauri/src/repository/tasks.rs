@@ -15,6 +15,17 @@ use crate::core::models::{CaptureSource, NewTask, Task};
 
 use super::db::{serde_err, store_err, Db};
 
+/// A partial task edit — every `Some` field is written, `None` leaves it untouched.
+/// A `text` edit also clears the `improved` flag; an empty `link` clears the stored
+/// link; `source_name` sets the displayed source (the `app_name` column).
+#[derive(Default)]
+pub struct TaskPatch {
+    pub text: Option<String>,
+    pub completed: Option<bool>,
+    pub link: Option<String>,
+    pub source_name: Option<String>,
+}
+
 /// The task repository — task-specific queries over the shared [`Db`]. Constructed
 /// by [`super::Repository`], which hands every repository the same connection.
 pub struct TaskRepository {
@@ -44,6 +55,7 @@ impl TaskRepository {
             text: new.text,
             status: "inbox".to_string(),
             improved: new.improved,
+            link: new.link,
             source: new.source,
             created_at: now.clone(),
             updated_at: now,
@@ -52,9 +64,9 @@ impl TaskRepository {
         let conn = self.db.lock()?;
         conn.execute(
             "INSERT INTO tasks (id, text, status, app_id, app_name, window_title, \
-             captured_at, created_at, updated_at, improved) \
+             captured_at, created_at, updated_at, improved, link) \
              VALUES (:id, :text, :status, :app_id, :app_name, :window_title, \
-             :captured_at, :created_at, :updated_at, :improved)",
+             :captured_at, :created_at, :updated_at, :improved, :link)",
             params.to_slice().as_slice(),
         )
         .map_err(store_err)?;
@@ -83,38 +95,49 @@ impl TaskRepository {
         fetch_one(&conn, id)
     }
 
-    /// Patch a task's mutable fields in one call. A text edit also clears the
-    /// `improved` flag — hand-edited text is no longer the AI-clean version, so the
-    /// inbox may offer to improve again. AI improvement has its own path
-    /// ([`mark_improved`](Self::mark_improved)) because it *computes* the new text
-    /// rather than accepting it from the caller.
-    pub fn update(&self, id: &str, text: Option<&str>, completed: Option<bool>) -> AppResult<Task> {
+    /// Apply a [`TaskPatch`]. A text edit also clears the `improved` flag — hand-edited
+    /// text is no longer the AI-clean version, so the inbox may offer to improve again.
+    /// AI improvement has its own path ([`mark_improved`](Self::mark_improved)) because
+    /// it *computes* the new text rather than accepting it from the caller. Returns the
+    /// updated task (or a not-found error, surfaced by the final fetch).
+    pub fn update(&self, id: &str, patch: TaskPatch) -> AppResult<Task> {
         let now = Utc::now().to_rfc3339();
         let conn = self.db.lock()?;
 
-        if let Some(text) = text {
-            let changed = conn
-                .execute(
-                    "UPDATE tasks SET text = ?1, improved = 0, updated_at = ?2 WHERE id = ?3",
-                    params![text, now, id],
-                )
-                .map_err(store_err)?;
-            if changed == 0 {
-                return Err(AppError::Store(format!("task {id} not found")));
-            }
+        if let Some(text) = patch.text {
+            conn.execute(
+                "UPDATE tasks SET text = ?1, improved = 0, updated_at = ?2 WHERE id = ?3",
+                params![text, now, id],
+            )
+            .map_err(store_err)?;
         }
 
-        if let Some(completed) = completed {
+        if let Some(completed) = patch.completed {
             let status = if completed { "done" } else { "inbox" };
-            let changed = conn
-                .execute(
-                    "UPDATE tasks SET status = ?1, updated_at = ?2 WHERE id = ?3",
-                    params![status, now, id],
-                )
-                .map_err(store_err)?;
-            if changed == 0 {
-                return Err(AppError::Store(format!("task {id} not found")));
-            }
+            conn.execute(
+                "UPDATE tasks SET status = ?1, updated_at = ?2 WHERE id = ?3",
+                params![status, now, id],
+            )
+            .map_err(store_err)?;
+        }
+
+        if let Some(link) = patch.link {
+            // Empty input clears the link (stored NULL).
+            let trimmed = link.trim();
+            let value = if trimmed.is_empty() { None } else { Some(trimmed) };
+            conn.execute(
+                "UPDATE tasks SET link = ?1, updated_at = ?2 WHERE id = ?3",
+                params![value, now, id],
+            )
+            .map_err(store_err)?;
+        }
+
+        if let Some(source_name) = patch.source_name {
+            conn.execute(
+                "UPDATE tasks SET app_name = ?1, updated_at = ?2 WHERE id = ?3",
+                params![source_name, now, id],
+            )
+            .map_err(store_err)?;
         }
 
         fetch_one(&conn, id)
@@ -149,6 +172,7 @@ struct TaskRow {
     created_at: String,
     updated_at: String,
     improved: bool,
+    link: Option<String>,
 }
 
 impl From<&Task> for TaskRow {
@@ -164,6 +188,7 @@ impl From<&Task> for TaskRow {
             created_at: task.created_at.clone(),
             updated_at: task.updated_at.clone(),
             improved: task.improved,
+            link: task.link.clone(),
         }
     }
 }
@@ -175,6 +200,7 @@ impl From<TaskRow> for Task {
             text: row.text,
             status: row.status,
             improved: row.improved,
+            link: row.link,
             source: CaptureSource {
                 app_id: row.app_id,
                 app_name: row.app_name,

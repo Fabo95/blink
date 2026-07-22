@@ -18,6 +18,11 @@ pub fn record_source(app: &AppHandle) {
     }
 }
 
+/// Open a URL in the user's default browser via the macOS `open` tool.
+pub fn open_url(url: &str) -> std::io::Result<()> {
+    std::process::Command::new("open").arg(url).spawn().map(|_| ())
+}
+
 /// Dock-icon reopen → bring the inbox back (the capture flow keeps it hidden).
 pub fn on_run_event(app: &AppHandle, event: &RunEvent) {
     if let RunEvent::Reopen { .. } = event {

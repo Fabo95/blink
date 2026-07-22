@@ -9,4 +9,12 @@ pub fn record_source(_app: &AppHandle) {}
 
 pub fn copy_selection() {}
 
+/// Best-effort open in the default browser via `xdg-open` (Linux/BSD).
+pub fn open_url(url: &str) -> std::io::Result<()> {
+    std::process::Command::new("xdg-open")
+        .arg(url)
+        .spawn()
+        .map(|_| ())
+}
+
 pub fn on_run_event(_app: &AppHandle, _event: &RunEvent) {}

@@ -50,10 +50,11 @@ pub fn run() {
             commands::tasks::delete_task,
             commands::tasks::update_task,
             commands::tasks::improve_task,
+            commands::link::open_link,
             commands::shortcut::get_capture_shortcut,
             commands::shortcut::set_capture_shortcut,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Blink")
-        .run(|app, event| platform::on_run_event(app, &event));
+        .run(|app, event| platform::os::on_run_event(app, &event));
 }

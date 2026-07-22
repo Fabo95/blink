@@ -1,22 +1,11 @@
-//! OS integration. The OS-specific source detection, copy simulation, and run-event
-//! handling live in `macos` (with `fallback` for other systems); the capture hotkey
-//! lives in `shortcut`.
+//! OS integration. Native primitives live in the `os` module (which selects its
+//! implementation by target at compile time); `shortcut` (the capture hotkey) and
+//! `window` (capture-panel placement) are the cross-platform glue built on top.
+//! Callers reach OS ops as `platform::os::…`.
 
-#[cfg(target_os = "macos")]
-mod macos;
-#[cfg(target_os = "macos")]
-use macos as os;
-
-#[cfg(not(target_os = "macos"))]
-mod fallback;
-#[cfg(not(target_os = "macos"))]
-use fallback as os;
-
+pub mod os;
 pub mod shortcut;
 mod window;
-
-/// React to a Tauri run-loop event (e.g. dock-icon reopen on macOS).
-pub use os::on_run_event;
 
 /// Register the capture-shortcut listener and bind every method's saved (or default)
 /// hotkey. A bad saved value is logged per method inside `bind_all`, never fatal.
