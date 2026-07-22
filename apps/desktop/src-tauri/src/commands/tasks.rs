@@ -19,9 +19,9 @@ pub fn delete_task(repository: State<'_, Repository>, id: String) -> AppResult<(
     repository.tasks.delete(&id)
 }
 
-/// Patch a task's mutable fields — text (which also clears the improved flag),
-/// completion, link (empty clears it), and/or the displayed source label. Any omitted
-/// field is left untouched. AI improvement is its own async command.
+/// Patch a task's mutable fields — text, completion, link (empty clears it), the
+/// displayed source label, and/or the `improved` flag. Any omitted field is left
+/// untouched. The AI call that produces improved text is its own command (`improve_text`).
 #[tauri::command]
 pub fn update_task(
     repository: State<'_, Repository>,
@@ -30,6 +30,7 @@ pub fn update_task(
     completed: Option<bool>,
     link: Option<String>,
     source: Option<String>,
+    improved: Option<bool>,
 ) -> AppResult<Task> {
     repository.tasks.update(
         &id,
@@ -38,6 +39,7 @@ pub fn update_task(
             completed,
             link,
             source_name: source,
+            improved,
         },
     )
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Kbd } from '@/components/ui/kbd';
 import { api, type CaptureMethod } from '@/lib/api';
 import { display, toShortcut } from '@/lib/shortcut';
 import { cn } from '@/lib/utils';
@@ -55,9 +56,15 @@ export function ShortcutRecorder({ method, value, onChange }: ShortcutRecorderPr
         setRecording(true);
       }}
       title={error || 'Click, then press a key combo to change the capture shortcut'}
-      className={cn('min-w-16 font-mono text-muted-foreground', error && 'text-destructive')}
+      className="min-w-16 text-muted-foreground"
     >
-      {recording ? 'Press keys…' : display(value) || '—'}
+      {recording ? (
+        <span className="text-[11px]">Press keys…</span>
+      ) : value ? (
+        <Kbd className={cn(error && 'border-destructive/50 text-destructive')}>{display(value)}</Kbd>
+      ) : (
+        <span className="text-[11px]">—</span>
+      )}
     </Button>
   );
 }

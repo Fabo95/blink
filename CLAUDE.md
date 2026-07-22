@@ -124,6 +124,14 @@ These extend the global rules in `~/.claude/CLAUDE.md`. Highlights that bite her
 - **No `any`, no non-null `!`.** Narrow explicitly.
 - **No emoji in the app UI.** Icons via `lucide-react`. One cursor everywhere (`cursor: default`),
   UI text not selectable.
+- **Keyboard shortcuts go through `react-hotkeys-hook`** — never a hand-rolled
+  `window.addEventListener('keydown', …)`. List/cursor navigation is the `useListCursor`
+  hook (built on it). The one exception is `ShortcutRecorder`, which *records* arbitrary
+  combos (not a fixed binding). Use `enableOnFormTags` when a shortcut must fire while a
+  field is focused (capture panels, editor `⌘↵`).
+- **Render keys with the shared `Kbd` chip** (`components/ui/kbd.tsx`), and a row of
+  key+label hints with `ShortcutHint` (`components/ShortcutHint.tsx`) — never plain
+  `Esc · ⌘↵` text. Keeps every shortcut hint identical across the app.
 - **Biome style**: 2-space, single quotes, semicolons, trailing commas, width 100.
 - **Comment only the *why*.** Don't annotate code you didn't write; no changelog comments.
 - **Deps**: never add one without asking first.

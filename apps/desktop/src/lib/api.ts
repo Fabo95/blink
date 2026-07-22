@@ -31,7 +31,7 @@ export const api = {
   deleteTask: (id: string) => invoke<void>('delete_task', { id }),
   updateTask: (
     id: string,
-    patch: { text?: string; completed?: boolean; link?: string; source?: string },
+    patch: { text?: string; completed?: boolean; link?: string; source?: string; improved?: boolean },
   ) =>
     invoke<Task>('update_task', {
       id,
@@ -39,6 +39,7 @@ export const api = {
       completed: patch.completed,
       link: patch.link,
       source: patch.source,
+      improved: patch.improved,
     }),
   /** Optimize a saved task's text with AI and persist it, marking it improved. */
   improveTask: (id: string, text: string) => invoke<Task>('improve_task', { id, text }),
@@ -128,9 +129,12 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       const nextCompleted = args?.completed;
       const nextLink = args?.link;
       const nextSource = args?.source;
+      const nextImproved = args?.improved;
       if (typeof nextText === 'string') {
         task.text = nextText;
-        task.improved = false;
+      }
+      if (typeof nextImproved === 'boolean') {
+        task.improved = nextImproved;
       }
       if (typeof nextCompleted === 'boolean') {
         task.status = nextCompleted ? 'done' : 'inbox';

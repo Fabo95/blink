@@ -1,7 +1,8 @@
-import { Link2, ShieldCheck, WandSparkles } from 'lucide-react';
+import { Check, Link2, ShieldCheck, WandSparkles } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useHotkeys } from 'react-hotkeys-hook';
+import { ShortcutHint } from '@/components/ShortcutHint';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import type { CaptureSource } from '@/generated/CaptureSource';
@@ -119,20 +120,14 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
     return () => unlisten?.();
   }, [load, kind.openEvent]);
 
-  // Esc cancels, ⌘↵ / Ctrl↵ saves.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        void hide();
-      } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        void save();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [hide, save]);
+  // Esc cancels, ⌘↵ saves — enabled inside the fields (the panel is basically a form).
+  useHotkeys('escape', () => void hide(), { enableOnFormTags: true, preventDefault: true });
+  useHotkeys('mod+enter', () => void save(), { enableOnFormTags: true, preventDefault: true });
+  useHotkeys('mod+i', () => void improve(), {
+    enabled: !improved && !improving,
+    enableOnFormTags: true,
+    preventDefault: true,
+  });
 
   const showSource = kind.showSource && source && (source.appName || source.windowTitle);
 
@@ -192,27 +187,24 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
         {error && <p className="line-clamp-2 text-[11px] text-destructive">{error}</p>}
 
         <div className="flex items-center justify-between gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={improve}
-            disabled={improving || !text.trim()}
-            className="text-blink-bright"
-          >
-            <WandSparkles className="size-3.5" />
-            {improving ? 'Improving…' : 'Improve with AI'}
-          </Button>
-          <div className="flex items-center gap-3">
-            <span className="text-[10px] text-muted-foreground">Esc · ⌘↵</span>
-            <Button
-              size="sm"
-              onClick={save}
-              disabled={!text.trim()}
-              className="shadow-[0_6px_20px_-6px_hsl(258_90%_66%/0.55)]"
-            >
-              Save task
-            </Button>
-          </div>
+          <ShortcutHint
+            shortcuts={[
+              ...(improved ? [] : [{ keys: '⌘I', label: 'improve' }]),
+              { keys: '⌘↵', label: 'save' },
+              { keys: 'Esc', label: 'cancel' },
+            ]}
+          />
+          {improving ? (
+            <span className="flex items-center gap-1.5 text-[11px] text-blink-bright">
+              <WandSparkles className="size-3 animate-pulse" />
+              Improving…
+            </span>
+          ) : improved ? (
+            <span className="flex items-center gap-1.5 text-[11px] text-blink-success">
+              <Check className="size-3" />
+              Improved
+            </span>
+          ) : null}
         </div>
       </div>
     </div>

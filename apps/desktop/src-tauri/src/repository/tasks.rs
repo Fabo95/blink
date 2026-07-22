@@ -16,14 +16,16 @@ use crate::core::models::{CaptureSource, NewTask, Task};
 use super::db::{serde_err, store_err, Db};
 
 /// A partial task edit — every `Some` field is written, `None` leaves it untouched.
-/// A `text` edit also clears the `improved` flag; an empty `link` clears the stored
-/// link; `source_name` sets the displayed source (the `app_name` column).
+/// An empty `link` clears the stored link; `source_name` sets the displayed source (the
+/// `app_name` column). The caller owns the `improved` flag (a manual edit clears it, an
+/// AI improve sets it), so it's passed explicitly rather than inferred from `text`.
 #[derive(Default)]
 pub struct TaskPatch {
     pub text: Option<String>,
     pub completed: Option<bool>,
     pub link: Option<String>,
     pub source_name: Option<String>,
+    pub improved: Option<bool>,
 }
 
 /// The task repository — task-specific queries over the shared [`Db`]. Constructed
@@ -95,19 +97,24 @@ impl TaskRepository {
         fetch_one(&conn, id)
     }
 
-    /// Apply a [`TaskPatch`]. A text edit also clears the `improved` flag — hand-edited
-    /// text is no longer the AI-clean version, so the inbox may offer to improve again.
-    /// AI improvement has its own path ([`mark_improved`](Self::mark_improved)) because
-    /// it *computes* the new text rather than accepting it from the caller. Returns the
-    /// updated task (or a not-found error, surfaced by the final fetch).
+    /// Apply a [`TaskPatch`], writing each `Some` field. Returns the updated task (or a
+    /// not-found error, surfaced by the final fetch).
     pub fn update(&self, id: &str, patch: TaskPatch) -> AppResult<Task> {
         let now = Utc::now().to_rfc3339();
         let conn = self.db.lock()?;
 
         if let Some(text) = patch.text {
             conn.execute(
-                "UPDATE tasks SET text = ?1, improved = 0, updated_at = ?2 WHERE id = ?3",
+                "UPDATE tasks SET text = ?1, updated_at = ?2 WHERE id = ?3",
                 params![text, now, id],
+            )
+            .map_err(store_err)?;
+        }
+
+        if let Some(improved) = patch.improved {
+            conn.execute(
+                "UPDATE tasks SET improved = ?1, updated_at = ?2 WHERE id = ?3",
+                params![improved, now, id],
             )
             .map_err(store_err)?;
         }
