@@ -43,6 +43,11 @@
   html {
     -webkit-user-select: none;
     user-select: none;
+    /* Native shell: the window itself never scrolls (this also clips the oversized,
+       fixed aurora so it can't produce a stray scrollbar). Scrolling happens inside
+       the content region. `overscroll-behavior` kills rubber-band chaining at the edge. */
+    overflow: hidden;
+    overscroll-behavior: none;
   }
 
   input,

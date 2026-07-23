@@ -31,9 +31,9 @@ export function App() {
   }, [refresh]);
 
   return (
-    <div className="mx-auto flex min-h-full max-w-3xl flex-col">
+    <div className="mx-auto flex h-full max-w-3xl flex-col">
       <Header />
-      <main className="flex-1 space-y-6 px-6 py-6">
+      <main className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-6">
         <CaptureCard />
         <TaskList tasks={tasks} onChanged={refresh} />
       </main>

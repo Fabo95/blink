@@ -196,28 +196,33 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
               editing && 'border-primary/40 bg-card/70 ring-2 ring-primary/30',
             )}
           >
+            {/* Whole-card click target: single-click selects (then ⏎ completes), double-click
+                completes. aria-hidden + tabIndex -1 keep it mouse-only (keyboard uses the
+                cursor); mousedown-preventDefault keeps focus on <body> so nav keeps working. */}
+            <button
+              type="button"
+              aria-hidden
+              tabIndex={-1}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setFocusedId(task.id)}
+              onDoubleClick={() => void toggleComplete(task)}
+              className="absolute inset-0 rounded-xl"
+            />
             {focused && !editing && (
-              <span className="absolute inset-y-2 left-0 w-[3px] rounded-full bg-primary" />
+              <span className="pointer-events-none absolute inset-y-2 left-0 w-[3px] rounded-full bg-primary" />
             )}
-            <div className="flex items-start gap-3">
+            {/* Content sits above the overlay but ignores pointer events, so clicks fall
+                through to select — except the link chip, which re-enables its own. */}
+            <div className="pointer-events-none relative flex items-start gap-3">
               <div className="min-w-0 flex-1">
-                {/* The text is the click target: single-click selects (then ⏎ completes),
-                    double-click completes directly. tabIndex -1 keeps it out of tab order. */}
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  // Don't take DOM focus on click — keep it on <body> so the list's
-                  // keyboard cursor (and ⏎ to complete) keeps working after a click.
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => setFocusedId(task.id)}
-                  onDoubleClick={() => void toggleComplete(task)}
+                <p
                   className={cn(
-                    'block w-full break-words text-left text-sm font-medium leading-snug',
+                    'break-words text-sm font-medium leading-snug',
                     done && 'text-muted-foreground line-through',
                   )}
                 >
                   {task.text}
-                </button>
+                </p>
 
                 {/* Quiet metadata footer: source, then a clickable link chip. */}
                 <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
@@ -234,7 +239,7 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
                         type="button"
                         onClick={() => openLink(task)}
                         title={task.link}
-                        className="inline-flex min-w-0 items-center gap-1 text-blink-bright transition hover:underline"
+                        className="pointer-events-auto relative inline-flex min-w-0 items-center gap-1 text-blink-bright transition hover:underline"
                       >
                         <ExternalLink className="size-3 shrink-0" />
                         <span className="truncate">{linkLabel(task.link)}</span>

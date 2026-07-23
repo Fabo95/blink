@@ -20,6 +20,7 @@
         "minWidth": 380,
         "minHeight": 520,
         "resizable": true,
+        "maximizable": false,
         "theme": "Dark",
         "titleBarStyle": "Overlay",
         "hiddenTitle": true
@@ -30,6 +31,7 @@
         "width": 480,
         "height": 300,
         "resizable": false,
+        "maximizable": false,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
@@ -48,6 +50,7 @@
         "width": 480,
         "height": 260,
         "resizable": false,
+        "maximizable": false,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
