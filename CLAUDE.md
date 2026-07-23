@@ -106,14 +106,23 @@ Run from the repo root unless noted.
   it resolves the pressed shortcut back to its method (`method_of`) and dispatches. `set` refuses
   a combo already owned by another method. UI is one `ShortcutRecorder` per method in the capture
   card; the commands `get/set_capture_shortcut` take a `method` arg.
-- **Inbox is keyboard-first** (`TaskList`): two cards — **Inbox** (active) and **Completed**
-  (done). A virtual cursor (`useListCursor`, built on `react-hotkeys-hook`) spans both: `↑↓`/`jk`
-  move it, `⏎` completes/restores the focused task, `e` edits, `o` opens its link, `⌫` deletes
-  (confirm `AlertDialog`), `c` toggles the Completed section, `Esc` unselects. Editing is an
-  in-row **Popover** (text/source/link fields; `⌘↵` save, `⌘I` improve, `Esc` cancel). There are
-  **no action buttons** — every action is a shortcut, always shown via a `ShortcutHint`; rows also
-  click-to-select and double-click-to-complete. `useListCursor` ignores keys originating inside a
-  `[role=dialog|menu|alertdialog]`, so an open overlay keeps its own keys.
+- **Inbox is keyboard-first** (`TaskList`): three stacked sections — **Inbox** (active),
+  **Completed** (done in the last 24h), and a collapsible **Archive** (older completions,
+  expanded in place with `a`). The archive is searchable and paginated (8/page), day-grouped
+  (Today / Yesterday / weekday / date via `lib/completed.ts::groupByDay`); `←`/`→` page while
+  it's open. A virtual cursor (`useListCursor`, built on `react-hotkeys-hook`) walks everything
+  visible (Inbox → Completed → open archive page): `↑↓`/`jk` move it, `⏎` completes/restores the
+  focused task, `e` edits, `o` opens its link, `⌫` deletes (confirm `AlertDialog`), `Esc`
+  unselects. `Tab` is swallowed in the main window (the cursor drives selection, not DOM focus)
+  except inside the open editor. Editing is an in-row **Popover** (text/source/link fields;
+  `⇥`/`⇧⇥` move between the fields and wrap, `⌘↵` save, `⌘I` improve, `Esc` cancel). There are **no action buttons** — every action is a shortcut, always shown via a
+  `ShortcutHint`; rows also click-to-select and double-click-to-complete. `useListCursor` ignores
+  keys originating inside a `[role=dialog|menu|alertdialog]`, so an open overlay keeps its own keys.
+  - **Structure**: `TaskList` is a thin orchestrator (owns the cursor + delete flow) that composes
+    `components/tasks/` presentational pieces — `TaskSection` (Inbox/Completed), `ArchiveSection`,
+    `TaskRow`, `TaskEditor`, `DeleteTaskDialog`, shared `hints.ts`. Two hooks hold the stateful
+    logic: `useTaskEditor` (draft fields + `⌘I`/`⌘↵`) and `useArchive` (open/search/pagination +
+    `a`/`←→`). Pure helpers (`splitTasks`, `groupByDay`) live in `lib/completed.ts`.
 - **Task edits** go through the `update_task` command → a `TaskPatch` (any of `text` / `completed`
   / `link` / `source` / `improved`); the frontend sends only changed fields. An optional `link`
   (http(s)) is opened by the `open_link` command (`platform::os::open_url`) from the `o` shortcut

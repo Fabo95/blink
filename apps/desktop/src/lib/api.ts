@@ -1,4 +1,5 @@
 import type { CaptureDraft } from '@/generated/CaptureDraft';
+import type { CaptureSource } from '@/generated/CaptureSource';
 import type { NewTask } from '@/generated/NewTask';
 import type { SanitizeResult } from '@/generated/SanitizeResult';
 import type { Task } from '@/generated/Task';
@@ -16,7 +17,7 @@ const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 export type CaptureMethod = 'copy' | 'manual';
 
 async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  if (isTauri) {
+  if (isTauri && false) {
     const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
     return tauriInvoke<T>(cmd, args);
   }
@@ -61,7 +62,74 @@ export const api = {
 
 // --- Browser fallback -------------------------------------------------------
 
-const mockStore: Task[] = [];
+// Seed the browser mock (no Tauri host) with a spread of tasks so the inbox,
+// last-24h Completed card, and day-grouped Archive are all visible in `pnpm desktop`.
+function seedMockStore(): Task[] {
+  const hoursAgo = (h: number) => new Date(Date.now() - h * 60 * 60 * 1000).toISOString();
+  const source = (appName: string, windowTitle: string): CaptureSource => ({
+    appId: appName.toLowerCase(),
+    appName,
+    windowTitle,
+    capturedAt: hoursAgo(200),
+  });
+  const done = (
+    text: string,
+    completedHoursAgo: number,
+    src: CaptureSource,
+    link: string | null = null,
+  ): Task => ({
+    id: crypto.randomUUID(),
+    text,
+    status: 'done',
+    improved: false,
+    link,
+    source: src,
+    createdAt: hoursAgo(completedHoursAgo + 4),
+    updatedAt: hoursAgo(completedHoursAgo),
+    completedAt: hoursAgo(completedHoursAgo),
+  });
+  const active = (text: string, src: CaptureSource, link: string | null = null): Task => ({
+    id: crypto.randomUUID(),
+    text,
+    status: 'inbox',
+    improved: false,
+    link,
+    source: src,
+    createdAt: hoursAgo(2),
+    updatedAt: hoursAgo(2),
+    completedAt: null,
+  });
+
+  const slack = source('Slack', '#engineering');
+  const chrome = source('Chrome', 'Linear — BLK-142');
+  const notion = source('Notion', 'Roadmap Q3');
+  const mail = source('Mail', 'Re: contract review');
+
+  return [
+    // Inbox (active)
+    active('Draft the sync-server auth middleware', chrome, 'https://linear.app/blink/issue/BLK-142'),
+    active('Reply to the security questionnaire', mail),
+    // Completed in the last 24h → Completed card
+    done('Ship the archive view', 3, chrome),
+    done('Review DLP ruleset PR', 10, slack, 'https://github.com/blink/desktop/pull/88'),
+    // Older → Archive, grouped by day (>8 so pagination shows)
+    done('Fix aurora animation jank', 30, notion),
+    done('Wire up manual-capture window', 34, slack),
+    done('Add completed_at migration', 52, chrome),
+    done('Redesign the task-row actions', 58, slack),
+    done('Rename copy-capture everywhere', 76, notion),
+    done('Extract the useListCursor hook', 80, chrome),
+    done('Add optional link to tasks', 100, mail, 'https://linear.app/blink/issue/BLK-88'),
+    done('Set up SQLCipher keychain key', 122, slack),
+    done('Expand the DLP ruleset', 146, notion),
+    done('Wire the global-shortcut plugin', 170, chrome),
+    done('Sketch the dark-violet theme', 200, notion),
+    done('Draft the zero-knowledge sync spec', 210, mail),
+    done('Bootstrap the Tauri v2 shell', 220, chrome, 'https://tauri.app'),
+  ];
+}
+
+const mockStore: Task[] = seedMockStore();
 const mockShortcuts: Record<CaptureMethod, string> = {
   copy: 'CommandOrControl+Shift+B',
   manual: 'CommandOrControl+Shift+M',
