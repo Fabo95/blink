@@ -1,21 +1,22 @@
 use chrono::Utc;
 use tauri::{AppHandle, Manager, State};
-use tauri_plugin_clipboard_manager::ClipboardExt;
 
 use crate::core::models::{CaptureDraft, CaptureSource};
-use crate::core::state::{FrontmostSource, PendingSource};
+use crate::core::state::{FrontmostSource, PendingCapture, PendingSource};
 use crate::services::security::SecurityFilter;
 
-/// Step 1–3 of copy-capture: read the system clipboard, run the DLP filter, return a
-/// review-ready draft. Nothing is persisted or transmitted here.
+/// Step 1–3 of copy-capture: take the snapshotted selection, run the DLP filter, return a
+/// review-ready draft. Nothing is persisted or transmitted here. The text was already
+/// lifted off the clipboard by the hotkey handler (which restored the user's clipboard),
+/// so this reads the stash rather than the live clipboard.
 #[tauri::command]
 pub fn read_copy_capture(
-    app: AppHandle,
     filter: State<'_, SecurityFilter>,
     source: State<'_, PendingSource>,
+    capture: State<'_, PendingCapture>,
 ) -> CaptureDraft {
-    // The real clipboard. Empty / non-text clipboard → empty capture.
-    let raw = app.clipboard().read_text().unwrap_or_default();
+    // Empty stash (nothing selected, or a non-text clipboard) → empty capture.
+    let raw = capture.peek().unwrap_or_default();
     let result = filter.sanitize(&raw);
 
     CaptureDraft {
@@ -52,9 +53,14 @@ fn fallback_capture_source() -> CaptureSource {
 /// macOS so focus returns to whatever the user was in — the main window never
 /// surfaces just because the panel closed.
 #[tauri::command]
-pub fn dismiss_copy_capture(app: AppHandle, source: State<'_, PendingSource>) {
-    // Drop the captured source so the next unrelated capture doesn't inherit it.
+pub fn dismiss_copy_capture(
+    app: AppHandle,
+    source: State<'_, PendingSource>,
+    capture: State<'_, PendingCapture>,
+) {
+    // Drop the captured source + text so the next unrelated capture doesn't inherit them.
     source.clear();
+    capture.clear();
     if let Some(window) = app.get_webview_window("copy-capture") {
         let _ = window.hide();
     }

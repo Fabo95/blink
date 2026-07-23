@@ -90,7 +90,10 @@ Run from the repo root unless noted.
   cancel, **no buttons**), saved as one `Task`; `CopyCapture`/`ManualCapture` are thin config
   wrappers over it.
   - **Copy** (`⌘⇧B`, `copy-capture` window): records the frontmost app/window as the source,
-    simulates ⌘C to copy the selection, sanitizes, then opens the panel pre-filled.
+    snapshots the clipboard, simulates ⌘C, then **polls** the clipboard until the selection
+    lands (instead of a fixed sleep) and **restores the user's clipboard** — capture never
+    clobbers what they had copied. The lifted text is stashed in `PendingCapture`; the panel's
+    `read_copy_capture` reads that stash (not the live clipboard), sanitizes, and pre-fills.
   - **Manual** (`⌘⇧M`, `manual-capture` window): no clipboard/source — a blank panel to type
     into; saved with a synthetic `manual` source.
   - Adding a method = a `CaptureMethod` variant (+ its `start`/window/`setting_key`/default) +

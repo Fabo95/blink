@@ -1,7 +1,6 @@
 import type { CaptureDraft } from '@/generated/CaptureDraft';
 import type { CaptureSource } from '@/generated/CaptureSource';
 import type { NewTask } from '@/generated/NewTask';
-import type { SanitizeResult } from '@/generated/SanitizeResult';
 import type { Task } from '@/generated/Task';
 
 /**
@@ -17,7 +16,7 @@ const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 export type CaptureMethod = 'copy' | 'manual';
 
 async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  if (isTauri && false) {
+  if (isTauri) {
     const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
     return tauriInvoke<T>(cmd, args);
   }

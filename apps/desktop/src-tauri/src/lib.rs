@@ -6,7 +6,7 @@ mod services;
 
 use tauri::Manager;
 
-use crate::core::state::PendingSource;
+use crate::core::state::{PendingCapture, PendingSource};
 use crate::repository::Repository;
 use crate::services::security::SecurityFilter;
 
@@ -24,6 +24,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(SecurityFilter::with_defaults())
         .manage(PendingSource::default())
+        .manage(PendingCapture::default())
         .setup(|app| {
             // The encrypted DB lives in the per-user app data dir; create it on
             // first run. The Repository opens the shared connection and its entity
