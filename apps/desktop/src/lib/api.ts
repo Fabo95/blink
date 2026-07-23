@@ -105,6 +105,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
         source: input.source,
         createdAt: now,
         updatedAt: now,
+        completedAt: null,
       };
       mockStore.unshift(task);
       return task as T;
@@ -138,6 +139,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       }
       if (typeof nextCompleted === 'boolean') {
         task.status = nextCompleted ? 'done' : 'inbox';
+        task.completedAt = nextCompleted ? new Date().toISOString() : null;
       }
       if (typeof nextLink === 'string') {
         task.link = nextLink.trim() ? nextLink.trim() : null;

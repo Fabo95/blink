@@ -37,7 +37,11 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
   const [error, setError] = useState('');
 
   const active = tasks.filter((t) => t.status !== 'done');
-  const completed = tasks.filter((t) => t.status === 'done');
+  // Completed section only keeps the last 24h, so it stays fresh instead of growing forever.
+  const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+  const completed = tasks.filter(
+    (t) => t.status === 'done' && t.completedAt != null && Date.parse(t.completedAt) >= dayAgo,
+  );
 
   const toggleComplete = async (task: Task) => {
     await api.updateTask(task.id, { completed: task.status !== 'done' });

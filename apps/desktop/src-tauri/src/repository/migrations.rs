@@ -26,5 +26,9 @@ pub(super) fn migrations() -> Migrations<'static> {
             );",
         ),
         M::up("ALTER TABLE tasks ADD COLUMN link TEXT;"),
+        M::up(
+            "ALTER TABLE tasks ADD COLUMN completed_at TEXT;
+             UPDATE tasks SET completed_at = updated_at WHERE status = 'done';",
+        ),
     ])
 }

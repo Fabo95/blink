@@ -61,14 +61,15 @@ impl TaskRepository {
             source: new.source,
             created_at: now.clone(),
             updated_at: now,
+            completed_at: None,
         };
         let params = to_params_named(TaskRow::from(&task)).map_err(serde_err)?;
         let conn = self.db.lock()?;
         conn.execute(
             "INSERT INTO tasks (id, text, status, app_id, app_name, window_title, \
-             captured_at, created_at, updated_at, improved, link) \
+             captured_at, created_at, updated_at, improved, link, completed_at) \
              VALUES (:id, :text, :status, :app_id, :app_name, :window_title, \
-             :captured_at, :created_at, :updated_at, :improved, :link)",
+             :captured_at, :created_at, :updated_at, :improved, :link, :completed_at)",
             params.to_slice().as_slice(),
         )
         .map_err(store_err)?;
@@ -121,9 +122,11 @@ impl TaskRepository {
 
         if let Some(completed) = patch.completed {
             let status = if completed { "done" } else { "inbox" };
+            // Stamp the completion time (cleared when moved back to the inbox).
+            let completed_at = completed.then_some(now.as_str());
             conn.execute(
-                "UPDATE tasks SET status = ?1, updated_at = ?2 WHERE id = ?3",
-                params![status, now, id],
+                "UPDATE tasks SET status = ?1, completed_at = ?2, updated_at = ?3 WHERE id = ?4",
+                params![status, completed_at, now, id],
             )
             .map_err(store_err)?;
         }
@@ -180,6 +183,7 @@ struct TaskRow {
     updated_at: String,
     improved: bool,
     link: Option<String>,
+    completed_at: Option<String>,
 }
 
 impl From<&Task> for TaskRow {
@@ -196,6 +200,7 @@ impl From<&Task> for TaskRow {
             updated_at: task.updated_at.clone(),
             improved: task.improved,
             link: task.link.clone(),
+            completed_at: task.completed_at.clone(),
         }
     }
 }
@@ -216,6 +221,7 @@ impl From<TaskRow> for Task {
             },
             created_at: row.created_at,
             updated_at: row.updated_at,
+            completed_at: row.completed_at,
         }
     }
 }

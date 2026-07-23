@@ -45,13 +45,12 @@ pub struct Task {
     pub id: String,
     pub text: String,
     pub status: String,
-    /// Whether the text has already been cleaned up by the AI optimizer.
     pub improved: bool,
-    /// An optional web link attached to the task (opened from the inbox).
     pub link: Option<String>,
     pub source: CaptureSource,
     pub created_at: String,
     pub updated_at: String,
+    pub completed_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
