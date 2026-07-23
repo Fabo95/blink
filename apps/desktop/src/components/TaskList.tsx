@@ -1,5 +1,5 @@
-import { Check, ChevronRight, ExternalLink, Inbox, WandSparkles } from 'lucide-react';
-import { useState } from 'react';
+import { Check, ExternalLink, Inbox, WandSparkles } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { ShortcutHint } from '@/components/ShortcutHint';
 import {
@@ -26,7 +26,6 @@ interface TaskListProps {
 
 export function TaskList({ tasks, onChanged }: TaskListProps) {
   const [improvingDraft, setImprovingDraft] = useState(false);
-  const [showCompleted, setShowCompleted] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [draftLink, setDraftLink] = useState('');
@@ -120,11 +119,9 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
     }
   };
 
-  // ↑/↓ (or j/k) move a cursor over the active inbox; ⏎ completes, e edits, ⌫ deletes,
-  // Esc clears. Suspended while the popover editor is open.
-  // The cursor spans the inbox and the (expanded) completed section, so the same keys
-  // work in both — ⏎ completes an active task or restores a completed one.
-  const navItems = showCompleted ? [...active, ...completed] : active;
+  // ↑/↓ (or j/k) move one cursor across both sections — Inbox then Completed — so the
+  // same keys work in both (⏎ completes an active task or restores a completed one).
+  const navItems = [...active, ...completed];
   const { focusedId, setFocusedId } = useListCursor(navItems, (t) => t.id, {
     onEnter: toggleComplete,
     onEdit: startEdit,
@@ -135,11 +132,14 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
     disabled: editingId !== null || deletingTask !== null,
   });
 
-  const overlayOpen = editingId !== null || deletingTask !== null;
-  // c toggles the Completed section; ⌘I improves the open editor's draft.
-  useHotkeys('c', () => setShowCompleted((v) => !v), {
-    enabled: completed.length > 0 && !overlayOpen,
-  });
+  // Keep the focused row in view as the cursor moves (`nearest` scrolls the minimum,
+  // and only when it's actually off-screen).
+  useEffect(() => {
+    if (!focusedId) return;
+    document.querySelector(`[data-task-id="${focusedId}"]`)?.scrollIntoView({ block: 'nearest' });
+  }, [focusedId]);
+
+  // ⌘I improves the open editor's draft.
   useHotkeys('mod+i', () => void improveDraft(), {
     enabled: editingId !== null && !draftImproved,
     enableOnFormTags: true,
@@ -190,6 +190,7 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
       <Popover key={task.id} open={editing} onOpenChange={(open) => !open && cancelEdit()}>
         <PopoverAnchor asChild>
           <li
+            data-task-id={task.id}
             className={cn(
               'group relative rounded-xl border border-border/60 bg-card/40 px-3.5 py-3 transition-colors',
               focused && 'border-primary/40 bg-card/70',
@@ -364,42 +365,24 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
         <Card className="panel">
           <CardHeader className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setShowCompleted((v) => !v)}
-                aria-expanded={showCompleted}
-                className="section-bar flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-primary transition hover:opacity-80"
-              >
+              <CardTitle className="section-bar text-sm font-semibold uppercase tracking-wide text-primary">
                 Completed
-                <ChevronRight
-                  className={cn('size-4 transition-transform', showCompleted && 'rotate-90')}
-                />
-              </button>
-              <div className="flex items-center gap-2">
-                <ShortcutHint
-                  shortcuts={[{ keys: 'c', label: showCompleted ? 'collapse' : 'expand' }]}
-                />
-                <span className="text-xs text-muted-foreground">{completed.length}</span>
-              </div>
+              </CardTitle>
+              <span className="text-xs text-muted-foreground">{completed.length} task(s)</span>
             </div>
-            {showCompleted && (
-              <ShortcutHint
-                shortcuts={[
-                  { keys: '↑↓', label: 'navigate' },
-                  { keys: '⏎', label: 'restore' },
-                  { keys: 'e', label: 'edit' },
-                  { keys: 'o', label: 'open' },
-                  { keys: '⌫', label: 'delete' },
-                ]}
-              />
-            )}
+            <ShortcutHint
+              shortcuts={[
+                { keys: '↑↓', label: 'navigate' },
+                { keys: '⏎', label: 'restore' },
+                { keys: 'e', label: 'edit' },
+                { keys: 'o', label: 'open' },
+                { keys: '⌫', label: 'delete' },
+              ]}
+            />
           </CardHeader>
-
-          {showCompleted && (
-            <CardContent>
-              <ul className="space-y-2">{completed.map(renderTask)}</ul>
-            </CardContent>
-          )}
+          <CardContent>
+            <ul className="space-y-2">{completed.map(renderTask)}</ul>
+          </CardContent>
         </Card>
       )}
 
