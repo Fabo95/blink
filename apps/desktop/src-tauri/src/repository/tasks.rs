@@ -42,7 +42,7 @@ impl TaskRepository {
     pub fn list(&self) -> AppResult<Vec<Task>> {
         let conn = self.db.lock()?;
         let mut stmt = conn
-            .prepare("SELECT * FROM tasks ORDER BY created_at DESC")
+            .prepare("SELECT * FROM tasks ORDER BY position DESC")
             .map_err(store_err)?;
         let rows = stmt.query([]).map_err(store_err)?;
         from_rows::<TaskRow>(rows)
@@ -73,7 +73,29 @@ impl TaskRepository {
             params.to_slice().as_slice(),
         )
         .map_err(store_err)?;
+        // New tasks land at the top of the inbox (the highest position so far, + 1).
+        conn.execute(
+            "UPDATE tasks SET position = \
+             (SELECT COALESCE(MAX(position), 0) + 1 FROM tasks WHERE id != ?1) WHERE id = ?1",
+            [&task.id],
+        )
+        .map_err(store_err)?;
         Ok(task)
+    }
+
+    /// Swap the ordering of two tasks — used to nudge a task up or down the inbox.
+    pub fn swap_positions(&self, a: &str, b: &str) -> AppResult<()> {
+        let conn = self.db.lock()?;
+        let read = |id: &str| -> AppResult<i64> {
+            conn.query_row("SELECT position FROM tasks WHERE id = ?1", [id], |row| row.get(0))
+                .map_err(store_err)
+        };
+        let (pa, pb) = (read(a)?, read(b)?);
+        conn.execute("UPDATE tasks SET position = ?1 WHERE id = ?2", params![pb, a])
+            .map_err(store_err)?;
+        conn.execute("UPDATE tasks SET position = ?1 WHERE id = ?2", params![pa, b])
+            .map_err(store_err)?;
+        Ok(())
     }
 
     pub fn delete(&self, id: &str) -> AppResult<()> {

@@ -49,6 +49,20 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
     }
   };
 
+  // Reordering is inbox-only: swap the focused active task with its neighbour above/below.
+  // Completed/archived rows aren't in `active`, so this is a no-op there.
+  const moveActive = async (task: Task, delta: -1 | 1) => {
+    const idx = active.findIndex((t) => t.id === task.id);
+    const neighbour = idx === -1 ? undefined : active[idx + delta];
+    if (!neighbour) return;
+    try {
+      await api.reorderTask(task.id, neighbour.id);
+      onChanged();
+    } catch (e) {
+      report(e, 'Could not reorder task');
+    }
+  };
+
   const isEditing = editor.task !== null;
   // The editor popover and the delete modal each own the keyboard while open, so the list
   // cursor and archive shortcuts stand down.
@@ -67,6 +81,8 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
     onEdit: editor.start,
     onDelete: setDeletingTask,
     onOpenLink: openLink,
+    onMoveUp: (t) => void moveActive(t, -1),
+    onMoveDown: (t) => void moveActive(t, 1),
     disabled: !interactive,
   });
 

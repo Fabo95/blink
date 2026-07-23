@@ -30,5 +30,11 @@ pub(super) fn migrations() -> Migrations<'static> {
             "ALTER TABLE tasks ADD COLUMN completed_at TEXT;
              UPDATE tasks SET completed_at = updated_at WHERE status = 'done';",
         ),
+        // Manual inbox ordering. Higher `position` sorts first; seed from rowid so existing
+        // rows keep their insertion order (newest on top).
+        M::up(
+            "ALTER TABLE tasks ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
+             UPDATE tasks SET position = rowid;",
+        ),
     ])
 }

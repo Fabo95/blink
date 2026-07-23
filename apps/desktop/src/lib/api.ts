@@ -30,6 +30,9 @@ export const api = {
   listTasks: () => invoke<Task[]>('list_tasks'),
   saveTask: (task: NewTask) => invoke<Task>('save_task', { task }),
   deleteTask: (id: string) => invoke<void>('delete_task', { id }),
+  /** Swap the inbox order of two tasks (move one past the other). */
+  reorderTask: (first: string, second: string) =>
+    invoke<void>('reorder_task', { first, second }),
   updateTask: (
     id: string,
     patch: { text?: string; completed?: boolean; link?: string; source?: string; improved?: boolean },
@@ -189,6 +192,14 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
     case 'delete_task': {
       const idx = mockStore.findIndex((t) => t.id === args?.id);
       if (idx >= 0) mockStore.splice(idx, 1);
+      return undefined as T;
+    }
+    case 'reorder_task': {
+      const a = mockStore.findIndex((t) => t.id === args?.first);
+      const b = mockStore.findIndex((t) => t.id === args?.second);
+      if (a >= 0 && b >= 0) {
+        [mockStore[a], mockStore[b]] = [mockStore[b], mockStore[a]];
+      }
       return undefined as T;
     }
     case 'update_task': {

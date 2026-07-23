@@ -112,8 +112,8 @@ Run from the repo root unless noted.
   (Today / Yesterday / weekday / date via `lib/completed.ts::groupByDay`); `←`/`→` page while
   it's open. A virtual cursor (`useListCursor`, built on `react-hotkeys-hook`) walks everything
   visible (Inbox → Completed → open archive page): `↑↓`/`jk` move it, `⏎` completes/restores the
-  focused task, `e` edits, `o` opens its link, `⌫` deletes (confirm `AlertDialog`), `Esc`
-  unselects. `Tab` is swallowed in the main window (the cursor drives selection, not DOM focus)
+  focused task, `e` edits, `o` opens its link, `⌫` deletes (confirm `AlertDialog`), `⌥↑`/`⌥↓`
+  reorder it (Inbox only — see below), `Esc` unselects. `Tab` is swallowed in the main window (the cursor drives selection, not DOM focus)
   except inside the open editor. Editing is an in-row **Popover** (text/source/link fields;
   `⇥`/`⇧⇥` move between the fields and wrap, `⌘↵` save, `⌘I` improve, `Esc` cancel). There are **no action buttons** — every action is a shortcut, always shown via a
   `ShortcutHint`; rows also click-to-select and double-click-to-complete. `useListCursor` ignores
@@ -123,6 +123,12 @@ Run from the repo root unless noted.
     `TaskRow`, `TaskEditor`, `DeleteTaskDialog`, shared `hints.ts`. Two hooks hold the stateful
     logic: `useTaskEditor` (draft fields + `⌘I`/`⌘↵`) and `useArchive` (open/search/pagination +
     `a`/`←→`). Pure helpers (`splitTasks`, `groupByDay`) live in `lib/completed.ts`.
+- **Inbox order** is manual and persisted: a `position` column (migration 5, seeded from `rowid`)
+  sorts `list` (`ORDER BY position DESC`, higher = top); new tasks land on top (`MAX+1`). `⌥↑`/`⌥↓`
+  on the focused Inbox row calls `reorder_task(first, second)` → `TaskRepository::swap_positions`
+  (swaps the two rows' positions). Only active tasks reorder; Completed/Archive keep their natural
+  order. `position` is storage-only — it's not on the `Task` model, so `TaskRow` omits it and
+  `SELECT *` just ignores it.
 - **Task edits** go through the `update_task` command → a `TaskPatch` (any of `text` / `completed`
   / `link` / `source` / `improved`); the frontend sends only changed fields. An optional `link`
   (http(s)) is opened by the `open_link` command (`platform::os::open_url`) from the `o` shortcut

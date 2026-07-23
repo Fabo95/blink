@@ -10,5 +10,9 @@ const listShortcuts = (primary: Shortcut): Shortcut[] => [
   { keys: '⌫', label: 'delete' },
 ];
 
-export const INBOX_SHORTCUTS = listShortcuts({ keys: '⏎', label: 'complete' });
+// Inbox tasks can be reordered (⌥↑/⌥↓); Completed/Archive keep their natural order.
+export const INBOX_SHORTCUTS: Shortcut[] = [
+  ...listShortcuts({ keys: '⏎', label: 'complete' }),
+  { keys: '⌥↑↓', label: 'reorder' },
+];
 export const COMPLETED_SHORTCUTS = listShortcuts({ keys: '⏎', label: 'restore' });

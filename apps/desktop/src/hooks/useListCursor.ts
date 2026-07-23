@@ -10,6 +10,10 @@ interface ListCursorActions<T> {
   onDelete?: (item: T) => void;
   /** Open-link action (o) — leaves the cursor in place. */
   onOpenLink?: (item: T) => void;
+  /** Move the focused item up (⌥↑) — the cursor follows it, so it stays put. */
+  onMoveUp?: (item: T) => void;
+  /** Move the focused item down (⌥↓). */
+  onMoveDown?: (item: T) => void;
   /** Suspend all shortcuts (e.g. while an editor is open). */
   disabled?: boolean;
 }
@@ -87,6 +91,15 @@ export function useListCursor<T>(
     preventDefault: true,
   });
   useHotkeys('backspace, delete', guard(() => act((a) => a.onDelete, false)), {
+    enabled: canAct,
+    preventDefault: true,
+  });
+  // ⌥↑/⌥↓ reorder without moving the cursor off the item (it keeps the same id).
+  useHotkeys('alt+up', guard(() => act((a) => a.onMoveUp, false)), {
+    enabled: canAct,
+    preventDefault: true,
+  });
+  useHotkeys('alt+down', guard(() => act((a) => a.onMoveDown, false)), {
     enabled: canAct,
     preventDefault: true,
   });

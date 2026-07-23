@@ -19,6 +19,16 @@ pub fn delete_task(repository: State<'_, Repository>, id: String) -> AppResult<(
     repository.tasks.delete(&id)
 }
 
+/// Swap the inbox order of two tasks (moving `first` and `second` past each other).
+#[tauri::command]
+pub fn reorder_task(
+    repository: State<'_, Repository>,
+    first: String,
+    second: String,
+) -> AppResult<()> {
+    repository.tasks.swap_positions(&first, &second)
+}
+
 /// Patch a task's mutable fields — text, completion, link (empty clears it), the
 /// displayed source label, and/or the `improved` flag. Any omitted field is left
 /// untouched. The AI call that produces improved text is its own command (`improve_text`).

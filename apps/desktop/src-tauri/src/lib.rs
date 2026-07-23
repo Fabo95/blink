@@ -48,6 +48,7 @@ pub fn run() {
             commands::tasks::list_tasks,
             commands::tasks::save_task,
             commands::tasks::delete_task,
+            commands::tasks::reorder_task,
             commands::tasks::update_task,
             commands::tasks::improve_task,
             commands::link::open_link,
