@@ -42,7 +42,7 @@ export function ArchiveSection({ archive, totalCount, renderRow }: ArchiveSectio
                 else searchRef.current?.blur();
               }}
               placeholder="Search completed…"
-              className="h-auto flex-1 border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
+              className="h-auto min-w-0 flex-1 border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
             />
           </div>
           <ShortcutHint

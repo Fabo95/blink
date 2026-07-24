@@ -12,7 +12,12 @@ const copyKind: CaptureKind = {
   showSource: true,
   load: async () => {
     const draft = await api.readCopyCapture();
-    return { text: draft.text, source: draft.source, redactionCount: draft.redactionCount };
+    return {
+      text: draft.text,
+      source: draft.source,
+      redactionCount: draft.redactionCount,
+      link: draft.link ?? undefined,
+    };
   },
   dismiss: () => api.dismissCopyCapture(),
 };

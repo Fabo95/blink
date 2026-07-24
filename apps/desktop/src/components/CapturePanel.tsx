@@ -14,6 +14,8 @@ export interface CaptureContent {
   text: string;
   source: CaptureSource;
   redactionCount: number;
+  /** Pre-filled link (e.g. the source page URL for a browser copy-capture). */
+  link?: string;
 }
 
 /** Everything that differs between capture methods; the panel owns the rest. */
@@ -51,7 +53,7 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
   const load = useCallback(async () => {
     const content = await kind.load();
     setText(content.text);
-    setLink('');
+    setLink(content.link ?? '');
     setSource(content.source);
     setRedactions(content.redactionCount);
     setImproved(false);
@@ -135,7 +137,7 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
     <div className="flex h-screen w-screen">
       {/* Translucent tint over the native hudWindow vibrancy — the window itself
           supplies the frost, rounding (radius 16) and drop shadow. */}
-      <div className="flex flex-1 flex-col gap-2.5 rounded-2xl border border-white/10 bg-[hsl(258_36%_13%/0.5)] p-4">
+      <div className="flex min-w-0 flex-1 flex-col gap-2.5 rounded-2xl border border-white/10 bg-[hsl(258_36%_13%/0.5)] p-4">
         {/* Drag handle: the header row moves the frameless window. */}
         <div
           data-tauri-drag-region=""
@@ -169,7 +171,7 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
             value={link}
             onChange={(e) => setLink(e.target.value)}
             placeholder="Add a link (optional)"
-            className="h-auto flex-1 border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            className="h-auto min-w-0 flex-1 border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
           />
         </div>
 

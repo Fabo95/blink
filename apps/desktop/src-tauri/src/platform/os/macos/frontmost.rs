@@ -1,10 +1,15 @@
-//! Frontmost-application + focused-window detection via AppKit + the Accessibility
-//! API.
+//! The frontmost app + focused-window title, plus the page URL for browsers — read through
+//! the `accessibility` wrapper.
 
+use accessibility_sys::{kAXDocumentAttribute, kAXRoleAttribute, kAXURLAttribute, AXUIElementRef};
+
+use super::accessibility::{find_child, read_string, read_url, AxElement};
 use crate::core::state::FrontmostSource;
 
-/// Read the frontmost application and its focused window title, or `None` if
-/// nothing is frontmost.
+/// Bound the web-area search so a deep/wide tree can't stall the capture.
+const MAX_SEARCH_DEPTH: u32 = 12;
+const MAX_SEARCH_NODES: u32 = 600;
+
 pub fn detect_source() -> Option<FrontmostSource> {
     use objc2_app_kit::NSWorkspace;
 
@@ -13,54 +18,57 @@ pub fn detect_source() -> Option<FrontmostSource> {
     let app_name = app.localizedName().map(|s| s.to_string()).unwrap_or_default();
     let pid = app.processIdentifier();
 
-    Some(FrontmostSource {
-        app_id,
-        app_name,
-        window_title: focused_window_title(pid).unwrap_or_default(),
-    })
+    let window = AxElement::for_application(pid).and_then(|app| app.focused_window());
+    let window_title = window.as_ref().and_then(AxElement::title).unwrap_or_default();
+    let url = window
+        .filter(|_| is_known_browser(&app_id))
+        .and_then(|window| page_url(&window));
+
+    Some(FrontmostSource { app_id, app_name, window_title, url })
 }
 
-/// The focused window's title via the Accessibility API. Needs the same
-/// Accessibility permission the ⌘C copy-simulation already requires; returns
-/// `None` if it isn't granted, so capture still works without a window title.
-fn focused_window_title(pid: i32) -> Option<String> {
-    use accessibility_sys::{
-        kAXFocusedWindowAttribute, kAXTitleAttribute, AXUIElementCreateApplication, AXUIElementRef,
-    };
-    use core_foundation::base::{CFType, CFTypeRef, TCFType};
-    use core_foundation::string::{CFString, CFStringRef};
+/// Apps we try to read a page URL from — the rest skip the (pointless) lookup.
+fn is_known_browser(bundle_id: &str) -> bool {
+    matches!(
+        bundle_id,
+        "com.apple.Safari"
+            | "com.apple.SafariTechnologyPreview"
+            | "com.google.Chrome"
+            | "com.google.Chrome.canary"
+            | "com.google.Chrome.beta"
+            | "com.brave.Browser"
+            | "com.microsoft.edgemac"
+            | "company.thebrowser.Browser" // Arc
+            | "org.mozilla.firefox"
+            | "com.vivaldi.Vivaldi"
+            | "com.operasoftware.Opera"
+    )
+}
 
-    unsafe {
-        let app_ref = AXUIElementCreateApplication(pid);
-        if app_ref.is_null() {
-            return None;
-        }
-        // Wrapping under the create rule ties each +1 reference to a guard that
-        // releases it on drop — no manual CFRelease bookkeeping.
-        let _app_guard = CFType::wrap_under_create_rule(app_ref as CFTypeRef);
-
-        let window_ref = copy_attr(app_ref, kAXFocusedWindowAttribute)?;
-        let _window_guard = CFType::wrap_under_create_rule(window_ref);
-
-        let title_ref = copy_attr(window_ref as AXUIElementRef, kAXTitleAttribute)?;
-        let title = CFString::wrap_under_create_rule(title_ref as CFStringRef).to_string();
-        (!title.is_empty()).then_some(title)
+/// Safari exposes the URL on the window (`AXDocument`); Chromium keeps it on the `AXWebArea`
+/// deeper in the tree.
+fn page_url(window: &AxElement) -> Option<String> {
+    if let Some(url) = read_url(window.raw(), kAXDocumentAttribute).filter(|u| is_http(u)) {
+        return Some(url);
     }
+    let mut remaining_nodes = MAX_SEARCH_NODES;
+    find_web_area_url(window.raw(), 0, &mut remaining_nodes)
 }
 
-/// Copy an Accessibility attribute, returning the owned CFTypeRef (caller releases).
-unsafe fn copy_attr(
-    element: accessibility_sys::AXUIElementRef,
-    attribute: &'static str,
-) -> Option<core_foundation::base::CFTypeRef> {
-    use std::ptr;
+fn find_web_area_url(element: AXUIElementRef, depth: u32, remaining_nodes: &mut u32) -> Option<String> {
+    if depth > MAX_SEARCH_DEPTH || *remaining_nodes == 0 {
+        return None;
+    }
+    *remaining_nodes -= 1;
 
-    use accessibility_sys::{kAXErrorSuccess, AXUIElementCopyAttributeValue};
-    use core_foundation::base::{CFTypeRef, TCFType};
-    use core_foundation::string::CFString;
+    if read_string(element, kAXRoleAttribute).as_deref() == Some("AXWebArea") {
+        if let Some(url) = read_url(element, kAXURLAttribute).filter(|u| is_http(u)) {
+            return Some(url);
+        }
+    }
+    find_child(element, |child| find_web_area_url(child, depth + 1, remaining_nodes))
+}
 
-    let key = CFString::from_static_string(attribute);
-    let mut value: CFTypeRef = ptr::null();
-    let err = AXUIElementCopyAttributeValue(element, key.as_concrete_TypeRef(), &mut value);
-    (err == kAXErrorSuccess && !value.is_null()).then_some(value)
+fn is_http(url: &str) -> bool {
+    url.starts_with("http://") || url.starts_with("https://")
 }

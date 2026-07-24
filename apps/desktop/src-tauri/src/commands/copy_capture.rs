@@ -19,15 +19,16 @@ pub fn read_copy_capture(
     let raw = capture.peek().unwrap_or_default();
     let result = filter.sanitize(&raw);
 
+    // Both set by the copy-capture hotkey while the source app was still frontmost.
+    let front = source.peek();
+    let link = front.as_ref().and_then(|f| f.url.clone());
+
     CaptureDraft {
         text: result.clean,
         original_length: raw.chars().count(),
         redaction_count: result.redaction_count,
-        // Set by the copy-capture hotkey while the source app was still frontmost.
-        source: source
-            .peek()
-            .map(capture_source_from)
-            .unwrap_or_else(fallback_capture_source),
+        source: front.map(capture_source_from).unwrap_or_else(fallback_capture_source),
+        link,
     }
 }
 

@@ -157,6 +157,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
           windowTitle: 'Copied text',
           capturedAt: new Date().toISOString(),
         },
+        link: null,
       };
       return draft as T;
     }

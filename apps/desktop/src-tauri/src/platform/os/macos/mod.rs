@@ -1,6 +1,7 @@
 //! macOS-specific platform integration. Exposes the OS interface the cross-platform
 //! code in `platform/` expects: `record_source`, `copy_selection`, `on_run_event`.
 
+mod accessibility;
 mod frontmost;
 mod input;
 

@@ -26,6 +26,8 @@ pub struct CaptureDraft {
     pub original_length: usize,
     pub redaction_count: usize,
     pub source: CaptureSource,
+    /// The source page URL when captured from a browser — pre-fills the link field.
+    pub link: Option<String>,
 }
 
 /// Result of running the local security filter over a text.

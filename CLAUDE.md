@@ -103,6 +103,9 @@ Run from the repo root unless noted.
 - **Source detection** (`platform/os/macos/frontmost.rs`): `NSWorkspace` for the frontmost app +
   the Accessibility API for its window title, captured *before* our panel steals focus and
   stashed in `PendingSource`. Reuses the Accessibility permission ⌘C already needs. Copy-only.
+  For **browsers** (matched by bundle id) it also reads the current page URL — the window's
+  `AXDocument` (Safari) or a bounded search for the `AXWebArea`'s `AXURL` (Chromium) — and carries
+  it as `FrontmostSource.url` → `CaptureDraft.link`, pre-filling the panel's link field.
 - **Capture shortcuts**: one hotkey **per method**, keyed by `CaptureMethod` and persisted in
   the `settings` table (`copy_capture_shortcut` / `manual_capture_shortcut`; defaults `⌘⇧B` /
   `⌘⇧M`). A single global-shortcut handler is registered; since it fires for every bound hotkey,

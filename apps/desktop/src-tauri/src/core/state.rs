@@ -8,6 +8,9 @@ pub struct FrontmostSource {
     pub app_id: String,
     pub app_name: String,
     pub window_title: String,
+    /// The current page URL, when the frontmost app is a browser — used to pre-fill the
+    /// capture's link field. `None` for non-browsers or if it couldn't be read.
+    pub url: Option<String>,
 }
 
 /// Set by the capture-hotkey handler *before* our panel steals focus, then read by
