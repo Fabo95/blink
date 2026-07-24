@@ -11,7 +11,7 @@ desktop app, dark-violet theme.
 - **Desktop app** (`apps/desktop`): Tauri v2 (Rust core) + React 19 + Vite 8 (rolldown) +
   Tailwind v4 + shadcn/ui (Radix) + `react-hotkeys-hook` + TypeScript 7. Local store: SQLite via
   **SQLCipher** (AES-256 at rest), key in the OS keychain.
-- **Sync server** (`apps/sync-server`): Fastify 5 + zod 4 + Drizzle ORM + Postgres 17 (planned
+- **Sync server** (`apps/server`): Fastify 5 + zod 4 + Drizzle ORM + Postgres 17 (planned
   Phase 2; not yet wired to the client).
 - **Tooling**: Biome (format + lint), not Prettier/ESLint.
 
@@ -20,7 +20,7 @@ desktop app, dark-violet theme.
 ```
 apps/
   desktop/          Tauri app. src/ = React webview, src-tauri/ = Rust core.
-  sync-server/      Self-hosted sync API (structured after ramble's backend).
+  server/      Self-hosted sync API (structured after ramble's backend).
 packages/
   contract/         zod wire schemas — single source of truth, client↔server. Built to dist.
   core/             Shared brand/theme constants.
@@ -62,7 +62,7 @@ Run from the repo root unless noted.
 - `pnpm --filter @blink/desktop gen:types` — regenerate TS types from Rust (`cargo test`, ts-rs).
 - `cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml` — fast Rust type-check.
 - `pnpm --filter @blink/db db:generate` / `db:migrate` — Drizzle migrations (sync server).
-- `docker compose up` — Postgres + sync-server.
+- `docker compose up` — Postgres + server.
 
 ## Architecture notes
 

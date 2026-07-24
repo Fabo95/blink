@@ -20,11 +20,11 @@ end-to-end encrypted client-side so even the operator only stores ciphertext.
 | Local Database   | SQLite via SQLCipher (AES-256)| `src-tauri/src/store.rs` · in-memory stub for now |
 | Local AI Engine  | ONNX Runtime / local LLM      | `packages/ai`              |
 | Zero-Knowledge E2EE | PBKDF2 + AES-GCM (WebCrypto)| `packages/crypto`          |
-| Cloud Sync       | CRDT → self-hosted Postgres   | `packages/sync`, `apps/sync-server` |
+| Cloud Sync       | CRDT → self-hosted Postgres   | `packages/sync`, `apps/server` |
 | Cloud schema/ORM | Drizzle (schema + migrations) | `packages/db`              |
 | Shared model     | Types, theme, DLP patterns    | `packages/core`            |
 
-The cloud tier is **self-hosted**: a thin sync API (`apps/sync-server`) is the only
+The cloud tier is **self-hosted**: a thin sync API (`apps/server`) is the only
 thing that talks to Postgres, so raw DB access is never exposed to clients. It uses
 **Drizzle** (`packages/db`) — the TS schema is the source of truth and drizzle-kit
 generates the SQL migrations; the least-privilege role, RLS policies and GRANTs live
@@ -67,7 +67,7 @@ Type-check everything: `pnpm typecheck` · Lint/format: `pnpm lint` / `pnpm form
 docker compose up          # Postgres (auto-runs migrations) + the sync API
 # host port clashes with a local Postgres? → POSTGRES_PORT=5433 docker compose up
 
-pnpm --filter @blink/sync-server dev   # or run the Fastify API on the host (tsx watch)
+pnpm --filter @blink/server dev   # or run the Fastify API on the host (tsx watch)
 ```
 
 The API listens on `:8787` (`/health`, `/v1/sync/push`, `/v1/sync/pull`). Point the
@@ -95,7 +95,7 @@ pnpm --filter @blink/desktop tauri icon src-tauri/app-icon.png
 blink/
 ├── apps/
 │   ├── desktop/           # Tauri app: React frontend + Rust core (src-tauri)
-│   └── sync-server/       # self-hosted sync API (Fastify + Zod + Drizzle)
+│   └── server/       # self-hosted sync API (Fastify + Zod + Drizzle)
 │       └── src/
 │           ├── index.ts   # bootstrap: listen + graceful shutdown
 │           ├── server.ts  # createServer(): plugins, zod, error handler

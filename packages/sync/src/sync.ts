@@ -1,7 +1,7 @@
 import type { SyncPacket } from '@blink/contract/wire';
 
 // The client half of the sync boundary: how the app talks to the self-hosted sync
-// API (apps/sync-server). The wire shapes come from @blink/contract (single
+// API (apps/server). The wire shapes come from @blink/contract (single
 // source of truth); this file is just the two HTTP calls.
 //
 // NOTE: not wired into the app yet — the conflict-free (CRDT) merge and the

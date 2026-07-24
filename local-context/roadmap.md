@@ -18,7 +18,7 @@ has all its building blocks written but none of them wired into the app.
 | Local task persistence (SQLite/SQLCipher) | ❌ in-memory only | `store/memory.rs` (TODO marker) |
 | Linear OAuth export | ❌ | — |
 | Local/offline AI (ONNX) | ❌ | — |
-| Sync server (Fastify + RLS + Drizzle) | ✅ standalone | `apps/sync-server` |
+| Sync server (Fastify + RLS + Drizzle) | ✅ standalone | `apps/server` |
 | E2EE envelope helpers | 🟡 not wired | `packages/crypto/e2ee.ts` |
 | Sync client (push/pull) | 🟡 not wired, no CRDT | `packages/sync/sync.ts` |
 | Team/SSO/billing | ❌ | — |
@@ -83,8 +83,8 @@ Goal: sellable to IT admins.
 
 Goal: DAX-Konzern can run the whole cloud tier inside their own network.
 
-- [ ] **Container images + Helm/Compose.** Production Dockerfiles (sync-server done), a Helm
-      chart / hardened compose for Postgres + sync-server + migrations.
+- [ ] **Container images + Helm/Compose.** Production Dockerfiles (server done), a Helm
+      chart / hardened compose for Postgres + server + migrations.
 - [ ] **Config via env only.** No baked-in secrets; document every var (extend `.env.example`).
 - [ ] **Self-hosted IdP + backups.** Support customer-run SSO endpoints, Postgres backup/PITR
       guidance, TLS termination.
@@ -95,7 +95,7 @@ Goal: DAX-Konzern can run the whole cloud tier inside their own network.
 ## Cross-cutting (do alongside, not a phase)
 
 - [ ] **Tests.** No test suite yet — add Rust unit tests (store, security filter, capture),
-      sync-server integration tests (RLS isolation, LWW), and crypto round-trip tests.
+      server integration tests (RLS isolation, LWW), and crypto round-trip tests.
 - [ ] **CI.** Lint + typecheck + build + test on push; `cargo test` also regenerates ts-rs
       types — gate on `src/generated` being in sync.
 - [ ] **Error/telemetry.** Structured client-side error reporting (respecting local-first
