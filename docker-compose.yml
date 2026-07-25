@@ -36,8 +36,15 @@ services:
     build:
       context: .
       dockerfile: apps/server/Dockerfile
+    # Secrets + config come from apps/server/.env (RESEND_API_KEY, BETTER_AUTH_SECRET, …);
+    # `environment` below overrides DATABASE_URL for the compose network.
+    env_file:
+      - apps/server/.env
     environment:
       PORT: 8787
+      # The image is prod-pruned (no pino-pretty), so force production logging even
+      # though the shared .env sets development for local `pnpm dev`.
+      ENVIRONMENT: production
       # Least-privilege: the server connects as `blink_api` (created by migration 0001)
       # — RLS is enforced and it only holds grants on the tables it needs (tasks +
       # the Better Auth tables). The owner `blink` is used solely by the migrate

@@ -1,6 +1,6 @@
 import type { IncomingHttpHeaders } from 'node:http';
 import { fromNodeHeaders } from 'better-auth/node';
-import type { Auth } from '@/setup/auth/auth.js';
+import type { AuthClient } from '@/clients/authClient.js';
 import { ApiError } from '@/utils/errors/apiError.js';
 
 export interface AuthContext {
@@ -8,7 +8,7 @@ export interface AuthContext {
 }
 
 interface AuthServiceDeps {
-  auth: Auth;
+  authClient: AuthClient;
 }
 
 export class AuthService {
@@ -23,7 +23,9 @@ export class AuthService {
    * from sign-in (`set-auth-token`); the returned `user.id` is what RLS scopes rows to.
    */
   async authenticate(headers: IncomingHttpHeaders): Promise<AuthContext> {
-    const result = await this.deps.auth.api.getSession({ headers: fromNodeHeaders(headers) });
+    const result = await this.deps.authClient.auth.api.getSession({
+      headers: fromNodeHeaders(headers),
+    });
     if (!result) throw new ApiError('unauthorized', 'Missing or invalid session');
     return { userId: result.user.id };
   }

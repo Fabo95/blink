@@ -1,3 +1,4 @@
+import type { AuthResult } from '@/generated/AuthResult';
 import type { AuthUser } from '@/generated/AuthUser';
 import type { CaptureDraft } from '@/generated/CaptureDraft';
 import type { CaptureSource } from '@/generated/CaptureSource';
@@ -25,9 +26,11 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 }
 
 export const api = {
-  signIn: (email: string, password: string) => invoke<AuthUser>('sign_in', { email, password }),
+  signIn: (email: string, password: string) => invoke<AuthResult>('sign_in', { email, password }),
   signUp: (email: string, password: string, name: string) =>
-  invoke<AuthUser>('sign_up', { email, password, name }),
+    invoke<AuthResult>('sign_up', { email, password, name }),
+  verifyEmail: (email: string, otp: string) => invoke<void>('verify_email', { email, otp }),
+  resendVerification: (email: string) => invoke<void>('resend_verification', { email }),
   signOut: () => invoke<void>('sign_out'),
   currentSession: () => invoke<AuthUser | null>('current_session'),
   readCopyCapture: () => invoke<CaptureDraft>('read_copy_capture'),
@@ -147,12 +150,17 @@ let mockSession: AuthUser | null = null;
 
 async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   switch (cmd) {
-    case 'sign_in':
-    case 'sign_up': {
+    // Sign-up always requires verification, so the OTP screen is exercisable in the browser.
+    case 'sign_up':
+      return { status: 'verificationRequired', user: null } as T;
+    // Any code verifies; sign-in then authenticates.
+    case 'verify_email':
+    case 'resend_verification':
+      return undefined as T;
+    case 'sign_in': {
       const email = String(args?.email ?? '');
-      const name = cmd === 'sign_up' ? String(args?.name ?? '') : (email.split('@')[0] ?? email);
-      mockSession = { id: crypto.randomUUID(), email, name };
-      return mockSession as T;
+      mockSession = { id: crypto.randomUUID(), email, name: email.split('@')[0] ?? email };
+      return { status: 'authenticated', user: mockSession } as T;
     }
     case 'sign_out':
       mockSession = null;

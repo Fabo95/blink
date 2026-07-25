@@ -20,6 +20,9 @@ const schema = z.object({
   BETTER_AUTH_URL: z.string().default('http://localhost:8787'),
   // CORS: comma-separated origins, supports regex patterns prefixed with "regex:".
   CORS_ORIGINS: z.string().default('http://localhost:1420'),
+  // Resend API key for outbound email (verification OTPs). Required — the server sends
+  // real email in every environment (see clients/emailClient).
+  RESEND_API_KEY: z.string().min(1),
 });
 
 const parsed = schema.safeParse(process.env);

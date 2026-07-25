@@ -5,7 +5,7 @@
 use tauri::State;
 
 use crate::core::error::{AppError, AppResult};
-use crate::core::models::AuthUser;
+use crate::core::models::{AuthResult, AuthUser};
 use crate::repository::Repository;
 use crate::services::auth::AuthService;
 
@@ -19,23 +19,40 @@ pub async fn sign_in(
     repository: State<'_, Repository>,
     email: String,
     password: String,
-) -> AppResult<AuthUser> {
-    let user = auth_service.sign_in(email, password).await?;
-    cache_user(&repository, &user)?;
-    Ok(user)
+) -> AppResult<AuthResult> {
+    let result = auth_service.sign_in(email, password).await?;
+    if let Some(user) = &result.user {
+        cache_user(&repository, user)?;
+    }
+    Ok(result)
 }
 
 #[tauri::command]
 pub async fn sign_up(
     auth_service: State<'_, AuthService>,
-    repository: State<'_, Repository>,
     email: String,
     password: String,
     name: String,
-) -> AppResult<AuthUser> {
-    let user = auth_service.sign_up(email, password, name).await?;
-    cache_user(&repository, &user)?;
-    Ok(user)
+) -> AppResult<AuthResult> {
+    // Verification-required: no session yet, so nothing to cache.
+    auth_service.sign_up(email, password, name).await
+}
+
+#[tauri::command]
+pub async fn verify_email(
+    auth_service: State<'_, AuthService>,
+    email: String,
+    otp: String,
+) -> AppResult<()> {
+    auth_service.verify_email(email, otp).await
+}
+
+#[tauri::command]
+pub async fn resend_verification(
+    auth_service: State<'_, AuthService>,
+    email: String,
+) -> AppResult<()> {
+    auth_service.resend_verification(email).await
 }
 
 #[tauri::command]

@@ -55,6 +55,27 @@ impl ServerClient {
             .await
     }
 
+    /// `POST /v1/auth/email-otp/send-verification-otp` — (re)send the verification code.
+    pub async fn send_verification_otp(&self, email: &str) -> reqwest::Result<Response> {
+        self.http
+            .post(url("v1/auth/email-otp/send-verification-otp"))
+            .json(&SendVerificationOtp {
+                email,
+                kind: "email-verification",
+            })
+            .send()
+            .await
+    }
+
+    /// `POST /v1/auth/email-otp/verify-email` — confirm the account with the code.
+    pub async fn verify_email_otp(&self, email: &str, otp: &str) -> reqwest::Result<Response> {
+        self.http
+            .post(url("v1/auth/email-otp/verify-email"))
+            .json(&VerifyEmailOtp { email, otp })
+            .send()
+            .await
+    }
+
 }
 
 /// Join a path onto the configured server base URL.
@@ -77,4 +98,17 @@ struct SignUp<'a> {
     email: &'a str,
     password: &'a str,
     name: &'a str,
+}
+
+#[derive(Serialize)]
+struct SendVerificationOtp<'a> {
+    email: &'a str,
+    #[serde(rename = "type")]
+    kind: &'a str,
+}
+
+#[derive(Serialize)]
+struct VerifyEmailOtp<'a> {
+    email: &'a str,
+    otp: &'a str,
 }

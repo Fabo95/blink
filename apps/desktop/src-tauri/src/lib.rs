@@ -56,6 +56,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::auth::sign_in,
             commands::auth::sign_up,
+            commands::auth::verify_email,
+            commands::auth::resend_verification,
             commands::auth::sign_out,
             commands::auth::current_session,
             commands::copy_capture::read_copy_capture,

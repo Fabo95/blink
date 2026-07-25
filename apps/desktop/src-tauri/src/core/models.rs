@@ -17,6 +17,25 @@ pub struct AuthUser {
     pub name: Option<String>,
 }
 
+/// Whether a sign-in/up attempt logged the user in, or the account still needs its
+/// email verified (a code was sent) before sign-in is allowed.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub enum AuthStatus {
+    Authenticated,
+    VerificationRequired,
+}
+
+/// The outcome of a sign-in/up: `user` is present only when `status` is authenticated.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct AuthResult {
+    pub status: AuthStatus,
+    pub user: Option<AuthUser>,
+}
+
 /// Where a captured snippet came from — the "system metadata".
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../src/generated/")]

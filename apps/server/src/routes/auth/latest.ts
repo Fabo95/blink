@@ -1,6 +1,5 @@
 import { fromNodeHeaders } from 'better-auth/node';
 import type { FastifyInstance } from 'fastify';
-import { auth } from '@/setup/auth/auth.js';
 
 /**
  * Mounts the whole Better Auth API at `/v1/auth/*` (sign-up, sign-in, session, sign-out, and
@@ -10,8 +9,8 @@ import { auth } from '@/setup/auth/auth.js';
  * and forward the `Response`.
  *
  * App-specific auth logic (custom sign-up side effects, the token→userId check) lives in
- * `AuthService` on top of `auth.api.*`; this route is just the transport for the standard
- * surface, not a place for business logic.
+ * `AuthService` on top of `authClient.auth.api.*`; this route is just the transport for the
+ * standard surface, not a place for business logic.
  */
 export function authHandlerRoute(fastify: FastifyInstance) {
   fastify.route({
@@ -20,6 +19,7 @@ export function authHandlerRoute(fastify: FastifyInstance) {
     // Not a typed route — keep it out of the generated OpenAPI document.
     schema: { hide: true },
     handler: async (request, reply) => {
+      const { authClient } = request.diScope.cradle;
       const url = new URL(request.url, `http://${request.headers.host}`);
       const req = new Request(url, {
         method: request.method,
@@ -28,7 +28,7 @@ export function authHandlerRoute(fastify: FastifyInstance) {
         body: request.body ? JSON.stringify(request.body) : undefined,
       });
 
-      const res = await auth.handler(req);
+      const res = await authClient.auth.handler(req);
       reply.status(res.status);
       // Copy headers, but pull Set-Cookie out separately: the Headers iterator collapses
       // repeated headers into one comma-joined value, which is invalid for Set-Cookie (the

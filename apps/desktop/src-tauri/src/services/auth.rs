@@ -8,7 +8,7 @@ use serde::Deserialize;
 
 use crate::clients::server_client::ServerClient;
 use crate::core::error::{AppError, AppResult};
-use crate::core::models::AuthUser;
+use crate::core::models::{AuthResult, AuthStatus, AuthUser};
 use crate::services::session_token::SessionTokenService;
 
 /// Auth against the sync server. Holds the client it talks through and the keychain
@@ -26,15 +26,27 @@ impl AuthService {
         }
     }
 
-    pub async fn sign_in(&self, email: String, password: String) -> AppResult<AuthUser> {
+    pub async fn sign_in(&self, email: String, password: String) -> AppResult<AuthResult> {
         let response = self
             .server_client
             .sign_in_email(&email, &password)
             .await
             .map_err(network_error)?;
-        let (user, token) = read_session(response).await?;
-        self.session_token_service.store(&token)?;
-        Ok(user)
+
+        if response.status().is_success() {
+            let (user, token) = read_session(response).await?;
+            self.session_token_service.store(&token)?;
+            return Ok(authenticated(user));
+        }
+
+        // The server rejects sign-in for an unverified account (403 EMAIL_NOT_VERIFIED)
+        // and auto-sends a fresh code — surface that as a normal branch, not an error.
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        if is_email_not_verified(&body) {
+            return Ok(verification_required());
+        }
+        Err(AppError::Auth(status_message(status, &body)))
     }
 
     pub async fn sign_up(
@@ -42,15 +54,37 @@ impl AuthService {
         email: String,
         password: String,
         name: String,
-    ) -> AppResult<AuthUser> {
+    ) -> AppResult<AuthResult> {
         let response = self
             .server_client
             .sign_up_email(&email, &password, &name)
             .await
             .map_err(network_error)?;
-        let (user, token) = read_session(response).await?;
-        self.session_token_service.store(&token)?;
-        Ok(user)
+        expect_success(response).await?;
+        // `requireEmailVerification` means sign-up creates the account (unverified) and
+        // auto-sends the OTP, but returns no session — the user must verify first.
+        Ok(verification_required())
+    }
+
+    /// Confirm the account with the emailed code. On success the caller signs in again
+    /// (now verified) to obtain a session.
+    pub async fn verify_email(&self, email: String, otp: String) -> AppResult<()> {
+        let response = self
+            .server_client
+            .verify_email_otp(&email, &otp)
+            .await
+            .map_err(network_error)?;
+        expect_success(response).await
+    }
+
+    /// (Re)send the verification code to the account's email.
+    pub async fn resend_verification(&self, email: String) -> AppResult<()> {
+        let response = self
+            .server_client
+            .send_verification_otp(&email)
+            .await
+            .map_err(network_error)?;
+        expect_success(response).await
     }
 
     /// Whether a session token is present on this device (the offline "is signed in"
@@ -106,6 +140,38 @@ fn status_message(status: StatusCode, body: &str) -> String {
         .ok()
         .and_then(|value| value.get("message")?.as_str().map(str::to_string))
         .unwrap_or_else(|| format!("the server rejected the request ({status})"))
+}
+
+fn authenticated(user: AuthUser) -> AuthResult {
+    AuthResult {
+        status: AuthStatus::Authenticated,
+        user: Some(user),
+    }
+}
+
+fn verification_required() -> AuthResult {
+    AuthResult {
+        status: AuthStatus::VerificationRequired,
+        user: None,
+    }
+}
+
+/// True when Better Auth rejected sign-in because the email isn't verified yet.
+fn is_email_not_verified(body: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|value| value.get("code")?.as_str().map(|code| code == "EMAIL_NOT_VERIFIED"))
+        .unwrap_or(false)
+}
+
+/// `Ok` on a 2xx response, otherwise the server's error message.
+async fn expect_success(response: Response) -> AppResult<()> {
+    if response.status().is_success() {
+        return Ok(());
+    }
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    Err(AppError::Auth(status_message(status, &body)))
 }
 
 #[derive(Deserialize)]
