@@ -1,3 +1,4 @@
+import type { AuthUser } from '@/generated/AuthUser';
 import type { CaptureDraft } from '@/generated/CaptureDraft';
 import type { CaptureSource } from '@/generated/CaptureSource';
 import type { NewTask } from '@/generated/NewTask';
@@ -24,12 +25,15 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 }
 
 export const api = {
-  /** Copy-capture: read the clipboard + system metadata, run the DLP filter, return a draft. */
+  signIn: (email: string, password: string) => invoke<AuthUser>('sign_in', { email, password }),
+  signUp: (email: string, password: string, name: string) =>
+  invoke<AuthUser>('sign_up', { email, password, name }),
+  signOut: () => invoke<void>('sign_out'),
+  currentSession: () => invoke<AuthUser | null>('current_session'),
   readCopyCapture: () => invoke<CaptureDraft>('read_copy_capture'),
   listTasks: () => invoke<Task[]>('list_tasks'),
   saveTask: (task: NewTask) => invoke<Task>('save_task', { task }),
   deleteTask: (id: string) => invoke<void>('delete_task', { id }),
-  /** Swap the inbox order of two tasks (move one past the other). */
   reorderTask: (first: string, second: string) =>
     invoke<void>('reorder_task', { first, second }),
   updateTask: (
@@ -137,8 +141,24 @@ const mockShortcuts: Record<CaptureMethod, string> = {
   manual: 'CommandOrControl+Shift+M',
 };
 
+// Browser-only auth: accept any credentials so the login gate is developable
+// without the Rust core / a running server.
+let mockSession: AuthUser | null = null;
+
 async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   switch (cmd) {
+    case 'sign_in':
+    case 'sign_up': {
+      const email = String(args?.email ?? '');
+      const name = cmd === 'sign_up' ? String(args?.name ?? '') : (email.split('@')[0] ?? email);
+      mockSession = { id: crypto.randomUUID(), email, name };
+      return mockSession as T;
+    }
+    case 'sign_out':
+      mockSession = null;
+      return undefined as T;
+    case 'current_session':
+      return mockSession as T;
     case 'read_copy_capture': {
       let text = '';
       try {

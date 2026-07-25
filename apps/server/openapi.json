@@ -1,0 +1,463 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Blink Sync API",
+    "version": "1.0.0"
+  },
+  "components": {
+    "schemas": {}
+  },
+  "paths": {
+    "/v1/sync/push": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "packets": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "taskId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "clock": {
+                          "type": "object",
+                          "properties": {
+                            "physical": {
+                              "type": "number"
+                            },
+                            "counter": {
+                              "type": "number"
+                            },
+                            "nodeId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "physical",
+                            "counter",
+                            "nodeId"
+                          ]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "inbox",
+                            "active",
+                            "exported",
+                            "archived"
+                          ]
+                        },
+                        "encrypted": {
+                          "type": "object",
+                          "properties": {
+                            "title": {
+                              "type": "object",
+                              "properties": {
+                                "ciphertext": {
+                                  "type": "string"
+                                },
+                                "iv": {
+                                  "type": "string"
+                                },
+                                "kdf": {
+                                  "type": "object",
+                                  "properties": {
+                                    "algorithm": {
+                                      "type": "string",
+                                      "enum": [
+                                        "PBKDF2"
+                                      ]
+                                    },
+                                    "hash": {
+                                      "type": "string",
+                                      "enum": [
+                                        "SHA-256"
+                                      ]
+                                    },
+                                    "iterations": {
+                                      "type": "number"
+                                    },
+                                    "salt": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "algorithm",
+                                    "hash",
+                                    "iterations",
+                                    "salt"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "ciphertext",
+                                "iv",
+                                "kdf"
+                              ]
+                            },
+                            "body": {
+                              "type": "object",
+                              "properties": {
+                                "ciphertext": {
+                                  "type": "string"
+                                },
+                                "iv": {
+                                  "type": "string"
+                                },
+                                "kdf": {
+                                  "type": "object",
+                                  "properties": {
+                                    "algorithm": {
+                                      "type": "string",
+                                      "enum": [
+                                        "PBKDF2"
+                                      ]
+                                    },
+                                    "hash": {
+                                      "type": "string",
+                                      "enum": [
+                                        "SHA-256"
+                                      ]
+                                    },
+                                    "iterations": {
+                                      "type": "number"
+                                    },
+                                    "salt": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "algorithm",
+                                    "hash",
+                                    "iterations",
+                                    "salt"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "ciphertext",
+                                "iv",
+                                "kdf"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "title",
+                            "body"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "taskId",
+                        "clock",
+                        "status",
+                        "encrypted"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "packets"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "written": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "written"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "reqId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "reqId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sync/pull": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "default": 0,
+              "type": "number"
+            },
+            "in": "query",
+            "name": "since",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "packets": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "taskId": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "clock": {
+                                "type": "object",
+                                "properties": {
+                                  "physical": {
+                                    "type": "number"
+                                  },
+                                  "counter": {
+                                    "type": "number"
+                                  },
+                                  "nodeId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "physical",
+                                  "counter",
+                                  "nodeId"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "inbox",
+                                  "active",
+                                  "exported",
+                                  "archived"
+                                ]
+                              },
+                              "encrypted": {
+                                "type": "object",
+                                "properties": {
+                                  "title": {
+                                    "type": "object",
+                                    "properties": {
+                                      "ciphertext": {
+                                        "type": "string"
+                                      },
+                                      "iv": {
+                                        "type": "string"
+                                      },
+                                      "kdf": {
+                                        "type": "object",
+                                        "properties": {
+                                          "algorithm": {
+                                            "type": "string",
+                                            "enum": [
+                                              "PBKDF2"
+                                            ]
+                                          },
+                                          "hash": {
+                                            "type": "string",
+                                            "enum": [
+                                              "SHA-256"
+                                            ]
+                                          },
+                                          "iterations": {
+                                            "type": "number"
+                                          },
+                                          "salt": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "algorithm",
+                                          "hash",
+                                          "iterations",
+                                          "salt"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "ciphertext",
+                                      "iv",
+                                      "kdf"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "body": {
+                                    "type": "object",
+                                    "properties": {
+                                      "ciphertext": {
+                                        "type": "string"
+                                      },
+                                      "iv": {
+                                        "type": "string"
+                                      },
+                                      "kdf": {
+                                        "type": "object",
+                                        "properties": {
+                                          "algorithm": {
+                                            "type": "string",
+                                            "enum": [
+                                              "PBKDF2"
+                                            ]
+                                          },
+                                          "hash": {
+                                            "type": "string",
+                                            "enum": [
+                                              "SHA-256"
+                                            ]
+                                          },
+                                          "iterations": {
+                                            "type": "number"
+                                          },
+                                          "salt": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "algorithm",
+                                          "hash",
+                                          "iterations",
+                                          "salt"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "ciphertext",
+                                      "iv",
+                                      "kdf"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "title",
+                                  "body"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "taskId",
+                              "clock",
+                              "status",
+                              "encrypted"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "packets"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "reqId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "reqId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8787"
+    }
+  ]
+}

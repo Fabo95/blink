@@ -6,9 +6,20 @@ use ts_rs::TS;
 // (run `cargo test` to regenerate), so the frontend types can never drift from
 // the Rust core.
 
+/// The signed-in account, as returned by the sync server's Better Auth endpoints.
+/// Extra fields on the server user (emailVerified, image, timestamps) are ignored.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct AuthUser {
+    pub id: String,
+    pub email: String,
+    pub name: Option<String>,
+}
+
 /// Where a captured snippet came from — the "system metadata".
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src/generated/")]
+#[ts(export, export_to = "../../src/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct CaptureSource {
     pub app_id: String,
@@ -19,7 +30,7 @@ pub struct CaptureSource {
 
 /// A sanitized snippet awaiting review — the DLP filter has already run.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src/generated/")]
+#[ts(export, export_to = "../../src/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct CaptureDraft {
     pub text: String,
@@ -32,7 +43,7 @@ pub struct CaptureDraft {
 
 /// Result of running the local security filter over a text.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src/generated/")]
+#[ts(export, export_to = "../../src/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct SanitizeResult {
     pub clean: String,
@@ -41,7 +52,7 @@ pub struct SanitizeResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src/generated/")]
+#[ts(export, export_to = "../../src/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct Task {
     pub id: String,
@@ -56,7 +67,7 @@ pub struct Task {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../../src/generated/")]
+#[ts(export, export_to = "../../src/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct NewTask {
     pub text: String,

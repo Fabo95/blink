@@ -9,6 +9,7 @@
     "dev": "pnpm --filter @blink/contract --filter @blink/db build && ENVIRONMENT=development tsx watch src/index.ts",
     "build": "rm -rf ./dist && tsc -p tsconfig.json && tsc-alias -p tsconfig.json",
     "start": "node ./dist/index.js",
+    "openapi:gen": "pnpm --filter @blink/contract --filter @blink/db build && tsx src/scripts/dumpOpenapi.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -16,6 +17,7 @@
     "@blink/db": "workspace:*",
     "@fastify/awilix": "^8.2.0",
     "@fastify/cors": "^11.3.0",
+    "@fastify/swagger": "^9.8.1",
     "awilix": "^13.0.5",
     "better-auth": "^1.6.25",
     "dotenv": "^17.4.2",

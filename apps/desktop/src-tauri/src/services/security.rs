@@ -3,7 +3,7 @@
 //! Runs entirely on-device before a snippet is persisted or sent anywhere.
 //! [`DEFAULT_RULES`] is a catalogue of provider-specific secret patterns (adapted
 //! from the gitleaks ruleset) followed by generic catch-alls. Construct a
-//! [`SecurityFilter`] with a custom rule set to extend the policy. DLP is heuristic:
+//! [`SecurityService`] with a custom rule set to extend the policy. DLP is heuristic:
 //! the precise provider prefixes rarely misfire; the generic rules at the end trade
 //! a little precision for coverage.
 
@@ -11,7 +11,7 @@ use regex::Regex;
 
 use crate::core::models::SanitizeResult;
 
-/// A declarative redaction rule, compiled into a matcher by [`SecurityFilter`].
+/// A declarative redaction rule, compiled into a matcher by [`SecurityService`].
 pub struct RedactionRule {
     pub kind: &'static str,
     pub pattern: &'static str,
@@ -142,11 +142,11 @@ struct Compiled {
 
 /// Redacts sensitive spans from text. Compile once (rules are compiled up front),
 /// then share and reuse.
-pub struct SecurityFilter {
+pub struct SecurityService {
     patterns: Vec<Compiled>,
 }
 
-impl SecurityFilter {
+impl SecurityService {
     /// Build a filter from an explicit rule set — the extension point for
     /// enterprise policies that add their own patterns.
     pub fn new(rules: &[RedactionRule]) -> Self {

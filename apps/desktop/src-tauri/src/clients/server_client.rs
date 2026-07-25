@@ -1,0 +1,80 @@
+//! Client for the Blink sync server — the only thing that talks to it (auth today,
+//! encrypted task sync later). One public method per endpoint we call; each owns its
+//! path + request body and returns the raw response for the service to interpret.
+//! Base URL overridable via `BLINK_SERVER_URL`.
+
+use reqwest::Response;
+use serde::Serialize;
+
+use crate::core::config::config;
+
+pub struct ServerClient {
+    http: reqwest::Client,
+}
+
+impl ServerClient {
+    pub fn new() -> Self {
+        Self {
+            http: reqwest::Client::new(),
+        }
+    }
+
+    /// `POST /v1/auth/sign-in/email`
+    pub async fn sign_in_email(&self, email: &str, password: &str) -> reqwest::Result<Response> {
+        self.http
+            .post(url("v1/auth/sign-in/email"))
+            .json(&SignIn { email, password })
+            .send()
+            .await
+    }
+
+    /// `POST /v1/auth/sign-up/email`
+    pub async fn sign_up_email(
+        &self,
+        email: &str,
+        password: &str,
+        name: &str,
+    ) -> reqwest::Result<Response> {
+        self.http
+            .post(url("v1/auth/sign-up/email"))
+            .json(&SignUp {
+                email,
+                password,
+                name,
+            })
+            .send()
+            .await
+    }
+
+    /// `POST /v1/auth/sign-out` (authenticated by the session bearer token).
+    pub async fn sign_out(&self, token: &str) -> reqwest::Result<Response> {
+        self.http
+            .post(url("v1/auth/sign-out"))
+            .bearer_auth(token)
+            .send()
+            .await
+    }
+
+}
+
+/// Join a path onto the configured server base URL.
+fn url(path: &str) -> String {
+    format!(
+        "{}/{}",
+        config().server_url.trim_end_matches('/'),
+        path.trim_start_matches('/')
+    )
+}
+
+#[derive(Serialize)]
+struct SignIn<'a> {
+    email: &'a str,
+    password: &'a str,
+}
+
+#[derive(Serialize)]
+struct SignUp<'a> {
+    email: &'a str,
+    password: &'a str,
+    name: &'a str,
+}

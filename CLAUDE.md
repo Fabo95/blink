@@ -11,8 +11,9 @@ desktop app, dark-violet theme.
 - **Desktop app** (`apps/desktop`): Tauri v2 (Rust core) + React 19 + Vite 8 (rolldown) +
   Tailwind v4 + shadcn/ui (Radix) + `react-hotkeys-hook` + TypeScript 7. Local store: SQLite via
   **SQLCipher** (AES-256 at rest), key in the OS keychain.
-- **Sync server** (`apps/server`): Fastify 5 + zod 4 + Drizzle ORM + Postgres 17 (planned
-  Phase 2; not yet wired to the client).
+- **Sync server** (`apps/server`): Fastify 5 + zod 4 + **awilix DI** + Drizzle ORM + Postgres 17
+  (RLS) + **Better Auth**, OpenAPI-documented. The desktop core authenticates against it today
+  (email/password); zero-knowledge encrypted task sync is Phase 2.
 - **Tooling**: Biome (format + lint), not Prettier/ESLint.
 
 ## Layout
@@ -38,8 +39,12 @@ lib.rs              composition root: dotenv, manage state, invoke_handler, run 
 commands/           IPC layer — one #[tauri::command] module per feature (ai, copy_capture,
                     manual_capture, link, tasks, shortcut). Thin: delegate to services/repository/platform.
 core/               shared types: error (AppError), models (ts-rs structs), state
-                    (FrontmostSource, PendingSource)
-services/           logic: ai (OpenAI client), security (DLP redaction filter)
+                    (FrontmostSource, PendingSource), config (the env singleton)
+clients/            transport to external systems — one struct per system: ServerClient (Blink
+                    sync server) + OpenAiClient. Thin: build + send, return the raw response.
+services/           business logic as structs, each holding its client(s) via DI and managed as
+                    Tauri state — AuthService (server auth), AiService (improve), SecurityService
+                    (DLP filter), SessionTokenService (keychain bearer token)
 repository/         persistence facade: Repository owns the shared Db (SQLCipher) and exposes
                     entity repos — TaskRepository, SettingsRepository. Plus db.rs (open +
                     keychain key + error helpers), migrations.rs (rusqlite_migration schema)
@@ -48,6 +53,36 @@ platform/           OS glue. os/ = native primitives behind one interface, impl 
                     for other OSes); shortcut.rs (the capture-hotkey feature); window.rs (capture
                     panel placement). shortcut/window are cross-platform, built on os::
 ```
+
+### `apps/server/src` (the sync server — layered)
+
+```
+index.ts            entry → createServer().listen()
+server.ts           Fastify app: cors, zod validator/serializer, @fastify/swagger, awilix DI,
+                    routes, error handler (ApiError → response envelope)
+router.ts           registers the route modules
+routes/             one folder per endpoint, handler in latest.ts (versioned convention):
+                    auth/ (Better Auth catch-all), sync/pull, sync/push, health-check
+services/common/    business logic (authService, syncService)
+services/model/     thin Drizzle wrappers (tasksModelService) — no business logic
+setup/auth/         the Better Auth instance (drizzle adapter + bearer plugin)
+setup/database/     the postgres/Drizzle connection (getDb)
+setup/dependencies/ awilix wiring: singletonCradle + requestCradle + setup + types
+scripts/            dumpOpenapi.ts (writes openapi.json)
+```
+
+- **DI (awilix)**: `createSingletonCradle()` registers app-lifetime singletons (`db`, `auth`) via
+  `asValue`; `createRequestCradle()` registers per-request services via `asClass(...).scoped()`.
+  Both go on `diContainer` in `setup.ts`; `types.ts` augments `@fastify/awilix`'s `Cradle` /
+  `RequestCradle`. Services take a single `{ dep }` object (awilix PROXY injection). Handlers
+  resolve via `req.diScope.cradle`. Add a service = a class + a `RequestCradle` field + a
+  `createRequestCradle` line. Route → common service → model service → Drizzle.
+- **Better Auth** is mounted as a catch-all at `/v1/auth/*` (`routes/auth/latest.ts`, `hide: true`
+  so it stays out of the OpenAPI doc); email/password + `bearer()` plugin, `basePath` matches the
+  mount. Sync routes call `authService.authenticate(headers)` → `getSession` → `userId`, and RLS
+  (`FORCE ROW LEVEL SECURITY` on `tasks`, set via `withUser`) scopes rows to that user.
+- **OpenAPI**: `@fastify/swagger` + the zod `jsonSchemaTransform` emit the spec;
+  `pnpm --filter @blink/server openapi:gen` dumps `apps/server/openapi.json` (the wire contract).
 
 ## Commands
 
@@ -62,17 +97,24 @@ Run from the repo root unless noted.
 - `pnpm --filter @blink/desktop gen:types` — regenerate TS types from Rust (`cargo test`, ts-rs).
 - `cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml` — fast Rust type-check.
 - `pnpm --filter @blink/db db:generate` / `db:migrate` — Drizzle migrations (sync server).
-- `docker compose up` — Postgres + server.
+- `pnpm --filter @blink/server openapi:gen` — dump `apps/server/openapi.json` from the routes.
+- `docker compose up` — Postgres + migrate + server.
 
 ## Architecture notes
 
 - **Two type boundaries, both single-source:**
   - **Rust → TS**: `ts-rs` derives on the structs in `core/models.rs` generate
     `apps/desktop/src/generated/*.ts` via `cargo test`. Don't hand-edit `src/generated/` (Biome
-    ignores it) — change the Rust struct, then run `gen:types`. `export_to` is relative to the
-    source file, so moving `models.rs` breaks it.
-  - **Client ↔ Server**: `@blink/contract` zod schemas are the wire format for the desktop
-    client and the sync server (Phase 2).
+    ignores it) — change the Rust struct, then run `gen:types`. `export_to` (`../../src/generated/`)
+    resolves relative to the crate's `src-tauri/src` (ts-rs 10), landing files in
+    `apps/desktop/src/generated/`.
+  - **Client ↔ Server**: `@blink/contract` zod schemas are the wire format; the server also emits
+    an OpenAPI doc (`openapi.json`) from its routes. The **Rust core** owns all server I/O — the
+    webview never makes HTTP calls.
+- **Rust owns server communication.** The flow is webview → Tauri IPC → Rust → server, never
+  webview → server. This keeps the bearer token and (later) E2EE keys in the native layer + OS
+  keychain, out of the JS heap; sidesteps CORS; and puts sync next to the local DB it reconciles.
+  Server I/O lives in `clients/` (transport) + `services/` (logic), same as any other command.
 - **Tauri IPC**: every `#[tauri::command]` in `src-tauri/src/commands/` is exposed through the
   typed façade in `apps/desktop/src/lib/api.ts`, which falls back to an in-memory mock when
   running under plain Vite (no Tauri host). Add a command → register in `lib.rs`
@@ -83,6 +125,25 @@ Run from the repo root unless noted.
   `Arc<Db>` to each entity repository. Add a table = a migration in `migrations.rs` + a
   `*Repository` file + a field on `Repository`. Row↔struct mapping uses `serde_rusqlite`
   (`SELECT *` maps by column name); a flat `TaskRow` mirrors the nested `Task` for storage.
+- **Services & clients (Rust DI)**: business logic lives in `services/` as structs; each holds the
+  `clients/` (and other services) it needs as fields named after the type — `AuthService {
+  server_client, session_token_service }`, `AiService { openai_client }`. They're built in `lib.rs`
+  (the composition root) and `.manage()`d, then resolved in commands via `State<XService>`, exactly
+  like `State<Repository>`. Clients are thin transport — one struct per external system, returning
+  `reqwest::Result<Response>`; the service checks status, parses, and maps errors to `AppError`.
+  Add a server endpoint = a method on `ServerClient` (its path + body) + the service call that reads
+  the response.
+- **Config singleton**: `core::config::config()` reads the environment once (`OnceLock`) into a
+  `Config`. Read env only there — never scatter `std::env::var`. A new var = a field + a line in
+  `from_env` (`BLINK_SERVER_URL`, `OPENAI_API_KEY`).
+- **Auth / login gate**: the main window is gated behind email/password sign-in (Better Auth on the
+  server). `AuthService` calls `ServerClient::sign_in_email` / `sign_up_email` / `sign_out`, reads
+  the `set-auth-token` header, and stores the bearer token in the keychain via `SessionTokenService`
+  (account `sync-session-token`); the account profile is cached in `settings` so `current_session`
+  gates offline (token present + cached user). Webview side: `App.tsx` composes
+  `<SessionProvider><AuthGate><Inbox/></AuthGate>` — `AuthGate` is the SPA's route-middleware
+  stand-in (renders `LoginScreen` until authenticated), and `useSession` reads the provider's
+  context. The token never enters the webview. Capture windows stay local (not gated).
 - **Capture methods**: each is a variant of `platform::shortcut::CaptureMethod`, and owns a
   global hotkey + a frameless window + a component. `main.tsx` branches on
   `getCurrentWindow().label` to render the right one. Both windows render the shared
@@ -139,8 +200,8 @@ Run from the repo root unless noted.
   / `link` / `source` / `improved`); the frontend sends only changed fields. An optional `link`
   (http(s)) is opened by the `open_link` command (`platform::os::open_url`) from the `o` shortcut
   or the row's link chip; its column was added in migration 3.
-- **AI "improve"**: `services/ai.rs::improve` is exposed as the `improve_text` command — it
-  returns cleaned text, no persistence. Both the capture panels and the inbox editor call it on
+- **AI "improve"**: `AiService::improve` (via `OpenAiClient`) is exposed as the `improve_text`
+  command — it returns cleaned text, no persistence. Both the capture panels and the inbox editor call it on
   `⌘I`, replace the field, and set an `improved` flag that gates re-improving (once per version,
   cleared when the text changes) and is persisted on save via `update_task`. The verb is
   **improve** everywhere. (`improve_task`/`mark_improved` predate this flow and are now unused.)
@@ -155,6 +216,11 @@ These extend the global rules in `~/.claude/CLAUDE.md`. Highlights that bite her
 
 - **`mod.rs` is a thin index** — module declarations + re-exports, not definitions. Exception:
   a module's namesake facade may live at its root (e.g. `repository::Repository`).
+- **Rust services & clients are structs**, held via DI and managed as Tauri state. Name a
+  dependency field after the type it holds (`server_client: ServerClient`, `session_token_service:
+  SessionTokenService`) — not an abbreviation like `client`/`tokens`. Read env only through
+  `core::config::config()`. On the **server**, the equivalent is awilix — add a service to a cradle,
+  resolve via `req.diScope.cradle`.
 - **No barrel files in packages.** Import directly from the origin module — `@blink/core/theme`,
   not `@blink/core`.
 - **Named exports only** (except where a framework demands default).
@@ -176,8 +242,12 @@ These extend the global rules in `~/.claude/CLAUDE.md`. Highlights that bite her
 
 ## Environments
 
-- `.env.example` (root) documents sync/Postgres/AI/Linear vars — Phase 1 needs none.
-- `apps/desktop/src-tauri/.env` (gitignored) holds `OPENAI_API_KEY` for the "Improve with AI"
-  action; loaded by `dotenvy` at startup in dev. Real env vars win.
-- Dev DB lives at `~/Library/Application Support/app.blink.desktop/blink.db` (SQLCipher). The
-  keychain key is under service `app.blink.desktop`, account `sqlcipher-db-key`.
+- `.env.example` (root) documents sync/Postgres/AI/Linear vars.
+- `apps/desktop/src-tauri/.env` (gitignored) holds the desktop core's env — `OPENAI_API_KEY` (the
+  "Improve with AI" action) and `BLINK_SERVER_URL` (the sync server, default `http://localhost:8787`).
+  Loaded by `dotenvy` at startup in dev, then read once via `core::config`; real env vars win.
+- Server env (`apps/server/src/env.ts`, zod-validated with dev defaults): `DATABASE_URL`,
+  `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `CORS_ORIGINS`.
+- Dev DB lives at `~/Library/Application Support/app.blink.desktop/blink.db` (SQLCipher). Keychain
+  service `app.blink.desktop` holds the DB key (account `sqlcipher-db-key`) and the sync session
+  token (account `sync-session-token`).

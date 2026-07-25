@@ -17,6 +17,8 @@ export function authHandlerRoute(fastify: FastifyInstance) {
   fastify.route({
     method: ['GET', 'POST'],
     url: '/v1/auth/*',
+    // Not a typed route — keep it out of the generated OpenAPI document.
+    schema: { hide: true },
     handler: async (request, reply) => {
       const url = new URL(request.url, `http://${request.headers.host}`);
       const req = new Request(url, {

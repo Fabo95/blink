@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import cors from '@fastify/cors';
+import fastifySwagger from '@fastify/swagger';
 import Fastify from 'fastify';
 import {
   hasZodFastifySchemaValidationErrors,
   isResponseSerializationError,
+  jsonSchemaTransform,
   serializerCompiler,
   validatorCompiler,
 } from 'fastify-type-provider-zod';
@@ -38,6 +40,18 @@ export function createServer() {
   // Zod drives both request validation and response serialization.
   fastify.setValidatorCompiler(validatorCompiler);
   fastify.setSerializerCompiler(serializerCompiler);
+
+  // Emit an OpenAPI 3 document from the zod route schemas. Registered before the
+  // routes so its onRoute hook sees them; the desktop client generates its types
+  // from the dumped spec (`pnpm openapi:gen`). The Better Auth catch-all opts out
+  // via `schema: { hide: true }` — it isn't a typed route.
+  fastify.register(fastifySwagger, {
+    openapi: {
+      info: { title: 'Blink Sync API', version: '1.0.0' },
+      servers: [{ url: env.BETTER_AUTH_URL }],
+    },
+    transform: jsonSchemaTransform,
+  });
 
   // awilix DI: singleton cradle (db, auth) + request cradle (services).
   registerDependencies(fastify);

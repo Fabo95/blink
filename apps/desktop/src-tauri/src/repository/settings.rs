@@ -40,4 +40,12 @@ impl SettingsRepository {
         .map_err(store_err)?;
         Ok(())
     }
+
+    /// Delete `key` if present (a no-op when it was never set).
+    pub fn remove(&self, key: &str) -> AppResult<()> {
+        let conn = self.db.lock()?;
+        conn.execute("DELETE FROM settings WHERE key = ?1", [key])
+            .map_err(store_err)?;
+        Ok(())
+    }
 }

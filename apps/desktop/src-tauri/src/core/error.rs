@@ -12,6 +12,9 @@ pub enum AppError {
     Store(String),
     /// An AI-optimization failure (missing key, network, or a bad model response).
     Ai(String),
+    /// An auth failure talking to the sync server (bad credentials, network, or a
+    /// keychain error storing the session token).
+    Auth(String),
     /// A capture-shortcut failure (invalid shortcut or the OS rejected it).
     Shortcut(String),
     /// Opening a task's link failed (bad URL or the OS opener errored).
@@ -23,6 +26,7 @@ impl fmt::Display for AppError {
         match self {
             AppError::Store(msg) => write!(f, "store error: {msg}"),
             AppError::Ai(msg) => write!(f, "ai error: {msg}"),
+            AppError::Auth(msg) => write!(f, "auth error: {msg}"),
             AppError::Shortcut(msg) => write!(f, "shortcut error: {msg}"),
             AppError::Link(msg) => write!(f, "link error: {msg}"),
         }

@@ -4,4 +4,8 @@ import type { CaptureSource } from "./CaptureSource";
 /**
  * A sanitized snippet awaiting review — the DLP filter has already run.
  */
-export type CaptureDraft = { text: string, originalLength: number, redactionCount: number, source: CaptureSource, link: string | null, };
+export type CaptureDraft = { text: string, originalLength: number, redactionCount: number, source: CaptureSource, 
+/**
+ * The source page URL when captured from a browser — pre-fills the link field.
+ */
+link: string | null, };

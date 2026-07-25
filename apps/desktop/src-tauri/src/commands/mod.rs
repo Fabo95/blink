@@ -2,6 +2,7 @@
 //! One module per feature group.
 
 pub mod ai;
+pub mod auth;
 pub mod copy_capture;
 pub mod link;
 pub mod manual_capture;

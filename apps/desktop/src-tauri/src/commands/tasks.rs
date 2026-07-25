@@ -3,6 +3,7 @@ use tauri::State;
 use crate::core::error::AppResult;
 use crate::core::models::{NewTask, Task};
 use crate::repository::{Repository, TaskPatch};
+use crate::services::ai::AiService;
 
 #[tauri::command]
 pub fn list_tasks(repository: State<'_, Repository>) -> AppResult<Vec<Task>> {
@@ -59,9 +60,10 @@ pub fn update_task(
 #[tauri::command]
 pub async fn improve_task(
     repository: State<'_, Repository>,
+    ai_service: State<'_, AiService>,
     id: String,
     text: String,
 ) -> AppResult<Task> {
-    let improved = crate::services::ai::improve(text).await?;
+    let improved = ai_service.improve(text).await?;
     repository.tasks.mark_improved(&id, &improved)
 }

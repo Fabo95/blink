@@ -3,7 +3,7 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::core::models::{CaptureDraft, CaptureSource};
 use crate::core::state::{FrontmostSource, PendingCapture, PendingSource};
-use crate::services::security::SecurityFilter;
+use crate::services::security::SecurityService;
 
 /// Step 1–3 of copy-capture: take the snapshotted selection, run the DLP filter, return a
 /// review-ready draft. Nothing is persisted or transmitted here. The text was already
@@ -11,13 +11,13 @@ use crate::services::security::SecurityFilter;
 /// so this reads the stash rather than the live clipboard.
 #[tauri::command]
 pub fn read_copy_capture(
-    filter: State<'_, SecurityFilter>,
+    security_service: State<'_, SecurityService>,
     source: State<'_, PendingSource>,
     capture: State<'_, PendingCapture>,
 ) -> CaptureDraft {
     // Empty stash (nothing selected, or a non-text clipboard) → empty capture.
     let raw = capture.peek().unwrap_or_default();
-    let result = filter.sanitize(&raw);
+    let result = security_service.sanitize(&raw);
 
     // Both set by the copy-capture hotkey while the source app was still frontmost.
     let front = source.peek();
