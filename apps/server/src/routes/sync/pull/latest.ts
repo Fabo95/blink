@@ -22,7 +22,7 @@ export function syncPullRoute(fastify: FastifyInstance) {
       },
     },
     async (req, reply) => {
-      const { authService, syncService } = req.server.services;
+      const { authService, syncService } = req.diScope.cradle;
 
       const { userId } = await authService.authenticate(req.headers);
       const packets = await syncService.pull(userId, req.query.since);

@@ -14,7 +14,9 @@
   "dependencies": {
     "@blink/contract": "workspace:*",
     "@blink/db": "workspace:*",
+    "@fastify/awilix": "^8.2.0",
     "@fastify/cors": "^11.3.0",
+    "awilix": "^13.0.5",
     "better-auth": "^1.6.25",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",

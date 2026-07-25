@@ -10,10 +10,9 @@ import {
 import { env } from '@/env.js';
 import router from '@/router.js';
 import { healthCheckRoute } from '@/routes/health-check.js';
-import { createServices } from '@/setup/dependencies/container.js';
+import { registerDependencies } from '@/setup/dependencies/setup.js';
 import { logger } from '@/setup/logger.js';
 import { ApiError } from '@/utils/errors/apiError.js';
-import '@/types/fastify.js';
 
 /** Comma-separated origins; entries prefixed `regex:` become RegExp. */
 function parseCorsOrigins(origins: string): (string | RegExp)[] {
@@ -40,8 +39,8 @@ export function createServer() {
   fastify.setValidatorCompiler(validatorCompiler);
   fastify.setSerializerCompiler(serializerCompiler);
 
-  // Plain service container attached once (no DI framework for three endpoints).
-  fastify.decorate('services', createServices());
+  // awilix DI: singleton cradle (db, auth) + request cradle (services).
+  registerDependencies(fastify);
 
   fastify.register(router);
   fastify.register(healthCheckRoute);
