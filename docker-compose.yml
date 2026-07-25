@@ -7,17 +7,30 @@ services:
       POSTGRES_PASSWORD: blink_dev_password
     ports:
       # Host port configurable to avoid clashing with a local Postgres.
-      - '${POSTGRES_PORT:-5432}:5432'
+      - '5432:5432'
     volumes:
       - blink_pgdata:/var/lib/postgresql/data
-      # Dev convenience: drizzle-generated migrations run once, alphabetically, on
-      # first init. For real deploys use `pnpm --filter @blink/db db:migrate`.
-      - ./packages/db/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U blink -d blink']
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # One-shot: applies pending Drizzle migrations (recorded in __drizzle_migrations),
+  # then exits — the server waits for it to succeed. Reuses the server image, which
+  # bundles @blink/db + drizzle-kit + the migrations. Runs as the owner so it can
+  # create/alter tables.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    command: ['pnpm', '--filter', '@blink/db', 'db:migrate']
+    environment:
+      DATABASE_URL: postgres://blink:blink_dev_password@postgres:5432/blink
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
 
   server:
     build:
@@ -25,13 +38,16 @@ services:
       dockerfile: apps/server/Dockerfile
     environment:
       PORT: 8787
-      # The API connects as the least-privilege, RLS-bound role.
-      DATABASE_URL: postgres://blink_api:blink_api_dev_password@postgres:5432/blink
+      # One connection for both Better Auth (which owns its tables) and sync; task
+      # rows stay per-user isolated via FORCE ROW LEVEL SECURITY on `tasks`.
+      DATABASE_URL: postgres://blink:blink_dev_password@postgres:5432/blink
     ports:
       - '8787:8787'
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   blink_pgdata:

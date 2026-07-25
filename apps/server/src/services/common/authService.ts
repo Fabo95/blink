@@ -1,23 +1,30 @@
+import type { IncomingHttpHeaders } from 'node:http';
+import { fromNodeHeaders } from 'better-auth/node';
+import type { Auth } from '@/setup/auth/auth.js';
 import { ApiError } from '@/utils/errors/apiError.js';
 
 export interface AuthContext {
   userId: string;
 }
 
+interface AuthServiceDeps {
+  auth: Auth;
+}
+
 export class AuthService {
+  private deps: AuthServiceDeps;
+
+  constructor(deps: AuthServiceDeps) {
+    this.deps = deps;
+  }
+
   /**
-   * Resolve the caller from an `Authorization: Bearer <token>` header.
-   *
-   * TODO(phase-3): verify the tenant IdP's JWT (Okta / Azure AD / Google
-   * Workspace) against its JWKS and read `sub`. For local dev the token *is*
-   * the user id.
+   * Resolve the caller from their bearer token via Better Auth's session. The token comes
+   * from sign-in (`set-auth-token`); the returned `user.id` is what RLS scopes rows to.
    */
-  authenticate(authorization: string | undefined): AuthContext {
-    if (!authorization?.startsWith('Bearer ')) {
-      throw new ApiError('unauthorized', 'Missing or invalid bearer token');
-    }
-    const token = authorization.slice('Bearer '.length).trim();
-    if (!token) throw new ApiError('unauthorized', 'Empty bearer token');
-    return { userId: token };
+  async authenticate(headers: IncomingHttpHeaders): Promise<AuthContext> {
+    const result = await this.deps.auth.api.getSession({ headers: fromNodeHeaders(headers) });
+    if (!result) throw new ApiError('unauthorized', 'Missing or invalid session');
+    return { userId: result.user.id };
   }
 }

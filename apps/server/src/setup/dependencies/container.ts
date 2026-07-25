@@ -1,6 +1,7 @@
 import { AuthService } from '@/services/common/authService.js';
 import { SyncService } from '@/services/common/syncService.js';
 import { TasksModelService } from '@/services/model/tasksModelService.js';
+import { auth } from '@/setup/auth/auth.js';
 import { getDb } from '@/setup/database/db.js';
 import type { Services } from './types.js';
 
@@ -10,7 +11,7 @@ import type { Services } from './types.js';
  */
 export function createServices(): Services {
   const tasksModelService = new TasksModelService({ db: getDb() });
-  const authService = new AuthService();
+  const authService = new AuthService({ auth });
   const syncService = new SyncService({ tasksModelService });
 
   return { tasksModelService, authService, syncService };

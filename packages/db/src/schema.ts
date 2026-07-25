@@ -11,6 +11,10 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
+// Better Auth's tables (user/session/account/verification) — re-exported so the shared
+// Drizzle client (and Better Auth's adapter) sees them alongside the app tables.
+export * from './auth-schema.js';
+
 /**
  * Opaque E2EE envelope stored verbatim in a `*_cipher` column. Structurally
  * identical to `@blink/crypto`'s `EncryptedEnvelope` — declared locally so this

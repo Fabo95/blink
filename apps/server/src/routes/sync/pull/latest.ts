@@ -24,7 +24,7 @@ export function syncPullRoute(fastify: FastifyInstance) {
     async (req, reply) => {
       const { authService, syncService } = req.server.services;
 
-      const { userId } = authService.authenticate(req.headers.authorization);
+      const { userId } = await authService.authenticate(req.headers);
       const packets = await syncService.pull(userId, req.query.since);
 
       return sendOk(reply, { packets });
