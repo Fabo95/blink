@@ -38,9 +38,11 @@ services:
       dockerfile: apps/server/Dockerfile
     environment:
       PORT: 8787
-      # One connection for both Better Auth (which owns its tables) and sync; task
-      # rows stay per-user isolated via FORCE ROW LEVEL SECURITY on `tasks`.
-      DATABASE_URL: postgres://blink:blink_dev_password@postgres:5432/blink
+      # Least-privilege: the server connects as `blink_api` (created by migration 0001)
+      # — RLS is enforced and it only holds grants on the tables it needs (tasks +
+      # the Better Auth tables). The owner `blink` is used solely by the migrate
+      # service for DDL + GRANTs; that's why this waits on migrate to finish.
+      DATABASE_URL: postgres://blink_api:blink_api_dev_password@postgres:5432/blink
     ports:
       - '8787:8787'
     depends_on:

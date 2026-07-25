@@ -81,6 +81,11 @@ scripts/            dumpOpenapi.ts (writes openapi.json)
   so it stays out of the OpenAPI doc); email/password + `bearer()` plugin, `basePath` matches the
   mount. Sync routes call `authService.authenticate(headers)` → `getSession` → `userId`, and RLS
   (`FORCE ROW LEVEL SECURITY` on `tasks`, set via `withUser`) scopes rows to that user.
+- **DB roles (least-privilege)**: the server connects as `blink_api`, a non-owner role with only
+  the grants it needs (`tasks`/`organizations` in `0001`, the Better Auth tables in `0003`), so RLS
+  is enforced and a compromise can't touch the schema. The owner `blink` is used **only** for
+  migrations/DDL + `GRANT`s (the `migrate` service). Grants are hand-written SQL migrations — Drizzle
+  can't express roles/grants/policies — so a new server-read table needs a matching `GRANT`.
 - **OpenAPI**: `@fastify/swagger` + the zod `jsonSchemaTransform` emit the spec;
   `pnpm --filter @blink/server openapi:gen` dumps `apps/server/openapi.json` (the wire contract).
 

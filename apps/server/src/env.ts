@@ -6,12 +6,13 @@ dotenv.config();
 const schema = z.object({
   PORT: z.coerce.number().default(8787),
   ENVIRONMENT: z.enum(['development', 'test', 'production', 'staging']).default('production'),
-  // The docker-compose Postgres owner. One connection serves both Better Auth (which owns
-  // its user/session tables) and sync — task rows stay per-user isolated because `tasks` has
-  // FORCE ROW LEVEL SECURITY, which applies even to the owner.
+  // The server connects as the least-privilege `blink_api` role (created by migration 0001):
+  // RLS is enforced and it holds only the grants it needs. The owner `blink` is used solely for
+  // migrations/DDL (the migrate service / `db:migrate`). Run migrations before the server so the
+  // role exists.
   DATABASE_URL: z
     .string()
-    .default('postgres://blink:blink_dev_password@localhost:5432/blink'),
+    .default('postgres://blink_api:blink_api_dev_password@localhost:5432/blink'),
   // Better Auth secret (hashing/encryption). MUST be overridden in production; the default
   // is dev-only. Generate one with `openssl rand -base64 32`.
   BETTER_AUTH_SECRET: z.string().min(32).default('dev-only-insecure-secret-change-me-32ch'),
