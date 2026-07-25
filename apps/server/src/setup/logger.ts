@@ -1,6 +1,7 @@
+import type { FastifyBaseLogger } from 'fastify';
 import { pino } from 'pino';
 
-export const logger = pino({
+export const logger: FastifyBaseLogger = pino({
   messageKey: 'message',
   // process.env here (not @/env) to avoid a circular import.
   ...(process.env.ENVIRONMENT === 'development'

@@ -1,3 +1,4 @@
+mod clients;
 mod commands;
 mod core;
 mod platform;
@@ -6,9 +7,15 @@ mod services;
 
 use tauri::Manager;
 
+use crate::clients::openai_client::OpenAiClient;
+use crate::clients::server_client::ServerClient;
+use crate::core::config::config;
 use crate::core::state::{PendingCapture, PendingSource};
 use crate::repository::Repository;
-use crate::services::security::SecurityFilter;
+use crate::services::ai::AiService;
+use crate::services::auth::AuthService;
+use crate::services::security::SecurityService;
+use crate::services::session_token::SessionTokenService;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -22,7 +29,12 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
-        .manage(SecurityFilter::with_defaults())
+        .manage(SecurityService::with_defaults())
+        .manage(AuthService::new(ServerClient::new(), SessionTokenService::new()))
+        // `None` when OPENAI_API_KEY isn't set — the improve command reports that.
+        .manage(AiService::new(
+            config().openai_api_key.clone().map(OpenAiClient::new),
+        ))
         .manage(PendingSource::default())
         .manage(PendingCapture::default())
         .setup(|app| {
@@ -42,6 +54,10 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::auth::sign_in,
+            commands::auth::sign_up,
+            commands::auth::sign_out,
+            commands::auth::current_session,
             commands::copy_capture::read_copy_capture,
             commands::copy_capture::dismiss_copy_capture,
             commands::manual_capture::dismiss_manual_capture,
