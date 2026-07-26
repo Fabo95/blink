@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { LoginScreen } from '@/components/LoginScreen';
+import { LoginScreen } from '@/components/auth/LoginScreen';
 import { useSession } from '@/hooks/useSession';
 
 /**
