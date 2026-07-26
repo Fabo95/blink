@@ -6,7 +6,7 @@ name: Deploy server
 # shared `web` network.
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - 'apps/server/**'
       - 'packages/contract/**'
