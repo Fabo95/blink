@@ -3,25 +3,24 @@ import { z } from 'zod';
 
 dotenv.config();
 
+// Every var is required — no defaults. Supply them via the environment (local:
+// apps/server/.env, see .env.example; prod: the compose `environment` / .env on the box).
 const schema = z.object({
-  PORT: z.coerce.number().default(8787),
-  ENVIRONMENT: z.enum(['development', 'test', 'production', 'staging']).default('production'),
+  PORT: z.coerce.number(),
+  ENVIRONMENT: z.enum(['development', 'test', 'production', 'staging']),
   // The server connects as the least-privilege `blink_api` role (created by migration 0001):
   // RLS is enforced and it holds only the grants it needs. The owner `blink` is used solely for
   // migrations/DDL (the migrate service / `db:migrate`). Run migrations before the server so the
   // role exists.
-  DATABASE_URL: z
-    .string()
-    .default('postgres://blink_api:blink_api_dev_password@localhost:5432/blink'),
-  // Better Auth secret (hashing/encryption). MUST be overridden in production; the default
-  // is dev-only. Generate one with `openssl rand -base64 32`.
-  BETTER_AUTH_SECRET: z.string().min(32).default('dev-only-insecure-secret-change-me-32ch'),
+  DATABASE_URL: z.string(),
+  // Better Auth secret (hashing/encryption). Generate one with `openssl rand -base64 32`.
+  BETTER_AUTH_SECRET: z.string().min(32),
   // The server's own public base URL, where Better Auth is mounted.
-  BETTER_AUTH_URL: z.string().default('http://localhost:8787'),
+  BETTER_AUTH_URL: z.string(),
   // CORS: comma-separated origins, supports regex patterns prefixed with "regex:".
-  CORS_ORIGINS: z.string().default('http://localhost:1420'),
-  // Resend API key for outbound email (verification OTPs). Required — the server sends
-  // real email in every environment (see clients/emailClient).
+  CORS_ORIGINS: z.string(),
+  // Resend API key for outbound email (verification OTPs) — the server sends real email
+  // in every environment (see clients/emailClient).
   RESEND_API_KEY: z.string().min(1),
 });
 
