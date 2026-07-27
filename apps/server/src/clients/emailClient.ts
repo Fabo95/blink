@@ -2,7 +2,7 @@ import { Resend } from 'resend';
 import { env } from '@/env.js';
 import { logger } from '@/setup/logger.js';
 
-const FROM = 'Blink <onboarding@resend.dev>';
+const FROM = 'Blink <noreply@blink.wolkenassistent.de>';
 
 export interface EmailMessage {
   to: string;
