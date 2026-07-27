@@ -20,7 +20,7 @@ export function authHandlerRoute(fastify: FastifyInstance) {
     schema: { hide: true },
     handler: async (request, reply) => {
       const { authClient } = request.diScope.cradle;
-      const url = new URL(request.url, `http://${request.headers.host}`);
+      const url = new URL(request.url, `${request.protocol}://${request.headers.host}`);
       const req = new Request(url, {
         method: request.method,
         headers: fromNodeHeaders(request.headers),

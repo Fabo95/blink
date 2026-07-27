@@ -29,6 +29,7 @@ export function createServer() {
     loggerInstance: logger,
     routerOptions: { ignoreTrailingSlash: true },
     genReqId: () => randomUUID(),
+    trustProxy: true,
   });
 
   fastify.register(cors, {

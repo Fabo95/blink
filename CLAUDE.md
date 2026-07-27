@@ -251,8 +251,10 @@ These extend the global rules in `~/.claude/CLAUDE.md`. Highlights that bite her
 - `apps/desktop/src-tauri/.env` (gitignored) holds the desktop core's env — `OPENAI_API_KEY` (the
   "Improve with AI" action) and `BLINK_SERVER_URL` (the sync server, default `http://localhost:8787`).
   Loaded by `dotenvy` at startup in dev, then read once via `core::config`; real env vars win.
-- Server env (`apps/server/src/env.ts`, zod-validated with dev defaults): `DATABASE_URL`,
-  `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `CORS_ORIGINS`.
+- Server env (`apps/server/src/env.ts`, zod-validated, **no defaults — all required**): `PORT`,
+  `ENVIRONMENT`, `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `CORS_ORIGINS`,
+  `RESEND_API_KEY`. Local: `apps/server/.env`. Prod deploy lives in `deploy/` (Docker Hub image
+  built by `.github/workflows/deploy-server.yml`, run inside the server's Caddy/n8n compose).
 - Dev DB lives at `~/Library/Application Support/app.blink.desktop/blink.db` (SQLCipher). Keychain
   service `app.blink.desktop` holds the DB key (account `sqlcipher-db-key`) and the sync session
   token (account `sync-session-token`).
