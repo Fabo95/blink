@@ -1,5 +1,6 @@
 import { fromNodeHeaders } from 'better-auth/node';
 import type { FastifyInstance } from 'fastify';
+import { env } from '@/env.js';
 
 /**
  * Mounts the whole Better Auth API at `/v1/auth/*` (sign-up, sign-in, session, sign-out, and
@@ -20,7 +21,8 @@ export function authHandlerRoute(fastify: FastifyInstance) {
     schema: { hide: true },
     handler: async (request, reply) => {
       const { authClient } = request.diScope.cradle;
-      const url = new URL(request.url, `${request.protocol}://${request.headers.host}`);
+
+      const url = new URL(request.url, env.BETTER_AUTH_URL);
       const req = new Request(url, {
         method: request.method,
         headers: fromNodeHeaders(request.headers),
