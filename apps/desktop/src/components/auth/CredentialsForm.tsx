@@ -6,7 +6,8 @@ import { Field } from './Field';
 
 /** Step 1: email + password (+ name on sign-up), with the sign-in ↔ sign-up toggle. */
 export function CredentialsForm({ flow }: { flow: LoginFlow }) {
-  const { mode, fields, error, busy, setField, submitCredentials, toggleMode } = flow;
+  const { mode, fields, error, busy, setField, submitCredentials, toggleMode, forgotPassword } =
+    flow;
   const signup = mode === 'signup';
 
   return (
@@ -66,6 +67,19 @@ export function CredentialsForm({ flow }: { flow: LoginFlow }) {
             disabled={busy}
           />
         </Field>
+
+        {!signup && (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              className="text-xs text-muted-foreground hover:text-foreground"
+              onClick={forgotPassword}
+              disabled={busy}
+            >
+              Forgot password?
+            </button>
+          </div>
+        )}
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 

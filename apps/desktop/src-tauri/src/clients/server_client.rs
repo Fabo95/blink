@@ -76,6 +76,32 @@ impl ServerClient {
             .await
     }
 
+    /// `POST /v1/auth/email-otp/request-password-reset` — email a password-reset code.
+    pub async fn request_password_reset(&self, email: &str) -> reqwest::Result<Response> {
+        self.http
+            .post(url("v1/auth/email-otp/request-password-reset"))
+            .json(&RequestPasswordReset { email })
+            .send()
+            .await
+    }
+
+    /// `POST /v1/auth/email-otp/reset-password` — set a new password with the emailed code.
+    pub async fn reset_password(
+        &self,
+        email: &str,
+        otp: &str,
+        password: &str,
+    ) -> reqwest::Result<Response> {
+        self.http
+            .post(url("v1/auth/email-otp/reset-password"))
+            .json(&ResetPassword {
+                email,
+                otp,
+                password,
+            })
+            .send()
+            .await
+    }
 }
 
 /// Join a path onto the configured server base URL.
@@ -111,4 +137,16 @@ struct SendVerificationOtp<'a> {
 struct VerifyEmailOtp<'a> {
     email: &'a str,
     otp: &'a str,
+}
+
+#[derive(Serialize)]
+struct RequestPasswordReset<'a> {
+    email: &'a str,
+}
+
+#[derive(Serialize)]
+struct ResetPassword<'a> {
+    email: &'a str,
+    otp: &'a str,
+    password: &'a str,
 }

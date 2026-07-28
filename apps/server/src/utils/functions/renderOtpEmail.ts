@@ -14,16 +14,47 @@ const c = {
 
 const OTP_TTL_MINUTES = 5;
 
-export interface VerificationEmail {
+export interface OtpEmail {
   subject: string;
   html: string;
   text: string;
 }
 
+interface OtpEmailCopy {
+  subject: string;
+  heading: string;
+  intro: string;
+  text: string;
+  disclaimer: string;
+}
+
 /** The branded verification email carrying a one-time code. */
-export function renderVerificationEmail(otp: string): VerificationEmail {
-  const subject = `Your Blink verification code: ${otp}`;
-  const text = `Your Blink verification code is ${otp}. Enter it to finish signing in — it expires in ${OTP_TTL_MINUTES} minutes. If you didn't request this, you can ignore this email.`;
+export function renderVerificationEmail(otp: string): OtpEmail {
+  return renderOtpEmail(otp, {
+    subject: `Your Blink verification code: ${otp}`,
+    heading: 'Verify your email',
+    intro: `Enter this code in Blink to finish signing in. It expires in ${OTP_TTL_MINUTES} minutes.`,
+    text: `Your Blink verification code is ${otp}. Enter it to finish signing in — it expires in ${OTP_TTL_MINUTES} minutes. If you didn't request this, you can ignore this email.`,
+    disclaimer:
+      "If you didn't request this, you can safely ignore this email — no account changes were made.",
+  });
+}
+
+/** The branded password-reset email carrying a one-time code. */
+export function renderPasswordResetEmail(otp: string): OtpEmail {
+  return renderOtpEmail(otp, {
+    subject: `Your Blink password reset code: ${otp}`,
+    heading: 'Reset your password',
+    intro: `Enter this code in Blink to choose a new password. It expires in ${OTP_TTL_MINUTES} minutes.`,
+    text: `Your Blink password reset code is ${otp}. Enter it to choose a new password — it expires in ${OTP_TTL_MINUTES} minutes. If you didn't request this, you can ignore this email; your password is unchanged.`,
+    disclaimer:
+      "If you didn't request this, you can safely ignore this email — your password is unchanged.",
+  });
+}
+
+/** The shared one-time-code layout; each email swaps only its copy. */
+function renderOtpEmail(otp: string, copy: OtpEmailCopy): OtpEmail {
+  const text = copy.text;
 
   const html = `<!doctype html>
 <html>
@@ -39,8 +70,8 @@ export function renderVerificationEmail(otp: string): VerificationEmail {
             </tr>
             <tr>
               <td style="padding:8px 40px 0;">
-                <h1 style="margin:0;font-size:20px;font-weight:600;color:${c.text};">Verify your email</h1>
-                <p style="margin:12px 0 0;font-size:14px;line-height:1.6;color:${c.textMuted};">Enter this code in Blink to finish signing in. It expires in ${OTP_TTL_MINUTES} minutes.</p>
+                <h1 style="margin:0;font-size:20px;font-weight:600;color:${c.text};">${copy.heading}</h1>
+                <p style="margin:12px 0 0;font-size:14px;line-height:1.6;color:${c.textMuted};">${copy.intro}</p>
               </td>
             </tr>
             <tr>
@@ -50,7 +81,7 @@ export function renderVerificationEmail(otp: string): VerificationEmail {
             </tr>
             <tr>
               <td style="padding:16px 40px 36px;">
-                <p style="margin:0;font-size:12px;line-height:1.6;color:${c.textMuted};">If you didn't request this, you can safely ignore this email — no account changes were made.</p>
+                <p style="margin:0;font-size:12px;line-height:1.6;color:${c.textMuted};">${copy.disclaimer}</p>
               </td>
             </tr>
           </table>
@@ -61,5 +92,5 @@ export function renderVerificationEmail(otp: string): VerificationEmail {
   </body>
 </html>`;
 
-  return { subject, html, text };
+  return { subject: copy.subject, html, text };
 }

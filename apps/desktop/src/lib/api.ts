@@ -31,6 +31,9 @@ export const api = {
     invoke<AuthResult>('sign_up', { email, password, name }),
   verifyEmail: (email: string, otp: string) => invoke<void>('verify_email', { email, otp }),
   resendVerification: (email: string) => invoke<void>('resend_verification', { email }),
+  requestPasswordReset: (email: string) => invoke<void>('request_password_reset', { email }),
+  resetPassword: (email: string, otp: string, password: string) =>
+    invoke<void>('reset_password', { email, otp, password }),
   signOut: () => invoke<void>('sign_out'),
   currentSession: () => invoke<AuthUser | null>('current_session'),
   readCopyCapture: () => invoke<CaptureDraft>('read_copy_capture'),
@@ -153,9 +156,11 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
     // Sign-up always requires verification, so the OTP screen is exercisable in the browser.
     case 'sign_up':
       return { status: 'verificationRequired', user: null } as T;
-    // Any code verifies; sign-in then authenticates.
+    // Any code verifies/resets; sign-in then authenticates.
     case 'verify_email':
     case 'resend_verification':
+    case 'request_password_reset':
+    case 'reset_password':
       return undefined as T;
     case 'sign_in': {
       const email = String(args?.email ?? '');

@@ -58,6 +58,8 @@ pub fn run() {
             commands::auth::sign_up,
             commands::auth::verify_email,
             commands::auth::resend_verification,
+            commands::auth::request_password_reset,
+            commands::auth::reset_password,
             commands::auth::sign_out,
             commands::auth::current_session,
             commands::copy_capture::read_copy_capture,

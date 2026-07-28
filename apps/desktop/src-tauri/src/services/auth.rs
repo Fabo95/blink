@@ -87,6 +87,33 @@ impl AuthService {
         expect_success(response).await
     }
 
+    /// Email a password-reset code. The server reports success even for unknown
+    /// addresses (no account enumeration), so this only fails on transport errors.
+    pub async fn request_password_reset(&self, email: String) -> AppResult<()> {
+        let response = self
+            .server_client
+            .request_password_reset(&email)
+            .await
+            .map_err(network_error)?;
+        expect_success(response).await
+    }
+
+    /// Set a new password with the emailed code. On success the caller signs in
+    /// with the new password to obtain a session.
+    pub async fn reset_password(
+        &self,
+        email: String,
+        otp: String,
+        password: String,
+    ) -> AppResult<()> {
+        let response = self
+            .server_client
+            .reset_password(&email, &otp, &password)
+            .await
+            .map_err(network_error)?;
+        expect_success(response).await
+    }
+
     /// Whether a session token is present on this device (the offline "is signed in"
     /// signal — it doesn't hit the network).
     pub fn is_authenticated(&self) -> AppResult<bool> {

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSession } from '@/hooks/useSession';
 import { errorMessage } from '@/lib/errorMessage';
 
-export type LoginStep = 'credentials' | 'verify';
+export type LoginStep = 'credentials' | 'verify' | 'forgotPassword' | 'resetPassword';
 export type LoginMode = 'signin' | 'signup';
 
 interface Fields {
@@ -23,6 +23,9 @@ export interface LoginFlow {
   toggleMode: () => void;
   submitCredentials: () => Promise<void>;
   submitOtp: () => Promise<void>;
+  forgotPassword: () => void;
+  submitResetRequest: () => Promise<void>;
+  submitReset: () => Promise<void>;
   resend: () => Promise<void>;
   back: () => void;
 }
@@ -30,12 +33,14 @@ export interface LoginFlow {
 const EMPTY_FIELDS: Fields = { name: '', email: '', password: '', otp: '' };
 
 /**
- * The sign-in/up + email-verification flow: credentials → (verify) → authenticated.
+ * The sign-in/up + email-verification + password-reset flow:
+ * credentials → (verify | forgotPassword → resetPassword) → authenticated.
  * A successful sign-in flips the session to authenticated, which unmounts the whole
  * login screen via `AuthGate`. Add a provider (e.g. Google) by adding an action here.
  */
 export function useLoginFlow(): LoginFlow {
-  const { signIn, signUp, verifyOtp, resendOtp } = useSession();
+  const { signIn, signUp, verifyOtp, resendOtp, requestPasswordReset, resetPassword } =
+    useSession();
   const [step, setStep] = useState<LoginStep>('credentials');
   const [mode, setMode] = useState<LoginMode>('signin');
   const [fields, setFields] = useState<Fields>(EMPTY_FIELDS);
@@ -56,17 +61,18 @@ export function useLoginFlow(): LoginFlow {
     setError(null);
   };
 
-  const submitCredentials = async () => {
+  const forgotPassword = () => {
+    setStep('forgotPassword');
+    // The password field becomes the *new* password on the reset step.
+    setFields((f) => ({ ...f, password: '', otp: '' }));
+    setError(null);
+  };
+
+  const run = async (action: () => Promise<void>) => {
     setError(null);
     setBusy(true);
     try {
-      const email = fields.email.trim();
-      const result =
-        mode === 'signup'
-          ? await signUp(email, fields.password, fields.name.trim())
-          : await signIn(email, fields.password);
-      // Authenticated results swap this screen out; otherwise a code was sent.
-      if (result.status === 'verificationRequired') setStep('verify');
+      await action();
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -74,27 +80,49 @@ export function useLoginFlow(): LoginFlow {
     }
   };
 
-  const submitOtp = async () => {
-    setError(null);
-    setBusy(true);
-    try {
+  const submitCredentials = () =>
+    run(async () => {
+      const email = fields.email.trim();
+      const result =
+        mode === 'signup'
+          ? await signUp(email, fields.password, fields.name.trim())
+          : await signIn(email, fields.password);
+      // Authenticated results swap this screen out; otherwise a code was sent.
+      if (result.status === 'verificationRequired') setStep('verify');
+    });
+
+  const submitOtp = () =>
+    run(async () => {
       const email = fields.email.trim();
       await verifyOtp(email, fields.otp.trim());
       const result = await signIn(email, fields.password); // now verified → session
       if (result.status !== 'authenticated') {
         setError('Verified, but sign-in failed. Please try again.');
-        setBusy(false);
       }
-    } catch (err) {
-      setError(errorMessage(err));
-      setBusy(false);
-    }
-  };
+    });
+
+  const submitResetRequest = () =>
+    run(async () => {
+      await requestPasswordReset(fields.email.trim());
+      setStep('resetPassword');
+    });
+
+  const submitReset = () =>
+    run(async () => {
+      const email = fields.email.trim();
+      await resetPassword(email, fields.otp.trim(), fields.password);
+      const result = await signIn(email, fields.password); // new password → session
+      if (result.status !== 'authenticated') {
+        setError('Password reset, but sign-in failed. Please try again.');
+      }
+    });
 
   const resend = async () => {
     setError(null);
     try {
-      await resendOtp(fields.email.trim());
+      const email = fields.email.trim();
+      if (step === 'resetPassword') await requestPasswordReset(email);
+      else await resendOtp(email);
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -110,6 +138,9 @@ export function useLoginFlow(): LoginFlow {
     toggleMode,
     submitCredentials,
     submitOtp,
+    forgotPassword,
+    submitResetRequest,
+    submitReset,
     resend,
     back,
   };

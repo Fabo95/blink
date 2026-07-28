@@ -56,6 +56,24 @@ pub async fn resend_verification(
 }
 
 #[tauri::command]
+pub async fn request_password_reset(
+    auth_service: State<'_, AuthService>,
+    email: String,
+) -> AppResult<()> {
+    auth_service.request_password_reset(email).await
+}
+
+#[tauri::command]
+pub async fn reset_password(
+    auth_service: State<'_, AuthService>,
+    email: String,
+    otp: String,
+    password: String,
+) -> AppResult<()> {
+    auth_service.reset_password(email, otp, password).await
+}
+
+#[tauri::command]
 pub async fn sign_out(
     auth_service: State<'_, AuthService>,
     repository: State<'_, Repository>,

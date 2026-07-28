@@ -4,7 +4,7 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { emailOTP } from 'better-auth/plugins';
 import { bearer } from 'better-auth/plugins/bearer';
 import { env } from '@/env.js';
-import { renderVerificationEmail } from '@/utils/functions/renderVerificationEmail.js';
+import { renderPasswordResetEmail, renderVerificationEmail } from '@/utils/functions/renderOtpEmail.js';
 import type { EmailClient } from './emailClient.js';
 
 interface AuthClientDeps {
@@ -12,14 +12,18 @@ interface AuthClientDeps {
   emailClient: EmailClient;
 }
 
+/** The OTP kinds we email — Better Auth's third kind (`sign-in`) isn't offered. */
+type OtpKind = 'email-verification' | 'forget-password';
+
 /**
  * Wraps the Better Auth instance — identity only. It never sees the E2EE key or task
  * plaintext; it just authenticates a caller so the sync routes can scope rows to
  * `userId` via RLS. Native (Tauri) clients authenticate with a bearer token; the server
  * resolves it via `authClient.auth.api.getSession`.
  *
- * Takes the injected {@link EmailClient} and owns the verification-email method, wired
- * into the emailOTP plugin (a 6-digit code, auto-sent on sign-up).
+ * Takes the injected {@link EmailClient} and owns the OTP-email method, wired into the
+ * emailOTP plugin (a 6-digit code — verification, auto-sent on sign-up, and password
+ * reset, sent on request).
  */
 export class AuthClient {
   readonly auth: Auth;
@@ -27,18 +31,22 @@ export class AuthClient {
 
   constructor(deps: AuthClientDeps) {
     this.emailClient = deps.emailClient;
-    this.auth = createAuth(deps.db, (email, otp) => this.sendVerificationEmail(email, otp));
+    this.auth = createAuth(deps.db, (email, otp, kind) => this.sendOtpEmail(email, otp, kind));
   }
 
-  private async sendVerificationEmail(email: string, otp: string): Promise<void> {
-    const { subject, html, text } = renderVerificationEmail(otp);
+  private async sendOtpEmail(email: string, otp: string, kind: OtpKind): Promise<void> {
+    const { subject, html, text } =
+      kind === 'forget-password' ? renderPasswordResetEmail(otp) : renderVerificationEmail(otp);
     await this.emailClient.send({ to: email, subject, html, text });
   }
 }
 
 /** The concrete Better Auth instance (kept as a factory so its plugin-augmented type
  *  flows through to `Auth`). */
-function createAuth(db: BlinkDb, sendVerificationEmail: (email: string, otp: string) => Promise<void>) {
+function createAuth(
+  db: BlinkDb,
+  sendOtpEmail: (email: string, otp: string, kind: OtpKind) => Promise<void>,
+) {
   return betterAuth({
     database: drizzleAdapter(db, { provider: 'pg' }),
     secret: env.BETTER_AUTH_SECRET,
@@ -55,7 +63,10 @@ function createAuth(db: BlinkDb, sendVerificationEmail: (email: string, otp: str
         sendVerificationOnSignUp: true,
         overrideDefaultEmailVerification: true,
         async sendVerificationOTP({ email, otp, type }) {
-          if (type === 'email-verification') await sendVerificationEmail(email, otp);
+          // `sign-in` OTPs are never requested — password is the only sign-in method.
+          if (type === 'email-verification' || type === 'forget-password') {
+            await sendOtpEmail(email, otp, type);
+          }
         },
       }),
     ],

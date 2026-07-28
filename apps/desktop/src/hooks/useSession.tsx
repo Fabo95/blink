@@ -22,6 +22,8 @@ export interface Session {
   signUp: (email: string, password: string, name: string) => Promise<AuthResult>;
   verifyOtp: (email: string, otp: string) => Promise<void>;
   resendOtp: (email: string) => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<void>;
+  resetPassword: (email: string, otp: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -81,6 +83,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     await api.resendVerification(email);
   }, []);
 
+  const requestPasswordReset = useCallback(async (email: string) => {
+    await api.requestPasswordReset(email);
+  }, []);
+
+  const resetPassword = useCallback(async (email: string, otp: string, password: string) => {
+    await api.resetPassword(email, otp, password);
+  }, []);
+
   const signOut = useCallback(async () => {
     await api.signOut();
     setUser(null);
@@ -88,8 +98,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<Session>(
-    () => ({ status, user, signIn, signUp, verifyOtp, resendOtp, signOut }),
-    [status, user, signIn, signUp, verifyOtp, resendOtp, signOut],
+    () => ({
+      status,
+      user,
+      signIn,
+      signUp,
+      verifyOtp,
+      resendOtp,
+      requestPasswordReset,
+      resetPassword,
+      signOut,
+    }),
+    [status, user, signIn, signUp, verifyOtp, resendOtp, requestPasswordReset, resetPassword, signOut],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
