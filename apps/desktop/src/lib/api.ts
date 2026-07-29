@@ -4,6 +4,7 @@ import type { CaptureDraft } from '@/generated/CaptureDraft';
 import type { CaptureSource } from '@/generated/CaptureSource';
 import type { NewTask } from '@/generated/NewTask';
 import type { Task } from '@/generated/Task';
+import type { TaskGroup } from '@/generated/TaskGroup';
 
 /**
  * Typed façade over the Tauri IPC boundary. Each method maps to a `#[tauri::command]`
@@ -40,11 +41,18 @@ export const api = {
   listTasks: () => invoke<Task[]>('list_tasks'),
   saveTask: (task: NewTask) => invoke<Task>('save_task', { task }),
   deleteTask: (id: string) => invoke<void>('delete_task', { id }),
-  reorderTask: (first: string, second: string) =>
-    invoke<void>('reorder_task', { first, second }),
+  reorderTask: (first: string, second: string) => invoke<void>('reorder_task', { first, second }),
   updateTask: (
     id: string,
-    patch: { text?: string; completed?: boolean; link?: string; source?: string; improved?: boolean },
+    patch: {
+      text?: string;
+      completed?: boolean;
+      link?: string;
+      source?: string;
+      improved?: boolean;
+      /** New group id; an empty string un-groups the task. */
+      taskGroupId?: string;
+    },
   ) =>
     invoke<Task>('update_task', {
       id,
@@ -53,7 +61,18 @@ export const api = {
       link: patch.link,
       source: patch.source,
       improved: patch.improved,
+      taskGroupId: patch.taskGroupId,
     }),
+  listTaskGroups: () => invoke<TaskGroup[]>('list_task_groups'),
+  createTaskGroup: (name: string) => invoke<TaskGroup>('create_task_group', { name }),
+  renameTaskGroup: (id: string, name: string) =>
+    invoke<TaskGroup>('rename_task_group', { id, name }),
+  /** Delete a group — its tasks fall back to ungrouped. */
+  deleteTaskGroup: (id: string) => invoke<void>('delete_task_group', { id }),
+  /** The inbox's active group filter, shared with the capture windows. */
+  getActiveTaskGroup: () => invoke<string | null>('get_active_task_group'),
+  setActiveTaskGroup: (taskGroupId: string | null) =>
+    invoke<void>('set_active_task_group', { taskGroupId }),
   /** Optimize a saved task's text with AI and persist it, marking it improved. */
   improveTask: (id: string, text: string) => invoke<Task>('improve_task', { id, text }),
   /** Open a task's link in the default browser (http/https only). */
@@ -65,8 +84,7 @@ export const api = {
   /** Ask OpenAI to improve raw captured text (returns the cleaned text). */
   improveText: (text: string) => invoke<string>('improve_text', { text }),
   /** The current global hotkey for a capture method (Tauri accelerator syntax). */
-  getCaptureShortcut: (method: CaptureMethod) =>
-    invoke<string>('get_capture_shortcut', { method }),
+  getCaptureShortcut: (method: CaptureMethod) => invoke<string>('get_capture_shortcut', { method }),
   /** Bind a new hotkey for a capture method; rejects if invalid or already in use. */
   setCaptureShortcut: (method: CaptureMethod, shortcut: string) =>
     invoke<void>('set_capture_shortcut', { method, shortcut }),
@@ -76,6 +94,20 @@ export const api = {
 
 // Seed the browser mock (no Tauri host) with a spread of tasks so the inbox,
 // last-24h Completed card, and day-grouped Archive are all visible in `pnpm desktop`.
+function seedMockTaskGroups(): TaskGroup[] {
+  const now = new Date().toISOString();
+  const group = (name: string): TaskGroup => ({
+    id: crypto.randomUUID(),
+    name,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return [group('Work'), group('Sport')];
+}
+
+const mockTaskGroups: TaskGroup[] = seedMockTaskGroups();
+let mockActiveTaskGroup: string | null = null;
+
 function seedMockStore(): Task[] {
   const hoursAgo = (h: number) => new Date(Date.now() - h * 60 * 60 * 1000).toISOString();
   const source = (appName: string, windowTitle: string): CaptureSource => ({
@@ -95,17 +127,24 @@ function seedMockStore(): Task[] {
     status: 'done',
     improved: false,
     link,
+    taskGroupId: null,
     source: src,
     createdAt: hoursAgo(completedHoursAgo + 4),
     updatedAt: hoursAgo(completedHoursAgo),
     completedAt: hoursAgo(completedHoursAgo),
   });
-  const active = (text: string, src: CaptureSource, link: string | null = null): Task => ({
+  const active = (
+    text: string,
+    src: CaptureSource,
+    link: string | null = null,
+    taskGroupId: string | null = null,
+  ): Task => ({
     id: crypto.randomUUID(),
     text,
     status: 'inbox',
     improved: false,
     link,
+    taskGroupId,
     source: src,
     createdAt: hoursAgo(2),
     updatedAt: hoursAgo(2),
@@ -116,11 +155,19 @@ function seedMockStore(): Task[] {
   const chrome = source('Chrome', 'Linear — BLK-142');
   const notion = source('Notion', 'Roadmap Q3');
   const mail = source('Mail', 'Re: contract review');
+  const work = mockTaskGroups[0]?.id ?? null;
+  const sport = mockTaskGroups[1]?.id ?? null;
 
   return [
     // Inbox (active)
-    active('Draft the sync-server auth middleware', chrome, 'https://linear.app/blink/issue/BLK-142'),
+    active(
+      'Draft the sync-server auth middleware',
+      chrome,
+      'https://linear.app/blink/issue/BLK-142',
+      work,
+    ),
     active('Reply to the security questionnaire', mail),
+    active('Book the Tuesday climbing slot', notion, null, sport),
     // Completed in the last 24h → Completed card
     done('Ship the archive view', 3, chrome),
     done('Review DLP ruleset PR', 10, slack, 'https://github.com/blink/desktop/pull/88'),
@@ -206,6 +253,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
         status: 'inbox',
         improved: input.improved,
         link: input.link,
+        taskGroupId: input.taskGroupId,
         source: input.source,
         createdAt: now,
         updatedAt: now,
@@ -259,8 +307,52 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       if (typeof nextSource === 'string') {
         task.source = { ...task.source, appName: nextSource };
       }
+      const nextTaskGroupId = args?.taskGroupId;
+      if (typeof nextTaskGroupId === 'string') {
+        task.taskGroupId = nextTaskGroupId.trim() ? nextTaskGroupId.trim() : null;
+      }
       task.updatedAt = new Date().toISOString();
       return task as T;
+    }
+    case 'list_task_groups':
+      return [...mockTaskGroups] as T;
+    case 'create_task_group': {
+      const name = String(args?.name ?? '').trim();
+      if (!name) throw new Error('group name cannot be empty');
+      if (mockTaskGroups.some((g) => g.name === name)) {
+        throw new Error('a group with this name already exists');
+      }
+      const now = new Date().toISOString();
+      const group: TaskGroup = { id: crypto.randomUUID(), name, createdAt: now, updatedAt: now };
+      mockTaskGroups.push(group);
+      return group as T;
+    }
+    case 'rename_task_group': {
+      const group = mockTaskGroups.find((g) => g.id === args?.id);
+      if (!group) throw new Error('task group not found');
+      const name = String(args?.name ?? '').trim();
+      if (!name) throw new Error('group name cannot be empty');
+      if (mockTaskGroups.some((g) => g.name === name && g.id !== group.id)) {
+        throw new Error('a group with this name already exists');
+      }
+      group.name = name;
+      group.updatedAt = new Date().toISOString();
+      return group as T;
+    }
+    case 'delete_task_group': {
+      const idx = mockTaskGroups.findIndex((g) => g.id === args?.id);
+      if (idx >= 0) mockTaskGroups.splice(idx, 1);
+      for (const task of mockStore) {
+        if (task.taskGroupId === args?.id) task.taskGroupId = null;
+      }
+      if (mockActiveTaskGroup === args?.id) mockActiveTaskGroup = null;
+      return undefined as T;
+    }
+    case 'get_active_task_group':
+      return mockActiveTaskGroup as T;
+    case 'set_active_task_group': {
+      mockActiveTaskGroup = typeof args?.taskGroupId === 'string' ? args.taskGroupId : null;
+      return undefined as T;
     }
     case 'dismiss_copy_capture':
     case 'dismiss_manual_capture':

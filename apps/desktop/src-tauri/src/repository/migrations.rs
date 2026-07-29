@@ -9,7 +9,7 @@ pub(super) fn migrations() -> Migrations<'static> {
             "CREATE TABLE IF NOT EXISTS tasks (
                 id           TEXT PRIMARY KEY,
                 text         TEXT NOT NULL,
-           ^     status       TEXT NOT NULL,
+                status       TEXT NOT NULL,
                 app_id       TEXT NOT NULL,
                 app_name     TEXT NOT NULL,
                 window_title TEXT NOT NULL,
@@ -35,6 +35,18 @@ pub(super) fn migrations() -> Migrations<'static> {
         M::up(
             "ALTER TABLE tasks ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
              UPDATE tasks SET position = rowid;",
+        ),
+        // User-defined task groups; a task belongs to at most one. ON DELETE SET NULL
+        // is legal on ADD COLUMN because the column's default is NULL.
+        M::up(
+            "CREATE TABLE IF NOT EXISTS task_groups (
+                id         TEXT PRIMARY KEY,
+                name       TEXT NOT NULL UNIQUE,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            ALTER TABLE tasks ADD COLUMN task_group_id TEXT \
+                REFERENCES task_groups(id) ON DELETE SET NULL;",
         ),
     ])
 }

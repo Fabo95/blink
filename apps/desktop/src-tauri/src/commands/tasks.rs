@@ -31,8 +31,9 @@ pub fn reorder_task(
 }
 
 /// Patch a task's mutable fields — text, completion, link (empty clears it), the
-/// displayed source label, and/or the `improved` flag. Any omitted field is left
-/// untouched. The AI call that produces improved text is its own command (`improve_text`).
+/// displayed source label, the group (empty un-groups), and/or the `improved` flag.
+/// Any omitted field is left untouched. The AI call that produces improved text is
+/// its own command (`improve_text`).
 #[tauri::command]
 pub fn update_task(
     repository: State<'_, Repository>,
@@ -42,6 +43,7 @@ pub fn update_task(
     link: Option<String>,
     source: Option<String>,
     improved: Option<bool>,
+    task_group_id: Option<String>,
 ) -> AppResult<Task> {
     repository.tasks.update(
         &id,
@@ -51,6 +53,7 @@ pub fn update_task(
             link,
             source_name: source,
             improved,
+            task_group_id,
         },
     )
 }

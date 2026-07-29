@@ -79,6 +79,7 @@ pub struct Task {
     pub status: String,
     pub improved: bool,
     pub link: Option<String>,
+    pub task_group_id: Option<String>,
     pub source: CaptureSource,
     pub created_at: String,
     pub updated_at: String,
@@ -95,5 +96,18 @@ pub struct NewTask {
     pub improved: bool,
     /// An optional web link entered in the capture panel.
     pub link: Option<String>,
+    /// The group picked in the capture panel (defaults to the inbox's active filter).
+    pub task_group_id: Option<String>,
     pub source: CaptureSource,
+}
+
+/// A user-defined task group (e.g. "Work", "Sport") — a task belongs to at most one.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct TaskGroup {
+    pub id: String,
+    pub name: String,
+    pub created_at: String,
+    pub updated_at: String,
 }

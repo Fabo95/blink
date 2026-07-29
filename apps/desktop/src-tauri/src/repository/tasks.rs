@@ -16,9 +16,10 @@ use crate::core::models::{CaptureSource, NewTask, Task};
 use super::db::{serde_err, store_err, Db};
 
 /// A partial task edit — every `Some` field is written, `None` leaves it untouched.
-/// An empty `link` clears the stored link; `source_name` sets the displayed source (the
-/// `app_name` column). The caller owns the `improved` flag (a manual edit clears it, an
-/// AI improve sets it), so it's passed explicitly rather than inferred from `text`.
+/// An empty `link` or `task_group_id` clears the stored value; `source_name` sets the
+/// displayed source (the `app_name` column). The caller owns the `improved` flag (a
+/// manual edit clears it, an AI improve sets it), so it's passed explicitly rather
+/// than inferred from `text`.
 #[derive(Default)]
 pub struct TaskPatch {
     pub text: Option<String>,
@@ -26,6 +27,7 @@ pub struct TaskPatch {
     pub link: Option<String>,
     pub source_name: Option<String>,
     pub improved: Option<bool>,
+    pub task_group_id: Option<String>,
 }
 
 /// The task repository — task-specific queries over the shared [`Db`]. Constructed
@@ -58,6 +60,7 @@ impl TaskRepository {
             status: "inbox".to_string(),
             improved: new.improved,
             link: new.link,
+            task_group_id: new.task_group_id,
             source: new.source,
             created_at: now.clone(),
             updated_at: now,
@@ -67,9 +70,11 @@ impl TaskRepository {
         let conn = self.db.lock()?;
         conn.execute(
             "INSERT INTO tasks (id, text, status, app_id, app_name, window_title, \
-             captured_at, created_at, updated_at, improved, link, completed_at) \
+             captured_at, created_at, updated_at, improved, link, completed_at, \
+             task_group_id) \
              VALUES (:id, :text, :status, :app_id, :app_name, :window_title, \
-             :captured_at, :created_at, :updated_at, :improved, :link, :completed_at)",
+             :captured_at, :created_at, :updated_at, :improved, :link, :completed_at, \
+             :task_group_id)",
             params.to_slice().as_slice(),
         )
         .map_err(store_err)?;
@@ -164,6 +169,17 @@ impl TaskRepository {
             .map_err(store_err)?;
         }
 
+        if let Some(task_group_id) = patch.task_group_id {
+            // Empty input un-groups the task (stored NULL).
+            let trimmed = task_group_id.trim();
+            let value = if trimmed.is_empty() { None } else { Some(trimmed) };
+            conn.execute(
+                "UPDATE tasks SET task_group_id = ?1, updated_at = ?2 WHERE id = ?3",
+                params![value, now, id],
+            )
+            .map_err(store_err)?;
+        }
+
         if let Some(source_name) = patch.source_name {
             conn.execute(
                 "UPDATE tasks SET app_name = ?1, updated_at = ?2 WHERE id = ?3",
@@ -206,6 +222,7 @@ struct TaskRow {
     improved: bool,
     link: Option<String>,
     completed_at: Option<String>,
+    task_group_id: Option<String>,
 }
 
 impl From<&Task> for TaskRow {
@@ -223,6 +240,7 @@ impl From<&Task> for TaskRow {
             improved: task.improved,
             link: task.link.clone(),
             completed_at: task.completed_at.clone(),
+            task_group_id: task.task_group_id.clone(),
         }
     }
 }
@@ -235,6 +253,7 @@ impl From<TaskRow> for Task {
             status: row.status,
             improved: row.improved,
             link: row.link,
+            task_group_id: row.task_group_id,
             source: CaptureSource {
                 app_id: row.app_id,
                 app_name: row.app_name,

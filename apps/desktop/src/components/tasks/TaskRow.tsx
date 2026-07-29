@@ -1,4 +1,4 @@
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, Tag } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Popover, PopoverAnchor } from '@/components/ui/popover';
 import type { Task } from '@/generated/Task';
@@ -9,6 +9,8 @@ interface TaskRowProps {
   task: Task;
   focused: boolean;
   editing: boolean;
+  /** The task's group name, shown as a chip (omitted while a group filter is active). */
+  groupName?: string;
   onSelect: (task: Task) => void;
   onToggleComplete: (task: Task) => void;
   onOpenLink: (task: Task) => void;
@@ -21,6 +23,7 @@ export function TaskRow({
   task,
   focused,
   editing,
+  groupName,
   onSelect,
   onToggleComplete,
   onOpenLink,
@@ -88,6 +91,17 @@ export function TaskRow({
                       <ExternalLink className="size-3 shrink-0" />
                       <span className="truncate">{linkLabel(task.link)}</span>
                     </button>
+                  </>
+                )}
+                {groupName && (
+                  <>
+                    <span aria-hidden className="text-muted-foreground/30">
+                      ·
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Tag className="size-3 shrink-0" />
+                      {groupName}
+                    </span>
                   </>
                 )}
               </div>

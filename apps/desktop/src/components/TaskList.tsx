@@ -3,14 +3,16 @@ import { useEffect, useState } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { ArchiveSection } from '@/components/tasks/ArchiveSection';
 import { DeleteTaskDialog } from '@/components/tasks/DeleteTaskDialog';
+import { GroupFilterBar } from '@/components/tasks/GroupFilterBar';
 import { COMPLETED_SHORTCUTS, INBOX_SHORTCUTS } from '@/components/tasks/hints';
 import { TaskEditor } from '@/components/tasks/TaskEditor';
 import { TaskRow } from '@/components/tasks/TaskRow';
 import { TaskSection } from '@/components/tasks/TaskSection';
+import type { Task } from '@/generated/Task';
 import { useArchive } from '@/hooks/useArchive';
 import { useListCursor } from '@/hooks/useListCursor';
 import { useTaskEditor } from '@/hooks/useTaskEditor';
-import type { Task } from '@/generated/Task';
+import { useTaskGroups } from '@/hooks/useTaskGroups';
 import { api } from '@/lib/api';
 import { splitTasks } from '@/lib/completed';
 import { errorMessage } from '@/lib/utils';
@@ -27,9 +29,20 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
   const [completedOpen, setCompletedOpen] = useState(true);
   const report = (e: unknown, fallback: string) => setError(errorMessage(e, fallback));
 
-  const { active, recentCompleted, archived } = splitTasks(tasks);
-
   const editor = useTaskEditor({ onSaved: onChanged, setError });
+  const isEditing = editor.task !== null;
+  // The editor popover and the delete modal each own the keyboard while open, so the
+  // group shortcuts (and, below, the list cursor) stand down.
+  const baseInteractive = !isEditing && deletingTask === null;
+  const taskGroups = useTaskGroups({ interactive: baseInteractive });
+
+  // Filtering before the split keeps every section (and its count) on the same filter.
+  const visible =
+    taskGroups.selectedId === null
+      ? tasks
+      : tasks.filter((t) => t.taskGroupId === taskGroups.selectedId);
+  const { active, recentCompleted, archived } = splitTasks(visible);
+  const groupNames = new Map(taskGroups.groups.map((g) => [g.id, g.name]));
 
   const toggleComplete = async (task: Task) => {
     try {
@@ -63,10 +76,8 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
     }
   };
 
-  const isEditing = editor.task !== null;
-  // The editor popover and the delete modal each own the keyboard while open, so the list
-  // cursor and archive shortcuts stand down.
-  const interactive = !isEditing && deletingTask === null;
+  // The group name-prompt / delete dialog own the keyboard too.
+  const interactive = baseInteractive && !taskGroups.busy;
   const archive = useArchive(archived, { interactive });
 
   // One cursor over everything currently visible — each collapsed section drops out, so
@@ -107,8 +118,8 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
       report(e, 'Could not delete task');
     }
   };
-  // The delete modal has no buttons — ⏎ confirms (Esc/backdrop cancel via Radix).
-  useHotkeys('enter', () => void confirmDelete(), {
+  // The delete modal has no buttons — ⌘↵ confirms (Esc/backdrop cancel via Radix).
+  useHotkeys('mod+enter', () => void confirmDelete(), {
     enabled: deletingTask !== null,
     preventDefault: true,
   });
@@ -134,17 +145,24 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
       task={task}
       focused={focusedId === task.id}
       editing={editor.isEditing(task.id)}
+      groupName={
+        // Redundant while a group filter is active — every visible row shares it.
+        taskGroups.selectedId === null && task.taskGroupId
+          ? groupNames.get(task.taskGroupId)
+          : undefined
+      }
       onSelect={(t) => setFocusedId(t.id)}
       onToggleComplete={toggleComplete}
       onOpenLink={openLink}
       onCancelEdit={editor.cancel}
     >
-      <TaskEditor editor={editor} error={error} />
+      <TaskEditor editor={editor} error={error} groups={taskGroups.groups} />
     </TaskRow>
   );
 
   return (
     <>
+      <GroupFilterBar view={taskGroups} />
       <TaskSection
         title="Inbox"
         toggleKey="i"
@@ -186,7 +204,10 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
         <ArchiveSection archive={archive} totalCount={archived.length} renderRow={renderRow} />
       )}
 
-      <DeleteTaskDialog task={deletingTask} onOpenChange={(open) => !open && setDeletingTask(null)} />
+      <DeleteTaskDialog
+        task={deletingTask}
+        onOpenChange={(open) => !open && setDeletingTask(null)}
+      />
     </>
   );
 }

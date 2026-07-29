@@ -1,11 +1,19 @@
-import { Check, Link2, ShieldCheck, WandSparkles } from 'lucide-react';
+import { Check, ChevronDown, Link2, ShieldCheck, Tag, WandSparkles } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { ShortcutHint } from '@/components/ShortcutHint';
 import { Badge } from '@/components/ui/badge';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import type { CaptureSource } from '@/generated/CaptureSource';
+import type { TaskGroup } from '@/generated/TaskGroup';
 import { api, isTauri } from '@/lib/api';
 import { normalizeLink } from '@/lib/link';
 
@@ -43,6 +51,9 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
   const [link, setLink] = useState('');
   const [source, setSource] = useState<CaptureSource | null>(null);
   const [redactions, setRedactions] = useState(0);
+  const [groups, setGroups] = useState<TaskGroup[]>([]);
+  const [taskGroupId, setTaskGroupId] = useState<string | null>(null);
+  const [groupMenuOpen, setGroupMenuOpen] = useState(false);
   const [improving, setImproving] = useState(false);
   // True once the text is AI-improved and untouched since — carried to the saved task
   // so the inbox doesn't offer to improve it again.
@@ -51,11 +62,19 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
   const fieldRef = useRef<HTMLTextAreaElement>(null);
 
   const load = useCallback(async () => {
-    const content = await kind.load();
+    // Groups + the inbox's active filter load alongside the content; a capture
+    // defaults to that filter (guarded against a stale id whose group is gone).
+    const [content, loadedGroups, activeGroup] = await Promise.all([
+      kind.load(),
+      api.listTaskGroups(),
+      api.getActiveTaskGroup(),
+    ]);
     setText(content.text);
     setLink(content.link ?? '');
     setSource(content.source);
     setRedactions(content.redactionCount);
+    setGroups(loadedGroups);
+    setTaskGroupId(loadedGroups.some((g) => g.id === activeGroup) ? activeGroup : null);
     setImproved(false);
     setError('');
     setTimeout(() => fieldRef.current?.focus(), 0);
@@ -65,6 +84,8 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
     setText('');
     setLink('');
     setRedactions(0);
+    setTaskGroupId(null);
+    setGroupMenuOpen(false);
     setImproved(false);
     setError('');
     await kind.dismiss();
@@ -74,14 +95,14 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
     const trimmed = text.trim();
     if (!trimmed || !source) return;
     // Accept a bare domain (`github.com`) — default it to https so it opens later.
-    await api.saveTask({ text: trimmed, improved, link: normalizeLink(link), source });
+    await api.saveTask({ text: trimmed, improved, link: normalizeLink(link), taskGroupId, source });
     if (isTauri) {
       // Only the main (inbox) window cares — target it directly.
       const { emitTo } = await import('@tauri-apps/api/event');
       await emitTo('main', 'task-saved');
     }
     await hide();
-  }, [text, improved, link, source, hide]);
+  }, [text, improved, link, taskGroupId, source, hide]);
 
   const improve = useCallback(async () => {
     if (!text.trim()) return;
@@ -123,10 +144,19 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
   }, [load, kind.openEvent]);
 
   // Esc cancels, ⌘↵ saves — enabled inside the fields (the panel is basically a form).
-  useHotkeys('escape', () => void hide(), { enableOnFormTags: true, preventDefault: true });
+  useHotkeys('escape', () => void hide(), {
+    enabled: !groupMenuOpen,
+    enableOnFormTags: true,
+    preventDefault: true,
+  });
   useHotkeys('mod+enter', () => void save(), { enableOnFormTags: true, preventDefault: true });
   useHotkeys('mod+i', () => void improve(), {
     enabled: !improved && !improving,
+    enableOnFormTags: true,
+    preventDefault: true,
+  });
+  useHotkeys('mod+g', () => setGroupMenuOpen((open) => !open), {
+    enabled: groups.length > 0,
     enableOnFormTags: true,
     preventDefault: true,
   });
@@ -175,6 +205,46 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
           />
         </div>
 
+        {/* Group picker — a field, not a button: ⌘G toggles the menu, arrows+⏎ pick.
+            Hidden entirely until the user has created a group. */}
+        {groups.length > 0 && (
+          <DropdownMenu open={groupMenuOpen} onOpenChange={setGroupMenuOpen}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                tabIndex={-1}
+                className="flex h-9 items-center gap-2 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm transition-colors"
+              >
+                <Tag className="size-3.5 shrink-0 text-muted-foreground" />
+                <span
+                  className={
+                    taskGroupId ? 'flex-1 text-left' : 'flex-1 text-left text-muted-foreground'
+                  }
+                >
+                  {groups.find((g) => g.id === taskGroupId)?.name ?? 'No group'}
+                </span>
+                <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              className="w-[var(--radix-dropdown-menu-trigger-width)]"
+            >
+              <DropdownMenuRadioGroup
+                value={taskGroupId ?? ''}
+                onValueChange={(value) => setTaskGroupId(value || null)}
+              >
+                <DropdownMenuRadioItem value="">No group</DropdownMenuRadioItem>
+                {groups.map((group) => (
+                  <DropdownMenuRadioItem key={group.id} value={group.id}>
+                    {group.name}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
         <Textarea
           ref={fieldRef}
           value={text}
@@ -192,6 +262,7 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
           <ShortcutHint
             shortcuts={[
               ...(improved ? [] : [{ keys: '⌘I', label: 'improve' }]),
+              ...(groups.length > 0 ? [{ keys: '⌘G', label: 'group' }] : []),
               { keys: '⌘↵', label: 'save' },
               { keys: 'Esc', label: 'cancel' },
             ]}

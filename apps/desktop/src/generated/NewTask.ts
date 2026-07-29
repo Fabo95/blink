@@ -10,4 +10,8 @@ improved: boolean,
 /**
  * An optional web link entered in the capture panel.
  */
-link: string | null, source: CaptureSource, };
+link: string | null, 
+/**
+ * The group picked in the capture panel (defaults to the inbox's active filter).
+ */
+taskGroupId: string | null, source: CaptureSource, };

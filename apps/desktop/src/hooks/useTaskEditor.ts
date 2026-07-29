@@ -12,6 +12,8 @@ export interface TaskEditor {
   draft: string;
   link: string;
   source: string;
+  /** The draft's group id, or `null` for no group. */
+  taskGroupId: string | null;
   /** True while the draft holds AI-improved text (gates ⌘I to once per version). */
   improved: boolean;
   improving: boolean;
@@ -19,6 +21,7 @@ export interface TaskEditor {
   setDraft: (value: string) => void;
   setLink: (value: string) => void;
   setSource: (value: string) => void;
+  setTaskGroupId: (value: string | null) => void;
   start: (task: Task) => void;
   cancel: () => void;
 }
@@ -38,6 +41,7 @@ export function useTaskEditor({ onSaved, setError }: Options): TaskEditor {
   const [draft, setDraftText] = useState('');
   const [link, setLink] = useState('');
   const [source, setSource] = useState('');
+  const [taskGroupId, setTaskGroupId] = useState<string | null>(null);
   const [improved, setImproved] = useState(false);
   const [improving, setImproving] = useState(false);
 
@@ -46,6 +50,7 @@ export function useTaskEditor({ onSaved, setError }: Options): TaskEditor {
     setDraftText(next.text);
     setLink(next.link ?? '');
     setSource(next.source.appName || next.source.appId);
+    setTaskGroupId(next.taskGroupId);
     setImproved(next.improved);
     setError('');
   };
@@ -55,6 +60,7 @@ export function useTaskEditor({ onSaved, setError }: Options): TaskEditor {
     setDraftText('');
     setLink('');
     setSource('');
+    setTaskGroupId(null);
     setImproved(false);
   };
 
@@ -70,13 +76,21 @@ export function useTaskEditor({ onSaved, setError }: Options): TaskEditor {
       cancel();
       return;
     }
-    const patch: { text?: string; link?: string; source?: string; improved?: boolean } = {};
+    const patch: {
+      text?: string;
+      link?: string;
+      source?: string;
+      improved?: boolean;
+      taskGroupId?: string;
+    } = {};
     if (text !== task.text) patch.text = text;
     const nextLink = normalizeLink(link) ?? '';
     if (nextLink !== (task.link ?? '')) patch.link = nextLink;
     const nextSource = source.trim();
     if (nextSource !== (task.source.appName || task.source.appId)) patch.source = nextSource;
     if (improved !== task.improved) patch.improved = improved;
+    // Empty string clears the group server-side (the link pattern).
+    if ((taskGroupId ?? '') !== (task.taskGroupId ?? '')) patch.taskGroupId = taskGroupId ?? '';
 
     if (Object.keys(patch).length === 0) {
       cancel();
@@ -123,11 +137,13 @@ export function useTaskEditor({ onSaved, setError }: Options): TaskEditor {
     draft,
     link,
     source,
+    taskGroupId,
     improved,
     improving,
     setDraft,
     setLink,
     setSource,
+    setTaskGroupId,
     start,
     cancel,
   };
