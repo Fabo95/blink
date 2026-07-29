@@ -18,10 +18,13 @@ CREATE POLICY "tasks_owner_rw" ON "tasks"
   WITH CHECK ("owner_id" = current_setting('app.current_user_id', true)::uuid);--> statement-breakpoint
 
 -- Least-privilege role the sync API connects as (RLS applies; not the owner).
+-- Created without a password on purpose: SQL migrations can't read env vars, so the
+-- password is set post-migration from POSTGRES_BLINK_API_PASSWORD (src/set-api-password.ts,
+-- run via db:deploy). Until that runs, the role can't log in — fail-closed.
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'blink_api') THEN
-    CREATE ROLE blink_api LOGIN PASSWORD 'blink_api_dev_password';
+    CREATE ROLE blink_api LOGIN;
   END IF;
 END
 $$;--> statement-breakpoint

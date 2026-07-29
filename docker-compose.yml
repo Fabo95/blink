@@ -17,16 +17,20 @@ services:
       retries: 10
 
   # One-shot: applies pending Drizzle migrations (recorded in __drizzle_migrations),
-  # then exits — the server waits for it to succeed. Reuses the server image, which
-  # bundles @blink/db + drizzle-kit + the migrations. Runs as the owner so it can
-  # create/alter tables.
+  # then sets the blink_api password from POSTGRES_BLINK_API_PASSWORD (migration 0001 creates
+  # the role with no password — it can't log in until this runs) and exits — the
+  # server waits for it to succeed. Reuses the server image, which bundles @blink/db
+  # + drizzle-kit + the migrations. Runs as the owner so it can create/alter tables
+  # and roles.
   migrate:
     build:
       context: .
       dockerfile: apps/server/Dockerfile
-    command: ['pnpm', '--filter', '@blink/db', 'db:migrate']
+    command: ['pnpm', '--filter', '@blink/db', 'db:deploy']
     environment:
       DATABASE_URL: postgres://blink:blink_dev_password@postgres:5432/blink
+      # Must be URL-safe — it's also interpolated into the server's DATABASE_URL below.
+      POSTGRES_BLINK_API_PASSWORD: ${POSTGRES_BLINK_API_PASSWORD:-blink_api_dev_password}
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,8 +52,9 @@ services:
       # Least-privilege: the server connects as `blink_api` (created by migration 0001)
       # — RLS is enforced and it only holds grants on the tables it needs (tasks +
       # the Better Auth tables). The owner `blink` is used solely by the migrate
-      # service for DDL + GRANTs; that's why this waits on migrate to finish.
-      DATABASE_URL: postgres://blink_api:blink_api_dev_password@postgres:5432/blink
+      # service for DDL + GRANTs + the blink_api password; that's why this waits on
+      # migrate to finish.
+      DATABASE_URL: postgres://blink_api:${POSTGRES_BLINK_API_PASSWORD:-blink_api_dev_password}@postgres:5432/blink
     ports:
       - '8787:8787'
     depends_on:

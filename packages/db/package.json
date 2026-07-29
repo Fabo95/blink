@@ -13,7 +13,9 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:set-api-password": "node dist/set-api-password.js",
+    "db:deploy": "pnpm db:migrate && pnpm db:set-api-password"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",

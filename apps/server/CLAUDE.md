@@ -56,7 +56,11 @@ env.ts              zod-validated env — no defaults, all required
   RLS is enforced and a compromise can't touch the schema. The owner `blink` is used **only** for
   migrations/DDL + `GRANT`s (the compose `migrate` service). Grants are hand-written SQL
   migrations in `@blink/db` — Drizzle can't express roles/grants/policies — so a new server-read
-  table needs a matching `GRANT`.
+  table needs a matching `GRANT`. Migration 0001 creates `blink_api` with LOGIN but **no
+  password** (SQL migrations can't read env vars, and a hardcoded one would leak into prod);
+  `@blink/db`'s `db:deploy` (what the `migrate` service runs) follows migrations with
+  `set-api-password.js`, which sets it from `POSTGRES_BLINK_API_PASSWORD`. Until that runs the role
+  can't log in — plain `db:migrate` alone leaves the server unable to connect on a fresh DB.
 - **OpenAPI**: `@fastify/swagger` + the zod `jsonSchemaTransform` emit the spec;
   `pnpm --filter @blink/server openapi:gen` dumps `apps/server/openapi.json` (the wire contract).
   Regenerate it whenever a route's schema changes.
