@@ -1,129 +1,144 @@
 # 🔮 Blink
 
-**Enterprise-Ready Local-First Task Ingestion System.**
+**Local-first task capture for macOS — from any highlighted text to a clean task in one keystroke.**
 
-Blink turns any highlighted text — a Slack message, a code comment, an email —
-into a task in one keystroke. It is _local-first_: snippets are sanitized and
-stored **on your machine** by a Rust core, and only explicitly-exported,
-DLP-cleaned tickets ever leave the device. When teams opt into sync, data is
-end-to-end encrypted client-side so even the operator only stores ciphertext.
+Blink turns whatever you just highlighted — a Slack message, a code comment, an email — into a
+task without leaving the app you're in. Press `⌘⇧B`: the Rust core records where you were,
+lifts the selection, redacts secrets on-device, and drops you into a small review panel to
+polish (optionally with AI) and save. Everything lands in a locally encrypted database;
+nothing leaves your machine unless you opt in.
 
-> This repository is the **Phase-1 MVP skeleton** — runnable, with the seams for
-> later phases (E2EE sync, ONNX local AI, SSO, VPC deploy) already in place as
-> typed stubs.
+It's also a deliberately over-engineered playground for patterns I care about: strict type-safe
+boundaries across three languages, a security model designed before the sync feature that needs
+it, and a keyboard-only UI with zero buttons.
 
-## Architecture
+## Highlights
 
-| Layer            | Tech                          | Package                    |
-| ---------------- | ----------------------------- | -------------------------- |
-| Client App Core  | Tauri (Rust) + React/TS       | `apps/desktop`             |
-| Local Database   | SQLite via SQLCipher (AES-256)| `src-tauri/src/store.rs` · in-memory stub for now |
-| Local AI Engine  | ONNX Runtime / local LLM      | `packages/ai`              |
-| Zero-Knowledge E2EE | PBKDF2 + AES-GCM (WebCrypto)| `packages/crypto`          |
-| Cloud Sync       | CRDT → self-hosted Postgres   | `packages/sync`, `apps/server` |
-| Cloud schema/ORM | Drizzle (schema + migrations) | `packages/db`              |
-| Shared model     | Types, theme, DLP patterns    | `packages/core`            |
+- **One-keystroke capture** — `⌘⇧B` captures the current selection: the Rust core detects the
+  frontmost app and window title (and the page URL in browsers), snapshots your clipboard,
+  simulates `⌘C`, polls until the selection lands, then **restores your clipboard** — capture
+  never clobbers what you had copied. `⌘⇧M` opens a blank panel for manual capture.
+- **On-device DLP** — a security filter redacts API keys, passwords, and private keys *before*
+  the text is even rendered, so secrets never reach the database or any AI call.
+- **Encrypted at rest** — SQLite via **SQLCipher** (AES-256); the key lives in the macOS
+  keychain, never on disk.
+- **Keyboard-first, no buttons — literally** — every action in the app is a shortcut, surfaced
+  through inline hints: navigate with `↑↓`/`jk`, `⏎` complete, `e` edit, `o` open link,
+  `⌘I` improve with AI, `⌘↵` confirms every commit. The mouse is optional everywhere.
+- **AI cleanup, human in the loop** — `⌘I` turns a rough capture into a single crisp action
+  item (OpenAI); the raw text is reviewed and editable before anything is saved.
+- **Type-safe across every boundary** — Rust structs generate the TypeScript IPC types via
+  `ts-rs` (no hand-maintained duplicates), and a shared `zod` contract package defines the
+  client↔server wire format, with an OpenAPI doc generated from the server's routes.
+- **Security-conscious sync design** — the self-hosted server (Fastify + Better Auth +
+  Postgres 17) never trusts itself: it connects as a least-privilege role and Row-Level
+  Security scopes every query to the requesting user. Task payloads are stored as ciphertext
+  columns, ready for the zero-knowledge E2EE sync tier (Phase 2).
 
-The cloud tier is **self-hosted**: a thin sync API (`apps/server`) is the only
-thing that talks to Postgres, so raw DB access is never exposed to clients. It uses
-**Drizzle** (`packages/db`) — the TS schema is the source of truth and drizzle-kit
-generates the SQL migrations; the least-privilege role, RLS policies and GRANTs live
-in a hand-written migration alongside. Because Blink is zero-knowledge, Postgres only
-ever stores ciphertext; the API enforces *who* can read *which* rows via per-request
-Row-Level Security (`withUser` sets `app.current_user_id` inside each transaction).
-`HttpSyncTransport` (the default) targets this API; `SupabaseSyncTransport` remains as
-a managed-cloud option for tenants who don't self-host.
-
-### Capture data flow
+## How a capture flows
 
 ```
 [Highlight text] → ⌘⇧B
-   → Tauri/Rust client reads clipboard + window metadata
-   → Local security filter redacts secrets (API keys, passwords, private keys)
-       ├─ Option A: local ONNX model  → title + context   (offline, private)
-       └─ Option B: E2EE cloud proxy  → title + context   (over Enterprise VPN)
-   → SQLCipher local store (AES-256)
-   → CRDT sync engine → E2EE packets → Cloud-Postgres   (Phase 2)
-   → Export button → decrypt locally → push to Linear/Jira   (Phase 1)
+   → Rust core records the frontmost app/window (+ browser URL),
+     snapshots the clipboard, simulates ⌘C, restores the clipboard after
+   → on-device DLP filter redacts secrets
+   → review panel: edit · ⌘I improve with AI · ⌘G pick group · ⌘↵ save
+   → SQLCipher store (AES-256, key in the macOS keychain)
+   → (Phase 2) HLC/LWW sync → E2EE envelopes → self-hosted Postgres
 ```
+
+## Architecture
+
+| Layer | Tech | Where |
+| --- | --- | --- |
+| Desktop app | Tauri v2 (Rust core) + React 19 + Vite + Tailwind v4 + shadcn/ui | `apps/desktop` |
+| Local store | SQLite via SQLCipher (AES-256), key in the OS keychain | `apps/desktop/src-tauri/src/repository` |
+| Sync/auth server | Fastify 5 + zod 4 + awilix DI + Better Auth (email OTP via Resend) | `apps/server` |
+| Database | Postgres 17, Drizzle ORM, hand-written RLS/role migrations | `packages/db` |
+| Wire contract | zod schemas, single source of truth client↔server (+ OpenAPI) | `packages/contract` |
+| E2EE primitives | AES-GCM + PBKDF2 envelope helpers (Phase 2 seam) | `packages/crypto` |
+| Sync engine | Hybrid logical clocks + LWW stubs (Phase 2 seam) | `packages/sync` |
+
+Three boundaries hold the design together:
+
+- **Rust → TypeScript**: `ts-rs` derives on the Rust models generate the webview's IPC types.
+  Change the struct, regenerate — the frontend can't drift from the core.
+- **Client ↔ server**: `@blink/contract` zod schemas are the wire format; the server also
+  emits `openapi.json` from its routes.
+- **Rust owns all server communication.** The webview only ever talks to the Rust core over
+  Tauri IPC; the bearer token (and later the E2EE keys) live in the native layer and the OS
+  keychain, never in the JS heap.
+
+The server side is defense-in-depth: migrations run as the schema owner, but the API connects
+as a separate `blink_api` role that can't touch anything it wasn't explicitly granted, and RLS
+policies bind every row to `app.current_user_id` set per request. Even a fully compromised API
+process can't read another user's rows — and since payloads are ciphertext columns, Phase 2's
+zero-knowledge sync means the operator stores nothing readable at all.
 
 ## Getting started
 
 ```bash
 pnpm install
 
-# Frontend only (browser, uses an in-memory mock of the Rust core):
+# Webview only (browser, in-memory mock of the Rust core — no Rust toolchain needed):
 pnpm desktop
 
-# Full desktop app (requires the Rust toolchain — https://rustup.rs):
+# Full desktop app (requires Rust — https://rustup.rs; first build compiles SQLCipher):
 pnpm tauri dev
 ```
 
-Type-check everything: `pnpm typecheck` · Lint/format: `pnpm lint` / `pnpm format`.
+`pnpm typecheck` type-checks the whole graph, `pnpm lint` / `pnpm format` run Biome.
 
-### Self-hosted cloud tier (Postgres + sync API)
-
-```bash
-docker compose up          # Postgres (auto-runs migrations) + the sync API
-# host port clashes with a local Postgres? → POSTGRES_PORT=5433 docker compose up
-
-pnpm --filter @blink/server dev   # or run the Fastify API on the host (tsx watch)
-```
-
-The API listens on `:8787` (`/health`, `/v1/sync/push`, `/v1/sync/pull`). Point the
-desktop client at it via `SYNC_API_URL`. See `.env.example`.
-
-Schema changes go through Drizzle:
+### Self-hosted server (auth today, sync in Phase 2)
 
 ```bash
-pnpm --filter @blink/db db:generate    # regenerate SQL migrations from the TS schema
-pnpm --filter @blink/db db:migrate     # apply migrations to $DATABASE_URL (real deploys)
+docker compose up   # Postgres + migrations (as the owner role) + the API (as blink_api)
+# port clash with a local Postgres? → POSTGRES_PORT=5433 docker compose up
 ```
 
-### Icons
+The API listens on `:8787` — health check, Better Auth under `/v1/auth`, and the sync
+endpoints. Point the desktop core at it with `BLINK_SERVER_URL`
+(`apps/desktop/src-tauri/.env`); `OPENAI_API_KEY` in the same file enables `⌘I`.
+See `.env.example` for the server/Postgres variables.
 
-The app icon set is generated from a source PNG:
-
-```bash
-node scripts/generate-icon.mjs                       # writes src-tauri/app-icon.png
-pnpm --filter @blink/desktop tauri icon src-tauri/app-icon.png
-```
+Schema changes go through Drizzle (`pnpm --filter @blink/db db:generate` / `db:migrate`);
+roles, grants, and RLS policies live in hand-written SQL migrations alongside, because an ORM
+can't express them. `pnpm --filter @blink/server openapi:gen` regenerates the OpenAPI doc.
 
 ## Repository layout
 
 ```
 blink/
 ├── apps/
-│   ├── desktop/           # Tauri app: React frontend + Rust core (src-tauri)
-│   └── server/       # self-hosted sync API (Fastify + Zod + Drizzle)
-│       └── src/
-│           ├── index.ts   # bootstrap: listen + graceful shutdown
-│           ├── server.ts  # createServer(): plugins, zod, error handler
-│           ├── router.ts  # registers route plugins
-│           ├── routes/    # thin handlers, always <feature>/latest.ts
-│           ├── services/  # common/ (business logic) + model/ (Drizzle wrappers)
-│           ├── setup/     # database, dependencies (container), logger
-│           └── utils/     # errors, response, schemas
+│   ├── desktop/            # Tauri app
+│   │   ├── src/            #   React webview: capture panels + keyboard-driven inbox
+│   │   │   └── generated/  #   ts-rs output — generated from the Rust models, never edited
+│   │   └── src-tauri/src/  #   Rust core, layered:
+│   │       ├── commands/   #     thin #[tauri::command] IPC endpoints
+│   │       ├── services/   #     business logic (DI structs; never import tauri)
+│   │       ├── clients/    #     transport: sync server, OpenAI
+│   │       ├── repository/ #     SQLCipher persistence + migrations
+│   │       └── platform/   #     OS glue: frontmost-app detection, ⌘C simulation, hotkeys
+│   └── server/             # Fastify API: routes → services (awilix DI) → Drizzle
 ├── packages/
-│   ├── core/              # shared types, brand theme tokens, DLP patterns
-│   ├── ai/                # local-ONNX / cloud title generation (seam)
-│   ├── crypto/            # zero-knowledge E2EE primitives
-│   ├── db/                # Drizzle schema, client (withUser/RLS), migrations
-│   └── sync/              # CRDT engine + Http/Supabase transports (seam)
-├── docker-compose.yml     # Postgres + sync API for local self-hosting
-└── scripts/               # repo tooling
+│   ├── contract/           # zod wire schemas — client↔server single source of truth
+│   ├── db/                 # Drizzle schema + RLS/role migrations + withUser() client
+│   ├── crypto/             # E2EE envelope primitives (Phase 2)
+│   ├── sync/               # HLC/LWW sync engine stubs (Phase 2)
+│   ├── ai/                 # title heuristics
+│   └── core/               # shared brand/theme tokens
+└── docker-compose.yml      # Postgres + migrate + API for local self-hosting
 ```
+
+Monorepo: pnpm workspaces + Turborepo, Biome for lint/format, TypeScript 7.
 
 ## Roadmap
 
-1. **Phase 1 — Local-First MVP** _(this skeleton)_: Tauri client, local store,
-   direct cloud-AI, direct Linear export.
-2. **Phase 2 — Secure Sync & Cloud Bridge**: Postgres + multi-device sync,
-   row-level E2EE.
-3. **Phase 3 — B2B Teams & SSO**: workspaces, roles, Okta/Azure SSO, billing.
-4. **Phase 4 — On-Premise / VPC**: full stack as Docker/Kubernetes in a private
-   network.
-
----
-
-_Confidential — for internal development use only. © 2026 Blink Inc._
+1. **Phase 1 — Local-first MVP** *(current)*: capture (`⌘⇧B`/`⌘⇧M`), DLP filter, encrypted
+   local store, AI improve, keyboard-driven inbox with groups and archive, account
+   sign-in/verification against the self-hosted server.
+2. **Phase 2 — Zero-knowledge sync**: multi-device sync over the existing server; E2EE
+   envelopes client-side, HLC/LWW conflict resolution (seams already in `packages/crypto`
+   and `packages/sync`).
+3. **Phase 3 — Teams**: workspaces, roles, SSO.
+4. **Phase 4 — On-premise / VPC**: the full stack as a private-network deployment.
