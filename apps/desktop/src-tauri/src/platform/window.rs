@@ -2,6 +2,20 @@
 
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize};
 
+/// Hide the labelled capture panel, then the whole app on macOS so focus returns to
+/// whatever the user was in — the main window never surfaces just because a panel
+/// closed.
+pub fn hide_capture_panel(app: &AppHandle, label: &str) {
+    if let Some(window) = app.get_webview_window(label) {
+        let _ = window.hide();
+    }
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.hide();
+    }
+    #[cfg(target_os = "macos")]
+    let _ = app.hide();
+}
+
 /// Show the copy-capture panel and tell it to read the clipboard.
 pub fn open_copy_capture_window(app: &AppHandle) {
     if show_centered(app, "copy-capture") {

@@ -1,7 +1,7 @@
 use tauri::State;
 
 use crate::core::error::AppResult;
-use crate::services::ai::AiService;
+use crate::services::ai_service::AiService;
 
 /// Improve raw text with AI and return the cleaned-up result (no persistence).
 #[tauri::command]

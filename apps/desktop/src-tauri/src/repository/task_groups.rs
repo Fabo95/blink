@@ -15,6 +15,7 @@ use crate::core::models::TaskGroup;
 
 use super::db::{serde_err, store_err, Db};
 
+#[derive(Clone)]
 pub struct TaskGroupRepository {
     db: Arc<Db>,
 }

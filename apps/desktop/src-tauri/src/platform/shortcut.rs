@@ -1,7 +1,8 @@
-//! Capture hotkeys, end to end. Each capture *method* owns a global shortcut
-//! (persisted via the [`Repository`]) and a window. A single handler is registered
-//! for all of them; because it fires for every bound hotkey, it resolves which method
-//! the pressed shortcut belongs to and starts that flow. This module owns the feature.
+//! Capture hotkeys — the OS mechanics. Each capture *method* owns a global shortcut
+//! and a window; which hotkey that is (saved value, defaults) is policy and lives in
+//! [`ShortcutService`]. A single handler is registered for all of them; because it
+//! fires for every bound hotkey, it resolves which method the pressed shortcut
+//! belongs to and starts that flow.
 
 use std::str::FromStr;
 use std::thread;
@@ -14,7 +15,7 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 use crate::core::error::{AppError, AppResult};
 use crate::core::state::PendingCapture;
-use crate::repository::Repository;
+use crate::services::shortcut_service::ShortcutService;
 
 use super::{os, window};
 
@@ -32,29 +33,9 @@ impl CaptureMethod {
     /// Every method — the set bound at startup and dispatched over on a keypress.
     const ALL: [CaptureMethod; 2] = [CaptureMethod::Copy, CaptureMethod::Manual];
 
-    /// The `settings` key this method's hotkey is persisted under.
-    fn setting_key(self) -> &'static str {
-        match self {
-            CaptureMethod::Copy => "copy_capture_shortcut",
-            CaptureMethod::Manual => "manual_capture_shortcut",
-        }
-    }
-
-    /// The out-of-the-box hotkey, used until the user changes it.
-    fn default_shortcut(self) -> &'static str {
-        match self {
-            CaptureMethod::Copy => "CommandOrControl+Shift+B",
-            CaptureMethod::Manual => "CommandOrControl+Shift+M",
-        }
-    }
-
     /// This method's current hotkey: the user's saved one, or the default.
     fn shortcut(self, app: &AppHandle) -> AppResult<String> {
-        Ok(app
-            .state::<Repository>()
-            .settings
-            .get(self.setting_key())?
-            .unwrap_or_else(|| self.default_shortcut().to_string()))
+        app.state::<ShortcutService>().current(self)
     }
 
     /// Run this method's flow (on the shortcut-handler thread).
@@ -125,9 +106,7 @@ pub fn set(app: &AppHandle, method: CaptureMethod, shortcut: &str) -> AppResult<
         }
     }
     bind(app, shortcut)?;
-    app.state::<Repository>()
-        .settings
-        .set(method.setting_key(), shortcut)
+    app.state::<ShortcutService>().save(method, shortcut)
 }
 
 /// Register a Tauri accelerator string with the OS. Idempotent: a hotkey already
@@ -147,14 +126,14 @@ fn bind(app: &AppHandle, shortcut: &str) -> AppResult<()> {
 
 /// Which capture method (if any) a shortcut is bound to — found by matching it against
 /// each method's current hotkey.
-fn method_of(app: &AppHandle, pressedShortcut: &Shortcut) -> Option<CaptureMethod> {
+fn method_of(app: &AppHandle, pressed_shortcut: &Shortcut) -> Option<CaptureMethod> {
     CaptureMethod::ALL.into_iter().find(|method| {
         method
             .shortcut(app)
             .ok()
             .and_then(|shortcut| Shortcut::from_str(&shortcut).ok())
             .as_ref()
-            == Some(pressedShortcut)
+            == Some(pressed_shortcut)
     })
 }
 

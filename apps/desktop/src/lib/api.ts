@@ -73,8 +73,6 @@ export const api = {
   getActiveTaskGroup: () => invoke<string | null>('get_active_task_group'),
   setActiveTaskGroup: (taskGroupId: string | null) =>
     invoke<void>('set_active_task_group', { taskGroupId }),
-  /** Optimize a saved task's text with AI and persist it, marking it improved. */
-  improveTask: (id: string, text: string) => invoke<Task>('improve_task', { id, text }),
   /** Open a task's link in the default browser (http/https only). */
   openLink: (url: string) => invoke<void>('open_link', { url }),
   /** Close the copy-capture panel and return focus to the previous app. */
@@ -260,14 +258,6 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
         completedAt: null,
       };
       mockStore.unshift(task);
-      return task as T;
-    }
-    case 'improve_task': {
-      const task = mockStore.find((t) => t.id === args?.id);
-      if (!task) throw new Error('task not found');
-      // Browser mock can't reach OpenAI — just flag it improved.
-      task.improved = true;
-      task.updatedAt = new Date().toISOString();
       return task as T;
     }
     case 'delete_task': {

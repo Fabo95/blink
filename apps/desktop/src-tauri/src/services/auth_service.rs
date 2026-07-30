@@ -1,7 +1,8 @@
 //! Email/password auth business logic against the sync server's Better Auth
 //! endpoints. [`AuthService`] holds the [`ServerClient`] it talks through, decides
 //! which endpoint to call, reads the `set-auth-token` header, and owns the session
-//! token's lifecycle in the OS keychain (the token never reaches the webview).
+//! token's lifecycle in the OS keychain (the token never reaches the webview) plus
+//! the cached account profile in `settings`.
 
 use reqwest::{Response, StatusCode};
 use serde::Deserialize;
@@ -9,20 +10,32 @@ use serde::Deserialize;
 use crate::clients::server_client::ServerClient;
 use crate::core::error::{AppError, AppResult};
 use crate::core::models::{AuthResult, AuthStatus, AuthUser};
-use crate::services::session_token::SessionTokenService;
+use crate::repository::SettingsRepository;
+use crate::services::session_token_service::SessionTokenService;
 
-/// Auth against the sync server. Holds the client it talks through and the keychain
-/// token store; constructed once and managed as Tauri state.
+/// The cached account profile — persisted so the login gate works offline and can
+/// show who's signed in without a round-trip.
+const AUTH_USER_KEY: &str = "auth_user";
+
+/// Auth against the sync server. Holds the client it talks through, the keychain
+/// token store, and the settings store caching the account profile; constructed
+/// once and managed as Tauri state.
 pub struct AuthService {
     server_client: ServerClient,
     session_token_service: SessionTokenService,
+    settings_repository: SettingsRepository,
 }
 
 impl AuthService {
-    pub fn new(server_client: ServerClient, session_token_service: SessionTokenService) -> Self {
+    pub fn new(
+        server_client: ServerClient,
+        session_token_service: SessionTokenService,
+        settings_repository: SettingsRepository,
+    ) -> Self {
         Self {
             server_client,
             session_token_service,
+            settings_repository,
         }
     }
 
@@ -36,6 +49,7 @@ impl AuthService {
         if response.status().is_success() {
             let (user, token) = read_session(response).await?;
             self.session_token_service.store(&token)?;
+            self.cache_user(&user)?;
             return Ok(authenticated(user));
         }
 
@@ -120,15 +134,37 @@ impl AuthService {
         Ok(self.session_token_service.read()?.is_some())
     }
 
-    /// Best-effort server-side revocation, then drop the local token regardless — the
-    /// user is signed out on this device even if the server is unreachable.
+    /// Best-effort server-side revocation, then drop the local token and cached
+    /// profile regardless — the user is signed out on this device even if the
+    /// server is unreachable.
     pub async fn sign_out(&self) -> AppResult<()> {
         if let Some(token) = self.session_token_service.read()? {
             let _ = self.server_client.sign_out(token.as_str()).await;
         }
-        self.session_token_service.clear()
+        self.session_token_service.clear()?;
+        self.settings_repository.remove(AUTH_USER_KEY)
     }
 
+    /// The signed-in account on this device, or `None` when signed out. Offline-first:
+    /// it reads the local cache and trusts it only while the keychain still holds a
+    /// token, so app launch never blocks on the network.
+    pub fn current_session(&self) -> AppResult<Option<AuthUser>> {
+        if !self.is_authenticated()? {
+            return Ok(None);
+        }
+        let Some(json) = self.settings_repository.get(AUTH_USER_KEY)? else {
+            return Ok(None);
+        };
+        serde_json::from_str(&json)
+            .map(Some)
+            .map_err(|e| AppError::Auth(format!("could not read the cached account: {e}")))
+    }
+
+    fn cache_user(&self, user: &AuthUser) -> AppResult<()> {
+        let json = serde_json::to_string(user)
+            .map_err(|e| AppError::Auth(format!("could not cache the account: {e}")))?;
+        self.settings_repository.set(AUTH_USER_KEY, &json)
+    }
 }
 
 /// Pull the session out of a Better Auth sign-in/up response: the bearer token from

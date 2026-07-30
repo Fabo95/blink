@@ -2,32 +2,31 @@ use tauri::State;
 
 use crate::core::error::AppResult;
 use crate::core::models::{NewTask, Task};
-use crate::repository::{Repository, TaskPatch};
-use crate::services::ai::AiService;
+use crate::services::task_service::{TaskPatch, TaskService};
 
 #[tauri::command]
-pub fn list_tasks(repository: State<'_, Repository>) -> AppResult<Vec<Task>> {
-    repository.tasks.list()
+pub fn list_tasks(task_service: State<'_, TaskService>) -> AppResult<Vec<Task>> {
+    task_service.list()
 }
 
 #[tauri::command]
-pub fn save_task(repository: State<'_, Repository>, task: NewTask) -> AppResult<Task> {
-    repository.tasks.insert(task)
+pub fn save_task(task_service: State<'_, TaskService>, task: NewTask) -> AppResult<Task> {
+    task_service.save(task)
 }
 
 #[tauri::command]
-pub fn delete_task(repository: State<'_, Repository>, id: String) -> AppResult<()> {
-    repository.tasks.delete(&id)
+pub fn delete_task(task_service: State<'_, TaskService>, id: String) -> AppResult<()> {
+    task_service.delete(&id)
 }
 
 /// Swap the inbox order of two tasks (moving `first` and `second` past each other).
 #[tauri::command]
 pub fn reorder_task(
-    repository: State<'_, Repository>,
+    task_service: State<'_, TaskService>,
     first: String,
     second: String,
 ) -> AppResult<()> {
-    repository.tasks.swap_positions(&first, &second)
+    task_service.reorder(&first, &second)
 }
 
 /// Patch a task's mutable fields — text, completion, link (empty clears it), the
@@ -36,7 +35,7 @@ pub fn reorder_task(
 /// its own command (`improve_text`).
 #[tauri::command]
 pub fn update_task(
-    repository: State<'_, Repository>,
+    task_service: State<'_, TaskService>,
     id: String,
     text: Option<String>,
     completed: Option<bool>,
@@ -45,7 +44,7 @@ pub fn update_task(
     improved: Option<bool>,
     task_group_id: Option<String>,
 ) -> AppResult<Task> {
-    repository.tasks.update(
+    task_service.update(
         &id,
         TaskPatch {
             text,
@@ -56,17 +55,4 @@ pub fn update_task(
             task_group_id,
         },
     )
-}
-
-/// Improve a task's text with AI and persist the cleaned-up result, marking it
-/// improved so it isn't offered again.
-#[tauri::command]
-pub async fn improve_task(
-    repository: State<'_, Repository>,
-    ai_service: State<'_, AiService>,
-    id: String,
-    text: String,
-) -> AppResult<Task> {
-    let improved = ai_service.improve(text).await?;
-    repository.tasks.mark_improved(&id, &improved)
 }

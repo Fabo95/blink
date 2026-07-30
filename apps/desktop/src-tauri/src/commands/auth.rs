@@ -4,27 +4,17 @@
 
 use tauri::State;
 
-use crate::core::error::{AppError, AppResult};
+use crate::core::error::AppResult;
 use crate::core::models::{AuthResult, AuthUser};
-use crate::repository::Repository;
-use crate::services::auth::AuthService;
-
-/// The cached account profile — persisted so the login gate works offline and can
-/// show who's signed in without a round-trip.
-const AUTH_USER_KEY: &str = "auth_user";
+use crate::services::auth_service::AuthService;
 
 #[tauri::command]
 pub async fn sign_in(
     auth_service: State<'_, AuthService>,
-    repository: State<'_, Repository>,
     email: String,
     password: String,
 ) -> AppResult<AuthResult> {
-    let result = auth_service.sign_in(email, password).await?;
-    if let Some(user) = &result.user {
-        cache_user(&repository, user)?;
-    }
-    Ok(result)
+    auth_service.sign_in(email, password).await
 }
 
 #[tauri::command]
@@ -34,7 +24,6 @@ pub async fn sign_up(
     password: String,
     name: String,
 ) -> AppResult<AuthResult> {
-    // Verification-required: no session yet, so nothing to cache.
     auth_service.sign_up(email, password, name).await
 }
 
@@ -74,35 +63,14 @@ pub async fn reset_password(
 }
 
 #[tauri::command]
-pub async fn sign_out(
-    auth_service: State<'_, AuthService>,
-    repository: State<'_, Repository>,
-) -> AppResult<()> {
-    auth_service.sign_out().await?;
-    repository.settings.remove(AUTH_USER_KEY)
+pub async fn sign_out(auth_service: State<'_, AuthService>) -> AppResult<()> {
+    auth_service.sign_out().await
 }
 
 /// The signed-in account on this device, or `None` when signed out. Offline-first:
 /// it reads the local cache and trusts it only while the keychain still holds a
 /// token, so app launch never blocks on the network.
 #[tauri::command]
-pub fn current_session(
-    auth_service: State<'_, AuthService>,
-    repository: State<'_, Repository>,
-) -> AppResult<Option<AuthUser>> {
-    if !auth_service.is_authenticated()? {
-        return Ok(None);
-    }
-    let Some(json) = repository.settings.get(AUTH_USER_KEY)? else {
-        return Ok(None);
-    };
-    serde_json::from_str(&json)
-        .map(Some)
-        .map_err(|e| AppError::Auth(format!("could not read the cached account: {e}")))
-}
-
-fn cache_user(repository: &Repository, user: &AuthUser) -> AppResult<()> {
-    let json = serde_json::to_string(user)
-        .map_err(|e| AppError::Auth(format!("could not cache the account: {e}")))?;
-    repository.settings.set(AUTH_USER_KEY, &json)
+pub fn current_session(auth_service: State<'_, AuthService>) -> AppResult<Option<AuthUser>> {
+    auth_service.current_session()
 }

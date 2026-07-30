@@ -32,6 +32,7 @@ pub struct TaskPatch {
 
 /// The task repository — task-specific queries over the shared [`Db`]. Constructed
 /// by [`super::Repository`], which hands every repository the same connection.
+#[derive(Clone)]
 pub struct TaskRepository {
     db: Arc<Db>,
 }
@@ -108,21 +109,6 @@ impl TaskRepository {
         conn.execute("DELETE FROM tasks WHERE id = ?1", [id])
             .map_err(store_err)?;
         Ok(())
-    }
-
-    pub fn mark_improved(&self, id: &str, text: &str) -> AppResult<Task> {
-        let now = Utc::now().to_rfc3339();
-        let conn = self.db.lock()?;
-        let changed = conn
-            .execute(
-                "UPDATE tasks SET text = ?1, improved = 1, updated_at = ?2 WHERE id = ?3",
-                params![text, now, id],
-            )
-            .map_err(store_err)?;
-        if changed == 0 {
-            return Err(AppError::Store(format!("task {id} not found")));
-        }
-        fetch_one(&conn, id)
     }
 
     /// Apply a [`TaskPatch`], writing each `Some` field. Returns the updated task (or a

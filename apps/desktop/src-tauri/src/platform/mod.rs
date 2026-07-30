@@ -5,7 +5,7 @@
 
 pub mod os;
 pub mod shortcut;
-mod window;
+pub mod window;
 
 /// Register the capture-shortcut listener and bind every method's saved (or default)
 /// hotkey. A bad saved value is logged per method inside `bind_all`, never fatal.

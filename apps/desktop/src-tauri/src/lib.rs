@@ -12,10 +12,14 @@ use crate::clients::server_client::ServerClient;
 use crate::core::config::config;
 use crate::core::state::{PendingCapture, PendingSource};
 use crate::repository::Repository;
-use crate::services::ai::AiService;
-use crate::services::auth::AuthService;
-use crate::services::security::SecurityService;
-use crate::services::session_token::SessionTokenService;
+use crate::services::ai_service::AiService;
+use crate::services::auth_service::AuthService;
+use crate::services::capture_service::CaptureService;
+use crate::services::security_service::SecurityService;
+use crate::services::session_token_service::SessionTokenService;
+use crate::services::shortcut_service::ShortcutService;
+use crate::services::task_group_service::TaskGroupService;
+use crate::services::task_service::TaskService;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -29,9 +33,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
-        .manage(SecurityService::with_defaults())
-        .manage(AuthService::new(ServerClient::new(), SessionTokenService::new()))
-        // `None` when OPENAI_API_KEY isn't set — the improve command reports that.
+        .manage(CaptureService::new(SecurityService::with_defaults()))
         .manage(AiService::new(
             config().openai_api_key.clone().map(OpenAiClient::new),
         ))
@@ -48,7 +50,21 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir)
                 .map_err(|e| format!("could not create data dir: {e}"))?;
 
-            app.manage(Repository::open(&data_dir.join("blink.db"))?);
+            let repository = Repository::open(&data_dir.join("blink.db"))?;
+
+            // The DB-backed services are built here (not up top with the others)
+            // because their repositories only exist once the Repository is open.
+            app.manage(AuthService::new(
+                ServerClient::new(),
+                SessionTokenService::new(),
+                repository.settings.clone(),
+            ));
+            app.manage(TaskService::new(repository.tasks.clone()));
+            app.manage(TaskGroupService::new(
+                repository.task_groups.clone(),
+                repository.settings.clone(),
+            ));
+            app.manage(ShortcutService::new(repository.settings.clone()));
 
             platform::init(app)?;
             Ok(())
@@ -71,7 +87,6 @@ pub fn run() {
             commands::tasks::delete_task,
             commands::tasks::reorder_task,
             commands::tasks::update_task,
-            commands::tasks::improve_task,
             commands::task_groups::list_task_groups,
             commands::task_groups::create_task_group,
             commands::task_groups::rename_task_group,
