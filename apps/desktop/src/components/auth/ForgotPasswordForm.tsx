@@ -17,7 +17,7 @@ export function ForgotPasswordForm({ flow }: { flow: LoginFlow }) {
         busy={busy}
         onSubmit={() => void submitResetRequest()}
         actions={
-          <AuthAction display="Esc" hotkey="escape" label="back to sign in" onAction={back} />
+          <AuthAction display="Esc" command="auth.back" label="back to sign in" onAction={back} />
         }
       >
         <Field label="Email" id="email">

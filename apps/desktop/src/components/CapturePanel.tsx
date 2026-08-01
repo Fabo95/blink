@@ -1,7 +1,5 @@
 import { Check, ChevronDown, Link2, ShieldCheck, Tag, WandSparkles } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useHotkeys } from 'react-hotkeys-hook';
-import { ShortcutHint } from '@/components/ShortcutHint';
 import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
@@ -16,6 +14,8 @@ import type { CaptureSource } from '@/generated/CaptureSource';
 import type { TaskGroup } from '@/generated/TaskGroup';
 import { api, isTauri } from '@/lib/api';
 import { normalizeLink } from '@/lib/link';
+import { Hints } from '@/lib/shortcuts/Hints';
+import { useShortcut } from '@/lib/shortcuts/useShortcut';
 
 /** The initial content a capture method drops into the panel when it opens. */
 export interface CaptureContent {
@@ -143,23 +143,16 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
     return () => unlisten?.();
   }, [load, kind.openEvent]);
 
-  // Esc cancels, ⌘↵ saves — enabled inside the fields (the panel is basically a form).
-  useHotkeys('escape', () => void hide(), {
-    enabled: !groupMenuOpen,
-    enableOnFormTags: true,
-    preventDefault: true,
-  });
-  useHotkeys('mod+enter', () => void save(), { enableOnFormTags: true, preventDefault: true });
-  useHotkeys('mod+i', () => void improve(), {
+  useShortcut('capture.save', { callback: () => void save() });
+  useShortcut('capture.improve', {
     enabled: !improved && !improving,
-    enableOnFormTags: true,
-    preventDefault: true,
+    callback: () => void improve(),
   });
-  useHotkeys('mod+g', () => setGroupMenuOpen((open) => !open), {
+  useShortcut('capture.group', {
     enabled: groups.length > 0,
-    enableOnFormTags: true,
-    preventDefault: true,
+    callback: () => setGroupMenuOpen((open) => !open),
   });
+  useShortcut('capture.cancel', { enabled: !groupMenuOpen, callback: () => void hide() });
 
   const showSource = kind.showSource && source && (source.appName || source.windowTitle);
 
@@ -259,14 +252,7 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
         {error && <p className="line-clamp-2 text-[11px] text-destructive">{error}</p>}
 
         <div className="flex items-center justify-between gap-2">
-          <ShortcutHint
-            shortcuts={[
-              ...(improved ? [] : [{ keys: '⌘i', label: 'improve' }]),
-              ...(groups.length > 0 ? [{ keys: '⌘g', label: 'group' }] : []),
-              { keys: '⌘↵', label: 'save' },
-              { keys: 'Esc', label: 'cancel' },
-            ]}
-          />
+          <Hints />
           {improving ? (
             <span className="flex items-center gap-1.5 text-[11px] text-blink-bright">
               <WandSparkles className="size-3 animate-pulse" />

@@ -61,7 +61,9 @@ export function ShortcutRecorder({ method, value, onChange }: ShortcutRecorderPr
       {recording ? (
         <span className="text-[11px]">Press keys…</span>
       ) : value ? (
-        <Kbd className={cn(error && 'border-destructive/50 text-destructive')}>{display(value)}</Kbd>
+        <Kbd className={cn(error && 'border-destructive/50 text-destructive')}>
+          {display(value)}
+        </Kbd>
       ) : (
         <span className="text-[11px]">—</span>
       )}

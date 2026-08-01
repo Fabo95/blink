@@ -1,108 +1,51 @@
 import { useRef, useState } from 'react';
-import { useHotkeys } from 'react-hotkeys-hook';
+import { useShortcut } from '@/lib/shortcuts/useShortcut';
 
-interface ListCursorActions<T> {
-  /** Primary action (↵) — the cursor advances to a neighbour first, since it removes the item. */
-  onEnter?: (item: T) => void;
-  /** Edit action (e / i) — keeps the cursor in place. */
-  onEdit?: (item: T) => void;
-  /** Delete action (⌫ / Del / d) — the cursor is left in place (the caller may confirm first). */
-  onDelete?: (item: T) => void;
-  /** Open-link action (o) — leaves the cursor in place. */
-  onOpenLink?: (item: T) => void;
-  /** Move the focused item up (⌥↑ / ⌥K) — the cursor follows it, so it stays put. */
-  onMoveUp?: (item: T) => void;
-  /** Move the focused item down (⌥↓ / ⌥J). */
-  onMoveDown?: (item: T) => void;
-  /** Suspend all shortcuts (e.g. while an editor is open). */
-  disabled?: boolean;
+interface Options {
+  /** False while an overlay (editor, dialog, prompt) owns the keyboard. */
+  enabled: boolean;
 }
 
 /**
  * A keyboard "cursor" over a list — a virtual selection held in state, not real DOM
- * focus, so the rows needn't be focusable. Key binding is delegated to
- * `react-hotkeys-hook` (which ignores typing in form fields for free); this hook owns
- * only the cursor position and the movement/action semantics.
- *
- * `↑`/`↓` (or `j`/`k`) move it — the first press from nothing lands on the top item.
- * `↵` runs `onEnter`, `e`/`i` run `onEdit`, `⌫`/`Del`/`d` run `onDelete`, `Esc` clears
- * the cursor. A stable ref feeds the handlers fresh state, so nothing re-binds on render.
+ * focus, so the rows needn't be focusable. This hook owns only the cursor: movement
+ * (`↑↓`/`jk`, first press lands on the top item), `Esc` (unselect), and `advance()` for
+ * actions that remove the focused item. The per-item actions themselves are shortcuts
+ * the caller enables — it has the item data their hints need.
  */
-export function useListCursor<T>(
-  items: T[],
-  getId: (item: T) => string,
-  actions: ListCursorActions<T> = {},
-) {
+export function useListCursor<T>(items: T[], getId: (item: T) => string, { enabled }: Options) {
   const [focusedId, setFocusedId] = useState<string | null>(null);
-  const ref = useRef({ items, getId, focusedId, actions });
-  ref.current = { items, getId, focusedId, actions };
-
-  const enabled = !actions.disabled;
-  const canAct = enabled && focusedId !== null;
+  const ref = useRef({ items, getId, focusedId });
+  ref.current = { items, getId, focusedId };
 
   const move = (delta: number) => {
     const { items, getId, focusedId } = ref.current;
     if (items.length === 0) return;
     const idx = items.findIndex((item) => getId(item) === focusedId);
-    const next = idx === -1 ? 0 : Math.min(Math.max(idx + delta, 0), items.length - 1);
-    setFocusedId(getId(items[next]));
+    const next = items[idx === -1 ? 0 : Math.min(Math.max(idx + delta, 0), items.length - 1)];
+    if (next !== undefined) setFocusedId(getId(next));
   };
 
-  const act = (
-    pick: (a: ListCursorActions<T>) => ((item: T) => void) | undefined,
-    advance: boolean,
-  ) => {
-    const { items, getId, focusedId, actions } = ref.current;
+  /** Move the cursor to a neighbour before the focused item leaves the list. */
+  const advance = () => {
+    const { items, getId, focusedId } = ref.current;
     const idx = items.findIndex((item) => getId(item) === focusedId);
     if (idx === -1) return;
-    if (advance) {
-      // Move to a neighbour before the item leaves, so the cursor keeps its place.
-      const neighbour = items[idx + 1] ?? items[idx - 1] ?? null;
-      setFocusedId(neighbour ? getId(neighbour) : null);
-    }
-    pick(actions)?.(items[idx]);
+    const neighbour = items[idx + 1] ?? items[idx - 1] ?? null;
+    setFocusedId(neighbour ? getId(neighbour) : null);
   };
 
-  // Radix dialogs/menus trap focus but keydowns still reach this document-level handler;
-  // ignore keys that came from inside one, so an open overlay's own shortcuts win.
-  const guard = (fn: () => void) => (e: KeyboardEvent) => {
-    const target = e.target;
-    if (target instanceof HTMLElement && target.closest('[role="dialog"], [role="alertdialog"], [role="menu"]')) {
-      return;
-    }
-    fn();
-  };
+  const focused = items.find((item) => getId(item) === focusedId) ?? null;
 
-  // preventDefault so a key that opens the editor / deletes doesn't also type into the
-  // field that just autofocused (or trigger a browser back-nav on Backspace).
-  useHotkeys('down, j', guard(() => move(1)), { enabled, preventDefault: true });
-  useHotkeys('up, k', guard(() => move(-1)), { enabled, preventDefault: true });
-  useHotkeys('escape', guard(() => setFocusedId(null)), { enabled: canAct });
-  useHotkeys('enter', guard(() => act((a) => a.onEnter, true)), {
-    enabled: canAct,
-    preventDefault: true,
+  useShortcut('cursor.down', {
+    enabled: enabled && items.length > 0,
+    callback: () => move(1),
   });
-  useHotkeys('e, i', guard(() => act((a) => a.onEdit, false)), {
-    enabled: canAct,
-    preventDefault: true,
-  });
-  useHotkeys('o', guard(() => act((a) => a.onOpenLink, false)), {
-    enabled: canAct,
-    preventDefault: true,
-  });
-  useHotkeys('backspace, delete, d', guard(() => act((a) => a.onDelete, false)), {
-    enabled: canAct,
-    preventDefault: true,
-  });
-  // ⌥↑/⌥↓ (or ⌥K/⌥J) reorder without moving the cursor off the item (it keeps the same id).
-  useHotkeys('alt+up, alt+k', guard(() => act((a) => a.onMoveUp, false)), {
-    enabled: canAct,
-    preventDefault: true,
-  });
-  useHotkeys('alt+down, alt+j', guard(() => act((a) => a.onMoveDown, false)), {
-    enabled: canAct,
-    preventDefault: true,
+  useShortcut('cursor.up', { enabled: enabled && items.length > 0, callback: () => move(-1) });
+  useShortcut('cursor.unselect', {
+    enabled: enabled && focusedId !== null,
+    callback: () => setFocusedId(null),
   });
 
-  return { focusedId, setFocusedId };
+  return { focusedId, setFocusedId, focused, advance };
 }

@@ -45,7 +45,7 @@ components/
   auth/             LoginScreen, CredentialsForm, VerifyForm, ForgotPasswordForm,
                     ResetPasswordForm, AuthCard, Field
   tasks/            TaskSection, ArchiveSection, TaskRow, TaskEditor, GroupFilterBar,
-                    DeleteTaskDialog, DeleteGroupDialog, shared hints.ts
+                    DeleteTaskDialog, DeleteGroupDialog
   CapturePanel.tsx  shared capture UI; CopyCapture/ManualCapture are thin config wrappers
   TaskList.tsx      inbox orchestrator (cursor + delete flow + group filter)
 hooks/              useTaskEditor, useTaskGroups, useArchive, useListCursor, useSession
@@ -148,23 +148,35 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   Editing is an in-row **Popover** (text/source/link/group fields; `⇥`/`⇧⇥` move between the
   fields and wrap, `⌘↵` save, `⌘I` improve, `Esc` cancel). There are **no action buttons** —
   every action is a shortcut; rows also click-to-select and double-click-to-complete.
-  `useListCursor` ignores keys originating inside a `[role=dialog|menu|alertdialog]`, so an
-  open overlay keeps its own keys.
-  - **Hint placement is a three-tier system.** (1) The footer **statusline** is the one fixed
-    home for browsing shortcuts and is context-aware — it shows only what currently works
-    (navigate when rows exist; `↵ complete`/`restore` + edit/open/delete/reorder for the
-    focused row, `o` only with a link, reorder only in the open Inbox; `/`+`←→ page` with the
-    archive open, else `←→ filter`; `Esc` last; empty while an overlay owns the keyboard).
-    Built by `statuslineShortcuts` (`components/tasks/hints.ts`), published by `TaskList`
-    through the `lib/statusline.ts` store (same external-store pattern as `hintStyle`),
-    rendered in `Inbox`'s footer next to the always-live `v` dialect toggle. (2) Section
-    headers carry only their toggle chip (`b`/`c`/`a`) — no hint rows. (3) Overlays that own
-    the keyboard (editor popover, dialogs, group name prompt, capture panels, auth forms)
-    keep control-local rows; the filter bar keeps its management keys (`n`/`r`/`⌘⌫`).
+  - **Shortcuts are declared once** (`lib/shortcuts/`). The **`KEYMAP`** table (`keymap.ts`)
+    is the single place keys are assigned — every entry owns its keys (synonyms
+    comma-separated), statusline chip (`hint`; `null` = surfaced by a control-local chip),
+    and `ORDER` slot, so conflicts are visible at a glance. The **`ShortcutProvider`**
+    (one per window, `main.tsx`) binds every KEYMAP entry once — a static `KeyBinding`
+    per row, `enabled`/`callback` looked up at keypress — so components never touch the
+    key engine (`react-hotkeys-hook` appears only inside the provider; never call
+    `useHotkeys` elsewhere). Components contribute only behavior:
+    `useShortcut(id, { enabled, callback, hint? })` (`hint` overrides for dynamic labels
+    like `↵ complete`/`restore`); `enabled` gates BOTH firing and the chip.
+  - **There is no scope system.** A shortcut works exactly while a mounted component
+    keeps it enabled: mounting separates the windows/screens, and overlay exclusivity is
+    plain `enabled` logic — `TaskList` computes one `enabled` boolean (`no editor, no
+    delete dialog, no group prompt`) and threads it into
+    `useListCursor`/`useArchive`/`useTaskGroups`, while each overlay's own shortcuts
+    enable on its open state. Entries sharing keys (Esc, `⌘↵`, `←→`/`hl`) rely on those
+    conditions being mutually exclusive.
+  - **The statusline is a view over the provider's table.** The footer (and the in-card
+    rows in capture/auth) render `<Hints />` — `useHints()` subscribes and returns the
+    chips of every enabled entry (`ORDER`-sorted, KEYMAP order breaking ties), so the row
+    always shows exactly what works right now, overlays included. A key surfaced by a
+    control-local chip declares `hint: null` in the KEYMAP (section toggles `b`/`c`/`a`,
+    filter-bar `n`/`r`/`⌘⌫`, the sign-out menu item, clickable `AuthAction`s).
   - **Structure**: `TaskList` is a thin orchestrator (owns the cursor, delete flow, and group
     filter) that composes `components/tasks/` presentational pieces. Stateful logic lives in
-    hooks: `useTaskEditor` (draft fields + `⌘I`/`⌘↵`), `useTaskGroups` (filter + group CRUD),
-    `useArchive` (open/search/pagination + `a`/`←→`). Pure helpers in `lib/completed.ts`.
+    hooks: `useTaskEditor` (editor shortcuts: `⇥`/`⌘i`/`⌘↵`/`Esc`), `useTaskGroups` (filter +
+    group CRUD + its prompt/dialog shortcuts), `useArchive` (open/search/pagination),
+    `useListCursor` (cursor + movement; the per-row shortcuts live in `TaskList`, which has
+    the task data their hints need). Pure helpers in `lib/completed.ts`.
 - **Task groups**: tasks optionally belong to one group (`tasks.task_group_id`, FK
   `ON DELETE SET NULL`; migration 6). `TaskGroupRepository` owns CRUD (names unique + non-empty;
   `delete` explicitly un-groups its tasks); commands are `list/create/rename/delete_task_group`
@@ -210,19 +222,20 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   SessionTokenService`) — not an abbreviation like `client`/`tokens`. One file per service/client,
   named after it (`auth_service.rs`, `server_client.rs`). Commands never touch a repository —
   always through a service; services never import `tauri`.
-- **No buttons, anywhere.** Every action is a keyboard shortcut, surfaced via `ShortcutHint`.
+- **No buttons, anywhere.** Every action is a keyboard shortcut, surfaced via `HintRow`.
   **`⌘↵` confirms** every commit/destructive action (save, delete-task, delete-group) — never
   plain `Enter`. Mouse affordances (pill click, row double-click) are secondary and stay out of
   the focus flow (`tabIndex={-1}` + `preventDefault` on mousedown).
 - **No emoji in the app UI.** Icons via `lucide-react`. One cursor everywhere (`cursor: default`),
   UI text not selectable.
-- **Keyboard shortcuts go through `react-hotkeys-hook`** — never a hand-rolled
-  `window.addEventListener('keydown', …)`. List/cursor navigation is the `useListCursor`
-  hook (built on it). The one exception is `ShortcutRecorder`, which *records* arbitrary
-  combos (not a fixed binding). Use `enableOnFormTags` when a shortcut must fire while a
-  field is focused (capture panels, editor `⌘↵`).
+- **Keyboard shortcuts go through the `KEYMAP`** (`lib/shortcuts/keymap.ts`): add the entry
+  there, enable it with `useShortcut(id, { when, run })` — never raw `useHotkeys` or a
+  hand-rolled `window.addEventListener('keydown', …)`. The exceptions: `ShortcutRecorder`
+  (*records* arbitrary combos, not a fixed binding) and input-local `onKeyDown` behavior
+  (the archive search's Esc-to-clear). Set `opts.enableOnFormTags` on the keymap entry
+  when a command must fire while a field is focused (capture panels, editor, auth forms).
 - **Render keys with the shared `Kbd` chip** (`components/ui/kbd.tsx`), and a row of
-  key+label hints with `ShortcutHint` (`components/ShortcutHint.tsx`) — never plain
+  key+label hints with `HintRow` (`components/HintRow.tsx`) — never plain
   `Esc · ⌘↵` text. Keeps every shortcut hint identical across the app. A `Shortcut` may
   carry a `vim` synonym (`{ keys: '↑↓', vim: 'jk' }`); `v` in the main window flips every
   chip between the two dialects (`lib/hintStyle.ts`, webview-local — both keys always work

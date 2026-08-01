@@ -2,7 +2,7 @@ import { Kbd } from '@/components/ui/kbd';
 import { useHintStyle } from '@/lib/hintStyle';
 import { cn } from '@/lib/utils';
 
-export interface Shortcut {
+export interface Hint {
   keys: string;
   vim?: string;
   label: string;
@@ -11,13 +11,7 @@ export interface Shortcut {
 /** A row of `key — label` hints, rendered consistently wherever shortcuts are surfaced
  *  (inbox header, capture panels, editor footer). `v` flips the display between the
  *  standard keys and their vim synonyms — the bindings themselves always accept both. */
-export function ShortcutHint({
-  shortcuts,
-  className,
-}: {
-  shortcuts: Shortcut[];
-  className?: string;
-}) {
+export function HintRow({ hints, className }: { hints: Hint[]; className?: string }) {
   const style = useHintStyle();
   return (
     <div
@@ -26,10 +20,10 @@ export function ShortcutHint({
         className,
       )}
     >
-      {shortcuts.map((shortcut) => (
-        <span key={shortcut.label} className="flex items-center gap-1">
-          <Kbd>{style === 'vim' && shortcut.vim ? shortcut.vim : shortcut.keys}</Kbd>
-          {shortcut.label}
+      {hints.map((hint) => (
+        <span key={hint.label} className="flex items-center gap-1">
+          <Kbd>{style === 'vim' && hint.vim ? hint.vim : hint.keys}</Kbd>
+          {hint.label}
         </span>
       ))}
     </div>

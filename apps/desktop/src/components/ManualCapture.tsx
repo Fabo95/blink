@@ -1,4 +1,4 @@
-import { CapturePanel, type CaptureKind } from '@/components/CapturePanel';
+import { type CaptureKind, CapturePanel } from '@/components/CapturePanel';
 import { api } from '@/lib/api';
 
 /**

@@ -1,7 +1,7 @@
 import { type RefObject, useEffect, useRef, useState } from 'react';
-import { useHotkeys } from 'react-hotkeys-hook';
 import type { Task } from '@/generated/Task';
 import { type DayGroup, groupByDay } from '@/lib/completed';
+import { useShortcut } from '@/lib/shortcuts/useShortcut';
 
 const PAGE_SIZE = 8;
 
@@ -24,19 +24,18 @@ export interface ArchiveView {
 }
 
 interface Options {
-  /** Gate the keyboard shortcuts while an editor or modal owns the keys. */
-  interactive: boolean;
+  /** False while an overlay (editor, dialog, prompt) owns the keyboard. */
+  enabled: boolean;
 }
 
 /**
  * The archive's view state over a list of older completions: expand/collapse, a text
  * search, and pagination, plus the `a` (toggle), `←→`/`hl` (page), and `/` (focus
- * search) shortcuts. While
- * the archive is open its pager owns the horizontal keys — TaskList only binds them to
- * the group filter when it's closed. Derivation is pure — the current page is sorted
- * most-recent-first, sliced, then day-grouped.
+ * search) shortcuts. While the archive is open its pager owns the horizontal keys —
+ * TaskList's filter cycle only enables when it's closed. Derivation is pure — the
+ * current page is sorted most-recent-first, sliced, then day-grouped.
  */
-export function useArchive(archived: Task[], { interactive }: Options): ArchiveView {
+export function useArchive(archived: Task[], { enabled }: Options): ArchiveView {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
@@ -69,12 +68,21 @@ export function useArchive(archived: Task[], { interactive }: Options): ArchiveV
     setPage(Math.max(0, Math.min(pageCount - 1, next)));
   };
 
-  useHotkeys('a', toggle, { enabled: interactive && archived.length > 0 });
-  const canPage = interactive && open;
-  useHotkeys('left, h', () => changePage(clampedPage - 1), { enabled: canPage });
-  useHotkeys('right, l', () => changePage(clampedPage + 1), { enabled: canPage });
-  // `/` (vim search) focuses the box; preventDefault keeps the slash out of the field.
-  useHotkeys('/', () => searchRef.current?.focus(), { enabled: canPage, preventDefault: true });
+  useShortcut('archive.toggle', { enabled: enabled && archived.length > 0, callback: toggle });
+  // `/` (vim search) focuses the box; the default preventDefault keeps the slash out of it.
+  useShortcut('archive.search', {
+    enabled: enabled && open,
+    callback: () => searchRef.current?.focus(),
+  });
+  const canPage = enabled && open && pageCount > 1;
+  useShortcut('archive.prevPage', {
+    enabled: canPage,
+    callback: () => changePage(clampedPage - 1),
+  });
+  useShortcut('archive.nextPage', {
+    enabled: canPage,
+    callback: () => changePage(clampedPage + 1),
+  });
 
   return {
     open,

@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { useHotkeys } from 'react-hotkeys-hook';
 import type { Task } from '@/generated/Task';
 import { api } from '@/lib/api';
 import { normalizeLink } from '@/lib/link';
+import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { errorMessage } from '@/lib/utils';
 
 export interface TaskEditor {
@@ -31,9 +31,25 @@ interface Options {
   setError: (message: string) => void;
 }
 
+// Native Tab moves between the editor's fields (`data-editor-field`); intercept only at
+// the ends to wrap, so focus stays inside the popover — Radix Popover doesn't trap it.
+function wrapEditorFields(e: KeyboardEvent) {
+  const fields = Array.from(document.querySelectorAll<HTMLElement>('[data-editor-field]'));
+  const first = fields[0];
+  const last = fields[fields.length - 1];
+  if (fields.length < 2 || first === undefined || last === undefined) return;
+  if (!e.shiftKey && e.target === last) {
+    e.preventDefault();
+    first.focus();
+  } else if (e.shiftKey && e.target === first) {
+    e.preventDefault();
+    last.focus();
+  }
+}
+
 /**
  * The in-row task editor's state machine: draft fields, the once-per-version AI-improve
- * flag, and the `⌘I` / `⌘↵` keys (bound here so they fire from inside the fields). Saving
+ * flag, and the editor scope's commands (`⇥` field-wrap / `⌘i` / `⌘↵` / `Esc`). Saving
  * sends only the fields that actually changed; an empty edit or link just cancels/clears.
  */
 export function useTaskEditor({ onSaved, setError }: Options): TaskEditor {
@@ -120,15 +136,21 @@ export function useTaskEditor({ onSaved, setError }: Options): TaskEditor {
     }
   };
 
-  useHotkeys('mod+i', () => void improve(), {
+  useShortcut('editor.field', { enabled: task !== null, callback: wrapEditorFields });
+  useShortcut('editor.improve', {
     enabled: task !== null && !improved,
-    enableOnFormTags: true,
-    preventDefault: true,
+    callback: () => void improve(),
   });
-  useHotkeys('mod+enter', () => void save(), {
+  useShortcut('editor.save', { enabled: task !== null, callback: () => void save() });
+  useShortcut('editor.cancel', {
     enabled: task !== null,
-    enableOnFormTags: true,
-    preventDefault: true,
+    callback: (e) => {
+      // Esc inside the open group-picker menu closes the menu (Radix); only a bare Esc
+      // cancels the editor.
+      const target = e.target;
+      if (target instanceof HTMLElement && target.closest('[role="menu"]')) return;
+      cancel();
+    },
   });
 
   return {

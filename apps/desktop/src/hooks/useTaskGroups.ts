@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useHotkeys } from 'react-hotkeys-hook';
 import type { TaskGroup } from '@/generated/TaskGroup';
 import { api } from '@/lib/api';
+import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { errorMessage } from '@/lib/utils';
 
 export type GroupPrompt = 'create' | 'rename';
@@ -21,24 +21,24 @@ export interface TaskGroupsView {
   /** True while the delete-confirm dialog is open. */
   deleting: boolean;
   cancelDelete: () => void;
-  /** True while a prompt or the delete dialog owns the keyboard. */
+  /** True while the name prompt or the delete dialog owns the keyboard. */
   busy: boolean;
   error: string;
 }
 
 interface Options {
-  /** Gate the keyboard shortcuts while an editor or modal owns the keys. */
-  interactive: boolean;
+  /** False while another overlay (editor, task-delete dialog) owns the keyboard. */
+  enabled: boolean;
 }
 
 /**
  * The inbox's group filter: the list of groups, the selected one (persisted as the
  * `active_task_group` setting so capture windows default to it), and the keyboard-only
  * management flows — `n` creates, `r` renames, `⌘⌫` deletes (`⌘↵` confirms). Filter
- * cycling (`←→`/`hl`) is exposed as `cycle` and bound in TaskList, which knows when the
- * archive pager owns those keys. Deleting a group un-groups its tasks, so no data is lost.
+ * cycling (`←→`/`hl`) is exposed as `cycle` and enabled in TaskList, which knows when the
+ * archive pager owns those keys. Deleting a group un-groups its tasks.
  */
-export function useTaskGroups({ interactive }: Options): TaskGroupsView {
+export function useTaskGroups({ enabled }: Options): TaskGroupsView {
   const [groups, setGroups] = useState<TaskGroup[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState<GroupPrompt | null>(null);
@@ -46,9 +46,6 @@ export function useTaskGroups({ interactive }: Options): TaskGroupsView {
   const [error, setError] = useState('');
 
   const selected = groups.find((g) => g.id === selectedId) ?? null;
-  const busy = prompt !== null || deleting;
-  // The hook's own overlays suspend its shortcuts too, not just the parent's.
-  const enabled = interactive && !busy;
 
   // The filter persists across restarts; ignore a stale id whose group is gone.
   useEffect(() => {
@@ -111,17 +108,25 @@ export function useTaskGroups({ interactive }: Options): TaskGroupsView {
     }
   };
 
-  useHotkeys('n', () => setPrompt('create'), { enabled, preventDefault: true });
-  useHotkeys('r', () => setPrompt('rename'), { enabled: enabled && selected !== null });
-  useHotkeys('mod+backspace', () => setDeleting(true), {
-    enabled: enabled && selected !== null,
-    preventDefault: true,
+  // Management keys stand down while any overlay — including this hook's own prompt and
+  // delete dialog — owns the keyboard.
+  const busy = prompt !== null || deleting;
+  const manage = enabled && !busy;
+  useShortcut('group.new', { enabled: manage, callback: () => setPrompt('create') });
+  useShortcut('group.rename', {
+    enabled: manage && selected !== null,
+    callback: () => setPrompt('rename'),
   });
-  // The confirm dialog has no buttons — ⌘↵ confirms (Esc/backdrop cancel via Radix).
-  useHotkeys('mod+enter', () => void confirmDelete(), {
-    enabled: interactive && deleting,
-    preventDefault: true,
+  useShortcut('group.delete', {
+    enabled: manage && selected !== null,
+    callback: () => setDeleting(true),
   });
+  // The confirm dialog has no buttons — ⌘↵ confirms; Esc (also Radix's backdrop) cancels.
+  useShortcut('groupDelete.confirm', {
+    enabled: deleting,
+    callback: () => void confirmDelete(),
+  });
+  useShortcut('groupDelete.cancel', { enabled: deleting, callback: cancelDelete });
 
   return {
     groups,

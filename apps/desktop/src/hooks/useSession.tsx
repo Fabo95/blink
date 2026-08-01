@@ -109,7 +109,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       resetPassword,
       signOut,
     }),
-    [status, user, signIn, signUp, verifyOtp, resendOtp, requestPasswordReset, resetPassword, signOut],
+    [
+      status,
+      user,
+      signIn,
+      signUp,
+      verifyOtp,
+      resendOtp,
+      requestPasswordReset,
+      resetPassword,
+      signOut,
+    ],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

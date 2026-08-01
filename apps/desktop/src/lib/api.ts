@@ -266,10 +266,13 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       return undefined as T;
     }
     case 'reorder_task': {
-      const a = mockStore.findIndex((t) => t.id === args?.first);
-      const b = mockStore.findIndex((t) => t.id === args?.second);
-      if (a >= 0 && b >= 0) {
-        [mockStore[a], mockStore[b]] = [mockStore[b], mockStore[a]];
+      const first = mockStore.find((t) => t.id === args?.first);
+      const second = mockStore.find((t) => t.id === args?.second);
+      if (first && second) {
+        const a = mockStore.indexOf(first);
+        const b = mockStore.indexOf(second);
+        mockStore[a] = second;
+        mockStore[b] = first;
       }
       return undefined as T;
     }

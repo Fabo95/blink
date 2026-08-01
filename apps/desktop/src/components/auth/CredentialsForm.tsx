@@ -18,7 +18,7 @@ export function CredentialsForm({ flow }: { flow: LoginFlow }) {
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2">
           <AuthAction
             display="⌘n"
-            hotkey="mod+n"
+            command="auth.toggleMode"
             label={signup ? 'sign in instead' : 'create account'}
             onAction={toggleMode}
           />
@@ -34,7 +34,7 @@ export function CredentialsForm({ flow }: { flow: LoginFlow }) {
           !signup && (
             <AuthAction
               display="⌘f"
-              hotkey="mod+f"
+              command="auth.forgot"
               label="forgot password"
               onAction={forgotPassword}
               disabled={busy}

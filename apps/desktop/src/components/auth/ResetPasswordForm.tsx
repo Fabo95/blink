@@ -28,12 +28,12 @@ export function ResetPasswordForm({ flow }: { flow: LoginFlow }) {
           <>
             <AuthAction
               display="⌘r"
-              hotkey="mod+r"
+              command="auth.resend"
               label="resend code"
               onAction={() => void resend()}
               disabled={busy}
             />
-            <AuthAction display="Esc" hotkey="escape" label="back" onAction={back} />
+            <AuthAction display="Esc" command="auth.back" label="back" onAction={back} />
           </>
         }
       >

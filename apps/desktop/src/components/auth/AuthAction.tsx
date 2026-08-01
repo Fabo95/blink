@@ -1,26 +1,29 @@
-import { useHotkeys } from 'react-hotkeys-hook';
 import { Kbd } from '@/components/ui/kbd';
+import type { ShortcutId } from '@/lib/shortcuts/keymap';
+import { useShortcut } from '@/lib/shortcuts/useShortcut';
 
 interface AuthActionProps {
-  /** Kbd display, e.g. `⌘R`. */
+  command: ShortcutId;
+  /** Kbd display, e.g. `⌘r`. */
   display: string;
-  /** react-hotkeys binding, e.g. `mod+r`. */
-  hotkey: string;
   label: string;
   onAction: () => void;
   disabled?: boolean;
 }
 
 /**
- * A secondary auth action: the shortcut, its hint chip, and a Pill-style secondary
- * click affordance in one element (out of the tab order, focus stays in the form).
+ * A secondary auth action: the command, its chip, and a Pill-style secondary click
+ * affordance in one element (out of the tab order, focus stays in the form). The chip
+ * renders here (it must be clickable), so the keymap entry carries no hint.
  */
-export function AuthAction({ display, hotkey, label, onAction, disabled = false }: AuthActionProps) {
-  useHotkeys(hotkey, onAction, {
-    enabled: !disabled,
-    enableOnFormTags: true,
-    preventDefault: true,
-  });
+export function AuthAction({
+  command,
+  display,
+  label,
+  onAction,
+  disabled = false,
+}: AuthActionProps) {
+  useShortcut(command, { enabled: !disabled, callback: onAction });
 
   return (
     <button

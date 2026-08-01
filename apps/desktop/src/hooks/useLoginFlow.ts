@@ -47,8 +47,7 @@ export function useLoginFlow(): LoginFlow {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const setField = (key: keyof Fields, value: string) =>
-    setFields((f) => ({ ...f, [key]: value }));
+  const setField = (key: keyof Fields, value: string) => setFields((f) => ({ ...f, [key]: value }));
 
   const toggleMode = () => {
     setMode((m) => (m === 'signin' ? 'signup' : 'signin'));

@@ -12,7 +12,14 @@ interface TaskSectionProps {
 
 /** A collapsible titled section (Inbox, Completed) with a count. Shortcut hints live in
  *  the footer statusline, not on sections. */
-export function TaskSection({ title, toggleKey, open, onToggle, count, children }: TaskSectionProps) {
+export function TaskSection({
+  title,
+  toggleKey,
+  open,
+  onToggle,
+  count,
+  children,
+}: TaskSectionProps) {
   return (
     <CollapsibleSection
       title={title}

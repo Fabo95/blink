@@ -1,12 +1,6 @@
 import { brand } from '@blink/core/theme';
 import type { ReactNode } from 'react';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface AuthCardProps {
   description: ReactNode;

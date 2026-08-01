@@ -1,6 +1,4 @@
 import { Check, ChevronDown, WandSparkles } from 'lucide-react';
-import type { KeyboardEvent } from 'react';
-import { ShortcutHint } from '@/components/ShortcutHint';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,31 +18,13 @@ interface TaskEditorProps {
   groups: TaskGroup[];
 }
 
-// Let native Tab move between the fields (it reliably reaches every one); only intercept
-// at the ends to wrap, so focus stays inside the popover — Radix Popover doesn't trap it.
-// Fields opt in with `data-editor-field`.
-function cycleFields(e: KeyboardEvent<HTMLElement>) {
-  if (e.key !== 'Tab') return;
-  const fields = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[data-editor-field]'));
-  if (fields.length < 2) return;
-  const first = fields[0];
-  const last = fields[fields.length - 1];
-  if (!e.shiftKey && e.target === last) {
-    e.preventDefault();
-    first.focus();
-  } else if (e.shiftKey && e.target === first) {
-    e.preventDefault();
-    last.focus();
-  }
-}
-
-/** The in-row editor popover. Actions are keyboard-only (⇥ field / ⌘I / ⌘↵ / Esc). */
+/** The in-row editor popover. Its commands (⇥ field / ⌘i / ⌘↵ / Esc) are declared in
+ *  `useTaskEditor` and hinted by the statusline. */
 export function TaskEditor({ editor, error, groups }: TaskEditorProps) {
   return (
     <PopoverContent
       align="start"
       sideOffset={8}
-      onKeyDown={cycleFields}
       className="w-[var(--radix-popover-trigger-width)] p-3"
     >
       <Textarea
@@ -73,15 +53,7 @@ export function TaskEditor({ editor, error, groups }: TaskEditorProps) {
         {groups.length > 0 && <GroupField editor={editor} groups={groups} />}
       </div>
       {error && <p className="mt-2 line-clamp-2 text-[11px] text-destructive">{error}</p>}
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <ShortcutHint
-          shortcuts={[
-            { keys: '⇥', label: 'field' },
-            ...(editor.improved ? [] : [{ keys: '⌘i', label: 'improve' }]),
-            { keys: '⌘↵', label: 'save' },
-            { keys: 'Esc', label: 'cancel' },
-          ]}
-        />
+      <div className="mt-3 flex items-center justify-end">
         <ImproveStatus improving={editor.improving} improved={editor.improved} />
       </div>
     </PopoverContent>

@@ -1,10 +1,10 @@
 import { useRef } from 'react';
-import { useHotkeys } from 'react-hotkeys-hook';
-import { type Shortcut, ShortcutHint } from '@/components/ShortcutHint';
+import { type Hint, HintRow } from '@/components/HintRow';
 import { DeleteGroupDialog } from '@/components/tasks/DeleteGroupDialog';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import type { TaskGroupsView } from '@/hooks/useTaskGroups';
+import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { cn } from '@/lib/utils';
 
 /**
@@ -16,16 +16,17 @@ import { cn } from '@/lib/utils';
  */
 export function GroupFilterBar({ view }: { view: TaskGroupsView }) {
   const promptInputRef = useRef<HTMLInputElement>(null);
-  // ⌘↵ confirms, matching the app-wide save/confirm key (enableOnFormTags so it fires
-  // while the prompt's field is focused).
-  useHotkeys('mod+enter', () => void view.submitPrompt(promptInputRef.current?.value ?? ''), {
+  // The name prompt's commands live here because the (uncontrolled) input does; the
+  // `group-prompt` scope itself is activated by useTaskGroups.
+  useShortcut('groupPrompt.submit', {
+    hint: { keys: '⌘↵', label: view.prompt === 'rename' ? 'rename group' : 'create group' },
     enabled: view.prompt !== null,
-    enableOnFormTags: true,
-    preventDefault: true,
+    callback: () => void view.submitPrompt(promptInputRef.current?.value ?? ''),
   });
+  useShortcut('groupPrompt.cancel', { enabled: view.prompt !== null, callback: view.closePrompt });
 
   // Management keys only — the movement key (←→ filter) lives in the footer statusline.
-  const shortcuts: Shortcut[] = [
+  const hints: Hint[] = [
     { keys: 'n', label: 'new' },
     ...(view.selected
       ? [
@@ -70,17 +71,10 @@ export function GroupFilterBar({ view }: { view: TaskGroupsView }) {
             {view.error && (
               <p className="mt-2 line-clamp-2 text-[11px] text-destructive">{view.error}</p>
             )}
-            <ShortcutHint
-              className="mt-2"
-              shortcuts={[
-                { keys: '⌘↵', label: view.prompt === 'rename' ? 'rename' : 'create' },
-                { keys: 'Esc', label: 'cancel' },
-              ]}
-            />
           </PopoverContent>
         )}
       </Popover>
-      <ShortcutHint className="pt-1.5" shortcuts={shortcuts} />
+      <HintRow className="pt-1.5" hints={hints} />
       {view.error && view.prompt === null && (
         <p className="line-clamp-2 text-[11px] text-destructive">{view.error}</p>
       )}

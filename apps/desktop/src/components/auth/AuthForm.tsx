@@ -1,6 +1,6 @@
 import { type ReactNode, useRef } from 'react';
-import { useHotkeys } from 'react-hotkeys-hook';
-import { ShortcutHint } from '@/components/ShortcutHint';
+import { Hints } from '@/lib/shortcuts/Hints';
+import { useShortcut } from '@/lib/shortcuts/useShortcut';
 
 interface AuthFormProps {
   /** Submit verb — becomes the ⌘↵ hint label (lowercased). */
@@ -30,10 +30,10 @@ export function AuthForm({
   children,
 }: AuthFormProps) {
   const formRef = useRef<HTMLFormElement>(null);
-  useHotkeys('mod+enter', () => formRef.current?.requestSubmit(), {
+  useShortcut('auth.submit', {
+    hint: { keys: '⌘↵', label: label.toLowerCase() },
     enabled: !disabled,
-    enableOnFormTags: true,
-    preventDefault: true,
+    callback: () => formRef.current?.requestSubmit(),
   });
 
   return (
@@ -51,10 +51,10 @@ export function AuthForm({
       className="space-y-4"
     >
       {children}
-      {/* One row, hints left (matching ShortcutHint's spacing), busy status right. */}
+      {/* One row, hints left (registry chip + clickable secondary actions), busy right. */}
       <div className="flex items-center justify-between gap-2 pt-1">
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-          <ShortcutHint shortcuts={[{ keys: '⌘↵', label: label.toLowerCase() }]} />
+          <Hints />
           {actions}
         </div>
         {busy && <span className="shrink-0 text-[11px] text-muted-foreground">{busyLabel}</span>}

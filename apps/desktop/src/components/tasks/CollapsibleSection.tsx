@@ -34,7 +34,11 @@ export function CollapsibleSection({
   return (
     <Card className="panel">
       <CardHeader className={cn(open && headerExtra ? 'space-y-2.5' : 'space-y-0')}>
-        <button type="button" onClick={onToggle} className="flex w-full items-center justify-between">
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex w-full items-center justify-between"
+        >
           <span className="flex items-center gap-2">
             <span className="section-bar text-sm font-semibold uppercase tracking-wide text-primary">
               {title}

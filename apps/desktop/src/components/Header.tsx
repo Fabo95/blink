@@ -1,5 +1,4 @@
 import { brand } from '@blink/core/theme';
-import { useHotkeys } from 'react-hotkeys-hook';
 import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
@@ -9,9 +8,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import type { AuthUser } from '@/generated/AuthUser';
 import { Kbd } from '@/components/ui/kbd';
+import type { AuthUser } from '@/generated/AuthUser';
 import { isTauri } from '@/lib/api';
+import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { cn } from '@/lib/utils';
 
 interface HeaderProps {
@@ -20,8 +20,9 @@ interface HeaderProps {
 }
 
 export function Header({ account, onSignOut }: HeaderProps) {
-  // ⌘⇧Q signs out (mirrors macOS's own log-out chord); the menu item shows the hint.
-  useHotkeys('mod+shift+q', onSignOut, { preventDefault: true });
+  // ⌘⇧q signs out (mirrors macOS's own log-out chord) — always on, surfaced by the menu
+  // item's chip rather than the statusline.
+  useShortcut('app.signOut', { callback: onSignOut });
 
   return (
     <header

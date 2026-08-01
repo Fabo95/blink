@@ -1,4 +1,3 @@
-import { ShortcutHint } from '@/components/ShortcutHint';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -13,8 +12,8 @@ interface DeleteTaskDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-/** Confirm-before-delete modal. It has no buttons — ⌘↵ confirms (bound by the parent),
- *  Esc / backdrop cancel via Radix. */
+/** Confirm-before-delete modal. It has no buttons — ⌘↵ confirms, Esc cancels (commands
+ *  bound by the parent, hinted by the statusline). */
 export function DeleteTaskDialog({ task, onOpenChange }: DeleteTaskDialogProps) {
   return (
     <AlertDialog open={task !== null} onOpenChange={onOpenChange}>
@@ -25,13 +24,6 @@ export function DeleteTaskDialog({ task, onOpenChange }: DeleteTaskDialogProps) 
             “{task?.text}” will be permanently deleted. This can't be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <ShortcutHint
-          className="justify-center pt-1"
-          shortcuts={[
-            { keys: '⌘↵', label: 'delete' },
-            { keys: 'Esc', label: 'cancel' },
-          ]}
-        />
       </AlertDialogContent>
     </AlertDialog>
   );
