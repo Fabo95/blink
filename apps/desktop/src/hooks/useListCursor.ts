@@ -2,17 +2,17 @@ import { useRef, useState } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 
 interface ListCursorActions<T> {
-  /** Primary action (⏎) — the cursor advances to a neighbour first, since it removes the item. */
+  /** Primary action (↵) — the cursor advances to a neighbour first, since it removes the item. */
   onEnter?: (item: T) => void;
-  /** Edit action (e) — keeps the cursor in place. */
+  /** Edit action (e / i) — keeps the cursor in place. */
   onEdit?: (item: T) => void;
-  /** Delete action (⌫ / Del) — the cursor is left in place (the caller may confirm first). */
+  /** Delete action (⌫ / Del / d) — the cursor is left in place (the caller may confirm first). */
   onDelete?: (item: T) => void;
   /** Open-link action (o) — leaves the cursor in place. */
   onOpenLink?: (item: T) => void;
-  /** Move the focused item up (⌥↑) — the cursor follows it, so it stays put. */
+  /** Move the focused item up (⌥↑ / ⌥K) — the cursor follows it, so it stays put. */
   onMoveUp?: (item: T) => void;
-  /** Move the focused item down (⌥↓). */
+  /** Move the focused item down (⌥↓ / ⌥J). */
   onMoveDown?: (item: T) => void;
   /** Suspend all shortcuts (e.g. while an editor is open). */
   disabled?: boolean;
@@ -25,8 +25,8 @@ interface ListCursorActions<T> {
  * only the cursor position and the movement/action semantics.
  *
  * `↑`/`↓` (or `j`/`k`) move it — the first press from nothing lands on the top item.
- * `⏎` runs `onEnter`, `e` runs `onEdit`, `⌫`/`Del` runs `onDelete`, `Esc` clears the
- * cursor. A stable ref feeds the handlers fresh state, so nothing re-binds on render.
+ * `↵` runs `onEnter`, `e`/`i` run `onEdit`, `⌫`/`Del`/`d` run `onDelete`, `Esc` clears
+ * the cursor. A stable ref feeds the handlers fresh state, so nothing re-binds on render.
  */
 export function useListCursor<T>(
   items: T[],
@@ -82,7 +82,7 @@ export function useListCursor<T>(
     enabled: canAct,
     preventDefault: true,
   });
-  useHotkeys('e', guard(() => act((a) => a.onEdit, false)), {
+  useHotkeys('e, i', guard(() => act((a) => a.onEdit, false)), {
     enabled: canAct,
     preventDefault: true,
   });
@@ -90,16 +90,16 @@ export function useListCursor<T>(
     enabled: canAct,
     preventDefault: true,
   });
-  useHotkeys('backspace, delete', guard(() => act((a) => a.onDelete, false)), {
+  useHotkeys('backspace, delete, d', guard(() => act((a) => a.onDelete, false)), {
     enabled: canAct,
     preventDefault: true,
   });
-  // ⌥↑/⌥↓ reorder without moving the cursor off the item (it keeps the same id).
-  useHotkeys('alt+up', guard(() => act((a) => a.onMoveUp, false)), {
+  // ⌥↑/⌥↓ (or ⌥K/⌥J) reorder without moving the cursor off the item (it keeps the same id).
+  useHotkeys('alt+up, alt+k', guard(() => act((a) => a.onMoveUp, false)), {
     enabled: canAct,
     preventDefault: true,
   });
-  useHotkeys('alt+down', guard(() => act((a) => a.onMoveDown, false)), {
+  useHotkeys('alt+down, alt+j', guard(() => act((a) => a.onMoveDown, false)), {
     enabled: canAct,
     preventDefault: true,
   });

@@ -205,7 +205,7 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
           />
         </div>
 
-        {/* Group picker — a field, not a button: ⌘G toggles the menu, arrows+⏎ pick.
+        {/* Group picker — a field, not a button: ⌘G toggles the menu, arrows+↵ pick.
             Hidden entirely until the user has created a group. */}
         {groups.length > 0 && (
           <DropdownMenu open={groupMenuOpen} onOpenChange={setGroupMenuOpen}>
@@ -261,8 +261,8 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
         <div className="flex items-center justify-between gap-2">
           <ShortcutHint
             shortcuts={[
-              ...(improved ? [] : [{ keys: '⌘I', label: 'improve' }]),
-              ...(groups.length > 0 ? [{ keys: '⌘G', label: 'group' }] : []),
+              ...(improved ? [] : [{ keys: '⌘i', label: 'improve' }]),
+              ...(groups.length > 0 ? [{ keys: '⌘g', label: 'group' }] : []),
               { keys: '⌘↵', label: 'save' },
               { keys: 'Esc', label: 'cancel' },
             ]}

@@ -30,8 +30,11 @@ interface Options {
 
 /**
  * The archive's view state over a list of older completions: expand/collapse, a text
- * search, and pagination, plus the `a` (toggle) and `←`/`→` (page) shortcuts. Derivation
- * is pure — the current page is sorted most-recent-first, sliced, then day-grouped.
+ * search, and pagination, plus the `a` (toggle), `←→`/`hl` (page), and `/` (focus
+ * search) shortcuts. While
+ * the archive is open its pager owns the horizontal keys — TaskList only binds them to
+ * the group filter when it's closed. Derivation is pure — the current page is sorted
+ * most-recent-first, sliced, then day-grouped.
  */
 export function useArchive(archived: Task[], { interactive }: Options): ArchiveView {
   const [open, setOpen] = useState(false);
@@ -68,8 +71,10 @@ export function useArchive(archived: Task[], { interactive }: Options): ArchiveV
 
   useHotkeys('a', toggle, { enabled: interactive && archived.length > 0 });
   const canPage = interactive && open;
-  useHotkeys('left', () => changePage(clampedPage - 1), { enabled: canPage });
-  useHotkeys('right', () => changePage(clampedPage + 1), { enabled: canPage });
+  useHotkeys('left, h', () => changePage(clampedPage - 1), { enabled: canPage });
+  useHotkeys('right, l', () => changePage(clampedPage + 1), { enabled: canPage });
+  // `/` (vim search) focuses the box; preventDefault keeps the slash out of the field.
+  useHotkeys('/', () => searchRef.current?.focus(), { enabled: canPage, preventDefault: true });
 
   return {
     open,

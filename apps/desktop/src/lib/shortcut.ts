@@ -32,7 +32,9 @@ function mainKey(e: KeyboardEvent): string | null {
   return named[c] ?? null; // bare modifiers (ShiftLeft, MetaLeft, …) → null
 }
 
-/** Render a shortcut as macOS glyphs, e.g. `CommandOrControl+Shift+B` → `⌘⇧B`. */
+/** Render a shortcut as macOS glyphs, e.g. `CommandOrControl+Shift+B` → `⌘⇧b`.
+ *  Letters are lowercased — hints show the keys as pressed (the ⇧ glyph already
+ *  says Shift), matching every other hint chip in the app. */
 export function display(shortcut: string): string {
   const glyph: Record<string, string> = {
     CommandOrControl: '⌘',
@@ -47,6 +49,6 @@ export function display(shortcut: string): string {
   };
   return shortcut
     .split('+')
-    .map((part) => glyph[part] ?? part)
+    .map((part) => glyph[part] ?? (part.length === 1 ? part.toLowerCase() : part))
     .join('');
 }

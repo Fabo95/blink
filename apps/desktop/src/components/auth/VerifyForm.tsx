@@ -1,7 +1,8 @@
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { LoginFlow } from '@/hooks/useLoginFlow';
+import { AuthAction } from './AuthAction';
 import { AuthCard } from './AuthCard';
+import { AuthForm } from './AuthForm';
 import { Field } from './Field';
 
 /** Step 2: enter the emailed OTP; then the flow signs in with the now-verified account. */
@@ -17,12 +18,24 @@ export function VerifyForm({ flow }: { flow: LoginFlow }) {
         </>
       }
     >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void submitOtp();
-        }}
-        className="space-y-4"
+      <AuthForm
+        label="Verify"
+        busyLabel="Verifying…"
+        busy={busy}
+        disabled={busy || fields.otp.length < 6}
+        onSubmit={() => void submitOtp()}
+        actions={
+          <>
+            <AuthAction
+              display="⌘r"
+              hotkey="mod+r"
+              label="resend code"
+              onAction={() => void resend()}
+              disabled={busy}
+            />
+            <AuthAction display="Esc" hotkey="escape" label="back" onAction={back} />
+          </>
+        }
       >
         <Field label="Verification code" id="otp">
           <Input
@@ -41,25 +54,7 @@ export function VerifyForm({ flow }: { flow: LoginFlow }) {
         </Field>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
-
-        <Button type="submit" className="w-full" disabled={busy || fields.otp.length < 6}>
-          {busy ? 'Verifying…' : 'Verify'}
-        </Button>
-      </form>
-
-      <div className="mt-4 flex justify-between text-xs text-muted-foreground">
-        <button type="button" className="hover:text-foreground" onClick={back}>
-          Back
-        </button>
-        <button
-          type="button"
-          className="hover:text-foreground disabled:opacity-50"
-          onClick={() => void resend()}
-          disabled={busy}
-        >
-          Resend code
-        </button>
-      </div>
+      </AuthForm>
     </AuthCard>
   );
 }

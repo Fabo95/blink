@@ -12,6 +12,8 @@ export interface TaskGroupsView {
   selectedId: string | null;
   selected: TaskGroup | null;
   select: (id: string | null) => void;
+  /** Step the filter through All + the groups (wraps). Bound to `←→`/`hl` in TaskList. */
+  cycle: (delta: number) => void;
   /** The open name prompt (create or rename), or `null` when closed. */
   prompt: GroupPrompt | null;
   closePrompt: () => void;
@@ -32,8 +34,9 @@ interface Options {
 /**
  * The inbox's group filter: the list of groups, the selected one (persisted as the
  * `active_task_group` setting so capture windows default to it), and the keyboard-only
- * management flows — `h`/`l` cycle the filter, `n` creates, `r` renames, `⌘⌫` deletes
- * (⏎ confirms). Deleting a group un-groups its tasks, so no data is lost.
+ * management flows — `n` creates, `r` renames, `⌘⌫` deletes (`⌘↵` confirms). Filter
+ * cycling (`←→`/`hl`) is exposed as `cycle` and bound in TaskList, which knows when the
+ * archive pager owns those keys. Deleting a group un-groups its tasks, so no data is lost.
  */
 export function useTaskGroups({ interactive }: Options): TaskGroupsView {
   const [groups, setGroups] = useState<TaskGroup[]>([]);
@@ -108,8 +111,6 @@ export function useTaskGroups({ interactive }: Options): TaskGroupsView {
     }
   };
 
-  useHotkeys('h', () => cycle(-1), { enabled: enabled && groups.length > 0 });
-  useHotkeys('l', () => cycle(1), { enabled: enabled && groups.length > 0 });
   useHotkeys('n', () => setPrompt('create'), { enabled, preventDefault: true });
   useHotkeys('r', () => setPrompt('rename'), { enabled: enabled && selected !== null });
   useHotkeys('mod+backspace', () => setDeleting(true), {
@@ -127,6 +128,7 @@ export function useTaskGroups({ interactive }: Options): TaskGroupsView {
     selectedId,
     selected,
     select,
+    cycle,
     prompt,
     closePrompt,
     submitPrompt,

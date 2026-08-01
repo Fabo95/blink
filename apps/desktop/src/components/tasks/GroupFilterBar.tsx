@@ -1,3 +1,5 @@
+import { useRef } from 'react';
+import { useHotkeys } from 'react-hotkeys-hook';
 import { type Shortcut, ShortcutHint } from '@/components/ShortcutHint';
 import { DeleteGroupDialog } from '@/components/tasks/DeleteGroupDialog';
 import { Input } from '@/components/ui/input';
@@ -7,13 +9,23 @@ import { cn } from '@/lib/utils';
 
 /**
  * The group filter above the inbox: an All pill plus one per group. Keyboard-only
- * management — `h`/`l` switch, `n` creates, `r` renames, `⌘⌫` deletes; the name
- * prompt is a small popover opened exclusively by those keys. Pills click-to-select
- * (parity with rows), but carry no management affordances.
+ * management — `n` creates, `r` renames, `⌘⌫` deletes; switching (`←→`/`hl`) is bound in
+ * TaskList and hinted in the footer statusline. The name prompt is a small popover opened
+ * exclusively by those keys. Pills click-to-select (parity with rows), but carry no
+ * management affordances.
  */
 export function GroupFilterBar({ view }: { view: TaskGroupsView }) {
+  const promptInputRef = useRef<HTMLInputElement>(null);
+  // ⌘↵ confirms, matching the app-wide save/confirm key (enableOnFormTags so it fires
+  // while the prompt's field is focused).
+  useHotkeys('mod+enter', () => void view.submitPrompt(promptInputRef.current?.value ?? ''), {
+    enabled: view.prompt !== null,
+    enableOnFormTags: true,
+    preventDefault: true,
+  });
+
+  // Management keys only — the movement key (←→ filter) lives in the footer statusline.
   const shortcuts: Shortcut[] = [
-    ...(view.groups.length > 0 ? [{ keys: 'h/l', label: 'filter' }] : []),
     { keys: 'n', label: 'new' },
     ...(view.selected
       ? [
@@ -49,15 +61,9 @@ export function GroupFilterBar({ view }: { view: TaskGroupsView }) {
               {view.prompt === 'rename' ? 'Rename group' : 'New group'}
             </p>
             <Input
+              ref={promptInputRef}
               autoFocus
               defaultValue={view.prompt === 'rename' ? (view.selected?.name ?? '') : ''}
-              onKeyDown={(e) => {
-                // ⌘↵ confirms, matching the app-wide save/confirm key.
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                  e.preventDefault();
-                  void view.submitPrompt(e.currentTarget.value);
-                }
-              }}
               placeholder="Group name"
               className="h-8 text-sm"
             />

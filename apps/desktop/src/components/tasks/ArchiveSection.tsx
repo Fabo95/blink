@@ -1,8 +1,6 @@
 import { Archive, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { ShortcutHint } from '@/components/ShortcutHint';
 import { CollapsibleSection } from '@/components/tasks/CollapsibleSection';
-import { COMPLETED_SHORTCUTS } from '@/components/tasks/hints';
 import { Input } from '@/components/ui/input';
 import type { Task } from '@/generated/Task';
 import type { ArchiveView } from '@/hooks/useArchive';
@@ -28,30 +26,22 @@ export function ArchiveSection({ archive, totalCount, renderRow }: ArchiveSectio
       meta={`${totalCount} completed`}
       bodyClassName="space-y-5"
       headerExtra={
-        <>
-          <div className="flex h-9 items-center gap-2 rounded-md border border-input px-3 shadow-sm transition focus-within:ring-1 focus-within:ring-ring">
-            <Search className="size-3.5 shrink-0 text-muted-foreground" />
-            <Input
-              ref={searchRef}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key !== 'Escape') return;
-                // Esc clears the query first, then blurs back to the list.
-                if (query) setQuery('');
-                else searchRef.current?.blur();
-              }}
-              placeholder="Search completed…"
-              className="h-auto min-w-0 flex-1 border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
-            />
-          </div>
-          <ShortcutHint
-            shortcuts={[
-              ...COMPLETED_SHORTCUTS,
-              ...(pageCount > 1 ? [{ keys: '←→', label: 'page' }] : []),
-            ]}
+        <div className="flex h-9 items-center gap-2 rounded-md border border-input px-3 shadow-sm transition focus-within:ring-1 focus-within:ring-ring">
+          <Search className="size-3.5 shrink-0 text-muted-foreground" />
+          <Input
+            ref={searchRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== 'Escape') return;
+              // Esc clears the query first, then blurs back to the list.
+              if (query) setQuery('');
+              else searchRef.current?.blur();
+            }}
+            placeholder="Search completed…"
+            className="h-auto min-w-0 flex-1 border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
           />
-        </>
+        </div>
       }
     >
       {items.length === 0 ? (

@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CaptureCard } from '@/components/CaptureCard';
 import { Header } from '@/components/Header';
+import { ShortcutHint } from '@/components/ShortcutHint';
 import { TaskList } from '@/components/TaskList';
 import type { Task } from '@/generated/Task';
 import { useSession } from '@/hooks/useSession';
 import { api, isTauri } from '@/lib/api';
+import { useHintStyle } from '@/lib/hintStyle';
+import { useStatusline } from '@/lib/statusline';
 
 /** The signed-in app: capture card + task inbox. Rendered only inside `<AuthGate>`. */
 export function Inbox() {
@@ -43,9 +46,27 @@ export function Inbox() {
         <CaptureCard />
         <TaskList tasks={tasks} onChanged={refresh} />
       </main>
-      <footer className="px-6 py-3 text-center text-[11px] tracking-wide text-muted-foreground">
-        Local-First · Zero-Knowledge E2EE on sync · Blink Phase 1
+      {/* The statusline: every shortcut available right now, in one fixed place. */}
+      <footer className="flex items-start justify-between gap-4 border-t border-border/50 px-6 py-3">
+        <Statusline />
+        <HintStyleToggle />
       </footer>
     </div>
+  );
+}
+
+// Leaf subscriber — only this re-renders when the browsing context changes.
+function Statusline() {
+  return <ShortcutHint shortcuts={useStatusline()} />;
+}
+
+// The label states what pressing `v` switches TO, so the hint doubles as the mode indicator.
+function HintStyleToggle() {
+  const style = useHintStyle();
+  return (
+    <ShortcutHint
+      className="shrink-0"
+      shortcuts={[{ keys: 'v', label: style === 'vim' ? 'standard hints' : 'vim hints' }]}
+    />
   );
 }

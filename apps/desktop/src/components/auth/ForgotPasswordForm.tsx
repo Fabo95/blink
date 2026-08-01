@@ -1,7 +1,8 @@
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { LoginFlow } from '@/hooks/useLoginFlow';
+import { AuthAction } from './AuthAction';
 import { AuthCard } from './AuthCard';
+import { AuthForm } from './AuthForm';
 import { Field } from './Field';
 
 /** Reset step 1: confirm the account email; a reset code is sent to it. */
@@ -10,12 +11,14 @@ export function ForgotPasswordForm({ flow }: { flow: LoginFlow }) {
 
   return (
     <AuthCard description="Enter your account email and we'll send you a reset code">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void submitResetRequest();
-        }}
-        className="space-y-4"
+      <AuthForm
+        label="Send reset code"
+        busyLabel="Sending…"
+        busy={busy}
+        onSubmit={() => void submitResetRequest()}
+        actions={
+          <AuthAction display="Esc" hotkey="escape" label="back to sign in" onAction={back} />
+        }
       >
         <Field label="Email" id="email">
           <Input
@@ -32,17 +35,7 @@ export function ForgotPasswordForm({ flow }: { flow: LoginFlow }) {
         </Field>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
-
-        <Button type="submit" className="w-full" disabled={busy}>
-          {busy ? 'Sending…' : 'Send reset code'}
-        </Button>
-      </form>
-
-      <div className="mt-4 flex justify-start text-xs text-muted-foreground">
-        <button type="button" className="hover:text-foreground" onClick={back}>
-          Back to sign in
-        </button>
-      </div>
+      </AuthForm>
     </AuthCard>
   );
 }

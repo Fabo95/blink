@@ -77,7 +77,7 @@ export function TaskEditor({ editor, error, groups }: TaskEditorProps) {
         <ShortcutHint
           shortcuts={[
             { keys: '⇥', label: 'field' },
-            ...(editor.improved ? [] : [{ keys: '⌘I', label: 'improve' }]),
+            ...(editor.improved ? [] : [{ keys: '⌘i', label: 'improve' }]),
             { keys: '⌘↵', label: 'save' },
             { keys: 'Esc', label: 'cancel' },
           ]}
@@ -119,7 +119,7 @@ function Field({
 }
 
 // A picker field, not an action button: it sits in the ⇥ cycle like the inputs
-// (`data-editor-field`), opens with ⏎/Space, and the menu's arrows+⏎ select.
+// (`data-editor-field`), opens with ↵/Space, and the menu's arrows+↵ select.
 function GroupField({ editor, groups }: { editor: TaskEditorState; groups: TaskGroup[] }) {
   const selectedName = groups.find((g) => g.id === editor.taskGroupId)?.name;
   return (

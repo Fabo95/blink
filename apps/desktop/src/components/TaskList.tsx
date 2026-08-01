@@ -4,7 +4,7 @@ import { useHotkeys } from 'react-hotkeys-hook';
 import { ArchiveSection } from '@/components/tasks/ArchiveSection';
 import { DeleteTaskDialog } from '@/components/tasks/DeleteTaskDialog';
 import { GroupFilterBar } from '@/components/tasks/GroupFilterBar';
-import { COMPLETED_SHORTCUTS, INBOX_SHORTCUTS } from '@/components/tasks/hints';
+import { statuslineShortcuts } from '@/components/tasks/hints';
 import { TaskEditor } from '@/components/tasks/TaskEditor';
 import { TaskRow } from '@/components/tasks/TaskRow';
 import { TaskSection } from '@/components/tasks/TaskSection';
@@ -15,6 +15,8 @@ import { useTaskEditor } from '@/hooks/useTaskEditor';
 import { useTaskGroups } from '@/hooks/useTaskGroups';
 import { api } from '@/lib/api';
 import { splitTasks } from '@/lib/completed';
+import { toggleHintStyle } from '@/lib/hintStyle';
+import { setStatusline } from '@/lib/statusline';
 import { errorMessage } from '@/lib/utils';
 
 interface TaskListProps {
@@ -80,8 +82,15 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
   const interactive = baseInteractive && !taskGroups.busy;
   const archive = useArchive(archived, { interactive });
 
+  // One horizontal axis, arrows + vim like ↑↓/jk: while the archive is open its pager
+  // owns ←→/hl (bound in useArchive), otherwise they cycle the group filter. Bound here
+  // rather than in useTaskGroups because only this component sees both states.
+  const canCycleGroups = interactive && !archive.open && taskGroups.groups.length > 0;
+  useHotkeys('left, h', () => taskGroups.cycle(-1), { enabled: canCycleGroups });
+  useHotkeys('right, l', () => taskGroups.cycle(1), { enabled: canCycleGroups });
+
   // One cursor over everything currently visible — each collapsed section drops out, so
-  // the cursor never lands on a hidden row. ⏎ completes an active task or restores a done one.
+  // the cursor never lands on a hidden row. ↵ completes an active task or restores a done one.
   const navItems = [
     ...(inboxOpen ? active : []),
     ...(completedOpen ? recentCompleted : []),
@@ -102,6 +111,29 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
     if (!focusedId) return;
     document.querySelector(`[data-task-id="${focusedId}"]`)?.scrollIntoView({ block: 'nearest' });
   }, [focusedId]);
+
+  // Publish the live browsing context to the footer statusline every render — the store
+  // drops content-equal publishes, so subscribers only re-render on real changes.
+  const focusedTask = navItems.find((t) => t.id === focusedId) ?? null;
+  useEffect(() => {
+    setStatusline(
+      statuslineShortcuts({
+        interactive,
+        hasRows: navItems.length > 0,
+        focused: focusedTask
+          ? {
+              done: focusedTask.status === 'done',
+              hasLink: focusedTask.link !== null,
+              reorderable: inboxOpen && active.some((t) => t.id === focusedTask.id),
+            }
+          : null,
+        archive: { open: archive.open, paged: archive.pageCount > 1 },
+        hasGroups: taskGroups.groups.length > 0,
+      }),
+    );
+  });
+
+  useEffect(() => () => setStatusline([]), []);
 
   const confirmDelete = async () => {
     const task = deletingTask;
@@ -124,8 +156,12 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
     preventDefault: true,
   });
 
-  // `i` / `c` collapse the Inbox / Completed sections (archive's `a` lives in useArchive).
-  useHotkeys('i', () => setInboxOpen((o) => !o), { enabled: interactive });
+  // `b` / `c` collapse the Inbox / Completed sections (archive's `a` lives in useArchive);
+  // `i` belongs to the cursor's edit action, vim-style.
+  useHotkeys('b', () => setInboxOpen((o) => !o), { enabled: interactive });
+  // `v` flips every hint chip between the standard keys and their vim synonyms — ungated,
+  // so the statusline's right side stays live even while an overlay owns the other keys.
+  useHotkeys('v', toggleHintStyle);
   useHotkeys('c', () => setCompletedOpen((o) => !o), {
     enabled: interactive && recentCompleted.length > 0,
   });
@@ -165,12 +201,10 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
       <GroupFilterBar view={taskGroups} />
       <TaskSection
         title="Inbox"
-        toggleKey="i"
+        toggleKey="b"
         open={inboxOpen}
         onToggle={() => setInboxOpen((o) => !o)}
         count={active.length}
-        shortcuts={INBOX_SHORTCUTS}
-        showShortcuts={active.length > 0}
       >
         {active.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-6 text-muted-foreground">
@@ -194,7 +228,6 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
           open={completedOpen}
           onToggle={() => setCompletedOpen((o) => !o)}
           count={recentCompleted.length}
-          shortcuts={COMPLETED_SHORTCUTS}
         >
           <ul className="space-y-2">{recentCompleted.map(renderRow)}</ul>
         </TaskSection>

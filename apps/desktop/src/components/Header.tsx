@@ -1,4 +1,5 @@
 import { brand } from '@blink/core/theme';
+import { useHotkeys } from 'react-hotkeys-hook';
 import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
@@ -9,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import type { AuthUser } from '@/generated/AuthUser';
+import { Kbd } from '@/components/ui/kbd';
 import { isTauri } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -18,6 +20,9 @@ interface HeaderProps {
 }
 
 export function Header({ account, onSignOut }: HeaderProps) {
+  // ⌘⇧Q signs out (mirrors macOS's own log-out chord); the menu item shows the hint.
+  useHotkeys('mod+shift+q', onSignOut, { preventDefault: true });
+
   return (
     <header
       data-tauri-drag-region
@@ -46,7 +51,10 @@ export function Header({ account, onSignOut }: HeaderProps) {
               {account.email}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={onSignOut}>Sign out</DropdownMenuItem>
+            <DropdownMenuItem onSelect={onSignOut}>
+              Sign out
+              <Kbd className="ml-auto">⌘⇧q</Kbd>
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

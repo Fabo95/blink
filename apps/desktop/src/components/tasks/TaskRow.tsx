@@ -44,7 +44,7 @@ export function TaskRow({
             editing && 'border-primary/40 bg-card/70 ring-2 ring-primary/30',
           )}
         >
-          {/* Whole-card click target: single-click selects (then ⏎ completes), double-click
+          {/* Whole-card click target: single-click selects (then ↵ completes), double-click
               completes. aria-hidden + tabIndex -1 keep it mouse-only (keyboard uses the
               cursor); mousedown-preventDefault keeps focus on <body> so nav keeps working. */}
           <button

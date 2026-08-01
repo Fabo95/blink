@@ -1,18 +1,40 @@
 import type { Shortcut } from '@/components/ShortcutHint';
 
-// The shared list keymap, so every section surfaces the same keys in the same order.
-// Inbox completes, Completed/Archive restore — only the ⏎ label differs.
-const listShortcuts = (primary: Shortcut): Shortcut[] => [
-  { keys: '↑↓', label: 'navigate' },
-  primary,
-  { keys: 'e', label: 'edit' },
-  { keys: 'o', label: 'open' },
-  { keys: '⌫', label: 'delete' },
-];
+export interface StatuslineContext {
+  /** False while an overlay (editor, dialog, prompt) owns the keyboard. */
+  interactive: boolean;
+  hasRows: boolean;
+  /** The cursor's task, or null when nothing is focused. */
+  focused: { done: boolean; hasLink: boolean; reorderable: boolean } | null;
+  archive: { open: boolean; paged: boolean };
+  hasGroups: boolean;
+}
 
-// Inbox tasks can be reordered (⌥↑/⌥↓); Completed/Archive keep their natural order.
-export const INBOX_SHORTCUTS: Shortcut[] = [
-  ...listShortcuts({ keys: '⏎', label: 'complete' }),
-  { keys: '⌥↑↓', label: 'reorder' },
-];
-export const COMPLETED_SHORTCUTS = listShortcuts({ keys: '⏎', label: 'restore' });
+// The one builder for the footer statusline — a chip appears only while its key does
+// something, in the shared grammar order: navigate · primary · actions · context · Esc.
+export function statuslineShortcuts(ctx: StatuslineContext): Shortcut[] {
+  if (!ctx.interactive) return [];
+  const { focused } = ctx;
+  return [
+    ...(ctx.hasRows ? [{ keys: '↑↓', vim: 'jk', label: 'navigate' }] : []),
+    ...(focused
+      ? [
+          { keys: '↵', label: focused.done ? 'restore' : 'complete' },
+          { keys: 'e', vim: 'i', label: 'edit' },
+          ...(focused.hasLink ? [{ keys: 'o', label: 'open' }] : []),
+          { keys: '⌫', vim: 'd', label: 'delete' },
+          ...(focused.reorderable ? [{ keys: '⌥↑↓', vim: '⌥kj', label: 'reorder' }] : []),
+        ]
+      : []),
+    ...(ctx.archive.open
+      ? [
+          { keys: '/', label: 'search' },
+          ...(ctx.archive.paged ? [{ keys: '←→', vim: 'hl', label: 'page' }] : []),
+        ]
+      : ctx.hasGroups
+        ? [{ keys: '←→', vim: 'hl', label: 'filter' }]
+        : []),
+    // Esc (unselect) ends the row, matching the actions-then-cancel order of the overlay rows.
+    ...(focused ? [{ keys: 'Esc', label: 'unselect' }] : []),
+  ];
+}

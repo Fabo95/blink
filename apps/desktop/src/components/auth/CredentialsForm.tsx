@@ -1,7 +1,8 @@
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { LoginFlow } from '@/hooks/useLoginFlow';
+import { AuthAction } from './AuthAction';
 import { AuthCard } from './AuthCard';
+import { AuthForm } from './AuthForm';
 import { Field } from './Field';
 
 /** Step 1: email + password (+ name on sign-up), with the sign-in ↔ sign-up toggle. */
@@ -14,21 +15,32 @@ export function CredentialsForm({ flow }: { flow: LoginFlow }) {
     <AuthCard
       description={signup ? 'Create your account' : 'Sign in to continue'}
       footer={
-        <button
-          type="button"
-          className="fixed bottom-8 left-1/2 -translate-x-1/2 text-xs text-muted-foreground hover:text-foreground"
-          onClick={toggleMode}
-        >
-          {signup ? 'Have an account? Sign in' : 'No account? Create one'}
-        </button>
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2">
+          <AuthAction
+            display="⌘n"
+            hotkey="mod+n"
+            label={signup ? 'sign in instead' : 'create account'}
+            onAction={toggleMode}
+          />
+        </div>
       }
     >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void submitCredentials();
-        }}
-        className="space-y-4"
+      <AuthForm
+        label={signup ? 'Create account' : 'Sign in'}
+        busyLabel="Please wait…"
+        busy={busy}
+        onSubmit={() => void submitCredentials()}
+        actions={
+          !signup && (
+            <AuthAction
+              display="⌘f"
+              hotkey="mod+f"
+              label="forgot password"
+              onAction={forgotPassword}
+              disabled={busy}
+            />
+          )
+        }
       >
         {signup && (
           <Field label="Name" id="name">
@@ -68,25 +80,8 @@ export function CredentialsForm({ flow }: { flow: LoginFlow }) {
           />
         </Field>
 
-        {!signup && (
-          <div className="flex justify-end">
-            <button
-              type="button"
-              className="text-xs text-muted-foreground hover:text-foreground"
-              onClick={forgotPassword}
-              disabled={busy}
-            >
-              Forgot password?
-            </button>
-          </div>
-        )}
-
         {error && <p className="text-sm text-destructive">{error}</p>}
-
-        <Button type="submit" className="w-full" disabled={busy}>
-          {busy ? 'Please wait…' : signup ? 'Create account' : 'Sign in'}
-        </Button>
-      </form>
+      </AuthForm>
     </AuthCard>
   );
 }

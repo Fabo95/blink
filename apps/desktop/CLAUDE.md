@@ -100,7 +100,12 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   profile is cached in `settings` so `current_session` gates offline (token present + cached
   user). Webview side: `AuthGate` is the SPA's route-middleware stand-in (renders `LoginScreen`
   until authenticated), and `useSession` reads the provider's context. The token never enters
-  the webview. Capture windows stay local (not gated).
+  the webview. Capture windows stay local (not gated). The auth screens are button-free like
+  the rest of the app: `⌘↵` is the only submit (shared `AuthForm` — `requestSubmit()` keeps
+  native validation, plain Enter is swallowed), `Esc` steps back, `⌘R` resends the code,
+  `⌘N` toggles sign-in ↔ sign-up, `⌘F` opens forgot-password — each surfaced by `AuthAction`
+  (shortcut + hint chip + Pill-style secondary click). `⌘⇧Q` signs out (hinted on the
+  header menu item).
 - **Capture methods**: each is a variant of `platform::shortcut::CaptureMethod`, and owns a
   global hotkey + a frameless window + a component. `main.tsx` branches on
   `getCurrentWindow().label` to render the right one. Both windows render the shared
@@ -134,17 +139,28 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
 - **Inbox is keyboard-first** (`TaskList`): three stacked sections — **Inbox** (active),
   **Completed** (done in the last 24h), and a collapsible **Archive** (older completions,
   expanded in place with `a`). The archive is searchable and paginated (8/page), day-grouped
-  (Today / Yesterday / weekday / date via `lib/completed.ts::groupByDay`); `←`/`→` page while
-  it's open. A virtual cursor (`useListCursor`, built on `react-hotkeys-hook`) walks everything
-  visible (Inbox → Completed → open archive page): `↑↓`/`jk` move it, `⏎` completes/restores the
-  focused task, `e` edits, `o` opens its link, `⌫` deletes (confirm `AlertDialog`, `⌘↵` to
-  confirm), `⌥↑`/`⌥↓` reorder it (Inbox only — see below), `Esc` unselects. `Tab` is swallowed
+  (Today / Yesterday / weekday / date via `lib/completed.ts::groupByDay`); `←→`/`hl` page while
+  it's open, `/` focuses its search box. A virtual cursor (`useListCursor`, built on `react-hotkeys-hook`) walks everything
+  visible (Inbox → Completed → open archive page): `↑↓`/`jk` move it, `↵` completes/restores the
+  focused task, `e`/`i` edit, `o` opens its link, `⌫`/`d` delete (confirm `AlertDialog`, `⌘↵` to
+  confirm), `⌥↑↓`/`⌥KJ` reorder it (Inbox only — see below), `Esc` unselects. `Tab` is swallowed
   in the main window (the cursor drives selection, not DOM focus) except inside the open editor.
   Editing is an in-row **Popover** (text/source/link/group fields; `⇥`/`⇧⇥` move between the
   fields and wrap, `⌘↵` save, `⌘I` improve, `Esc` cancel). There are **no action buttons** —
-  every action is a shortcut, always shown via a `ShortcutHint`; rows also click-to-select and
-  double-click-to-complete. `useListCursor` ignores keys originating inside a
-  `[role=dialog|menu|alertdialog]`, so an open overlay keeps its own keys.
+  every action is a shortcut; rows also click-to-select and double-click-to-complete.
+  `useListCursor` ignores keys originating inside a `[role=dialog|menu|alertdialog]`, so an
+  open overlay keeps its own keys.
+  - **Hint placement is a three-tier system.** (1) The footer **statusline** is the one fixed
+    home for browsing shortcuts and is context-aware — it shows only what currently works
+    (navigate when rows exist; `↵ complete`/`restore` + edit/open/delete/reorder for the
+    focused row, `o` only with a link, reorder only in the open Inbox; `/`+`←→ page` with the
+    archive open, else `←→ filter`; `Esc` last; empty while an overlay owns the keyboard).
+    Built by `statuslineShortcuts` (`components/tasks/hints.ts`), published by `TaskList`
+    through the `lib/statusline.ts` store (same external-store pattern as `hintStyle`),
+    rendered in `Inbox`'s footer next to the always-live `v` dialect toggle. (2) Section
+    headers carry only their toggle chip (`b`/`c`/`a`) — no hint rows. (3) Overlays that own
+    the keyboard (editor popover, dialogs, group name prompt, capture panels, auth forms)
+    keep control-local rows; the filter bar keeps its management keys (`n`/`r`/`⌘⌫`).
   - **Structure**: `TaskList` is a thin orchestrator (owns the cursor, delete flow, and group
     filter) that composes `components/tasks/` presentational pieces. Stateful logic lives in
     hooks: `useTaskEditor` (draft fields + `⌘I`/`⌘↵`), `useTaskGroups` (filter + group CRUD),
@@ -155,11 +171,13 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   + `get/set_active_task_group` (the active filter persists in `settings` under
   `active_task_group`, so capture windows can read it).
   - **Filter bar** (`GroupFilterBar` + `useTaskGroups`): pills for **All** + each group above
-    the inbox. `h`/`l` cycle the filter (wraps), `n` creates, `r` renames (popover prompt),
-    `⌘⌫` deletes (confirm `⌘↵` in `DeleteGroupDialog` — deleting moves its tasks back to All).
-    Filtering happens before `splitTasks`, so all sections respect it.
+    the inbox. `←→`/`hl` cycle the filter (wraps; while the archive is open these keys page it
+    instead — bound in `TaskList`, which sees both states; hinted in the statusline), `n`
+    creates, `r` renames (popover prompt), `⌘⌫` deletes (confirm `⌘↵` in `DeleteGroupDialog` —
+    deleting moves its tasks back to All). Filtering happens before `splitTasks`, so all
+    sections respect it.
   - **Assignment**: the editor gains a group field in the `⇥` cycle (Radix dropdown, arrow keys
-    + `⏎`); `update_task` clears the group when sent an empty string (same pattern as `link`).
+    + `↵`); `update_task` clears the group when sent an empty string (same pattern as `link`).
     `CapturePanel` shows a group picker (`⌘G`) when groups exist, **defaulting to the inbox's
     active filter** (validated against the loaded groups so a stale id degrades to none).
   - `TaskRow` shows a group chip (Tag icon) only while the All filter is active.
@@ -205,7 +223,14 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   field is focused (capture panels, editor `⌘↵`).
 - **Render keys with the shared `Kbd` chip** (`components/ui/kbd.tsx`), and a row of
   key+label hints with `ShortcutHint` (`components/ShortcutHint.tsx`) — never plain
-  `Esc · ⌘↵` text. Keeps every shortcut hint identical across the app.
+  `Esc · ⌘↵` text. Keeps every shortcut hint identical across the app. A `Shortcut` may
+  carry a `vim` synonym (`{ keys: '↑↓', vim: 'jk' }`); `v` in the main window flips every
+  chip between the two dialects (`lib/hintStyle.ts`, webview-local — both keys always work
+  regardless of what's displayed). Glyph rules: a chip shows exactly what's pressed —
+  letters always lowercase (`e`, `jk`, `⌘i`, `⌥kj`, `⌘⇧q`; the `⇧` glyph carries Shift,
+  never a capital), plain Return is `↵` (never `⏎`), named keys keep their labels (`Esc`),
+  and each hint row ends with its Esc action. (Prose in docs may still name chords
+  conventionally, e.g. ⌘I — the rule is about rendered chips.)
 - **Never hand-edit `src/generated/`** — change the struct in `core/models.rs`, run `gen:types`.
 
 ## Environment
