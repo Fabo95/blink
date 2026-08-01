@@ -1,6 +1,6 @@
 import { Input } from '@/components/ui/input';
 import type { LoginFlow } from '@/hooks/useLoginFlow';
-import { AuthAction } from './AuthAction';
+import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { AuthCard } from './AuthCard';
 import { AuthForm } from './AuthForm';
 import { Field } from './Field';
@@ -11,37 +11,12 @@ export function CredentialsForm({ flow }: { flow: LoginFlow }) {
     flow;
   const signup = mode === 'signup';
 
+  useShortcut('auth.toggleMode', { enabled: !busy, callback: toggleMode });
+  useShortcut('auth.forgot', { enabled: !signup && !busy, callback: forgotPassword });
+
   return (
-    <AuthCard
-      description={signup ? 'Create your account' : 'Sign in to continue'}
-      footer={
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2">
-          <AuthAction
-            display="⌘n"
-            command="auth.toggleMode"
-            label={signup ? 'sign in instead' : 'create account'}
-            onAction={toggleMode}
-          />
-        </div>
-      }
-    >
-      <AuthForm
-        label={signup ? 'Create account' : 'Sign in'}
-        busyLabel="Please wait…"
-        busy={busy}
-        onSubmit={() => void submitCredentials()}
-        actions={
-          !signup && (
-            <AuthAction
-              display="⌘f"
-              command="auth.forgot"
-              label="forgot password"
-              onAction={forgotPassword}
-              disabled={busy}
-            />
-          )
-        }
-      >
+    <AuthCard description={signup ? 'Create your account' : 'Sign in to continue'}>
+      <AuthForm busyLabel="Please wait…" busy={busy} onSubmit={() => void submitCredentials()}>
         {signup && (
           <Field label="Name" id="name">
             <Input

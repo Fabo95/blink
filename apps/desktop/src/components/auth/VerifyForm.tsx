@@ -1,6 +1,6 @@
 import { Input } from '@/components/ui/input';
 import type { LoginFlow } from '@/hooks/useLoginFlow';
-import { AuthAction } from './AuthAction';
+import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { AuthCard } from './AuthCard';
 import { AuthForm } from './AuthForm';
 import { Field } from './Field';
@@ -8,6 +8,9 @@ import { Field } from './Field';
 /** Step 2: enter the emailed OTP; then the flow signs in with the now-verified account. */
 export function VerifyForm({ flow }: { flow: LoginFlow }) {
   const { fields, error, busy, setField, submitOtp, resend, back } = flow;
+
+  useShortcut('auth.resend', { enabled: !busy, callback: () => void resend() });
+  useShortcut('auth.back', { callback: back });
 
   return (
     <AuthCard
@@ -19,23 +22,10 @@ export function VerifyForm({ flow }: { flow: LoginFlow }) {
       }
     >
       <AuthForm
-        label="Verify"
         busyLabel="Verifying…"
         busy={busy}
         disabled={busy || fields.otp.length < 6}
         onSubmit={() => void submitOtp()}
-        actions={
-          <>
-            <AuthAction
-              display="⌘r"
-              command="auth.resend"
-              label="resend code"
-              onAction={() => void resend()}
-              disabled={busy}
-            />
-            <AuthAction display="Esc" command="auth.back" label="back" onAction={back} />
-          </>
-        }
       >
         <Field label="Verification code" id="otp">
           <Input

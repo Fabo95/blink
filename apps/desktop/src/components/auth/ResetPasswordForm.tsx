@@ -1,6 +1,6 @@
 import { Input } from '@/components/ui/input';
 import type { LoginFlow } from '@/hooks/useLoginFlow';
-import { AuthAction } from './AuthAction';
+import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { AuthCard } from './AuthCard';
 import { AuthForm } from './AuthForm';
 import { Field } from './Field';
@@ -8,6 +8,9 @@ import { Field } from './Field';
 /** Reset step 2: the emailed code + a new password; then the flow signs back in. */
 export function ResetPasswordForm({ flow }: { flow: LoginFlow }) {
   const { fields, error, busy, setField, submitReset, resend, back } = flow;
+
+  useShortcut('auth.resend', { enabled: !busy, callback: () => void resend() });
+  useShortcut('auth.back', { callback: back });
 
   return (
     <AuthCard
@@ -19,23 +22,10 @@ export function ResetPasswordForm({ flow }: { flow: LoginFlow }) {
       }
     >
       <AuthForm
-        label="Reset password"
         busyLabel="Resetting…"
         busy={busy}
         disabled={busy || fields.otp.length < 6}
         onSubmit={() => void submitReset()}
-        actions={
-          <>
-            <AuthAction
-              display="⌘r"
-              command="auth.resend"
-              label="resend code"
-              onAction={() => void resend()}
-              disabled={busy}
-            />
-            <AuthAction display="Esc" command="auth.back" label="back" onAction={back} />
-          </>
-        }
       >
         <Field label="Reset code" id="otp">
           <Input

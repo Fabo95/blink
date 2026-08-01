@@ -148,16 +148,19 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   Editing is an in-row **Popover** (text/source/link/group fields; `⇥`/`⇧⇥` move between the
   fields and wrap, `⌘↵` save, `⌘I` improve, `Esc` cancel). There are **no action buttons** —
   every action is a shortcut; rows also click-to-select and double-click-to-complete.
-  - **Shortcuts are declared once** (`lib/shortcuts/`). The **`KEYMAP`** table (`keymap.ts`)
+  - **Shortcuts are declared once** (`lib/shortcuts/`). The **`SHORTCUTS`** table (`shortcuts.ts`)
     is the single place keys are assigned — every entry owns its keys (synonyms
     comma-separated), statusline chip (`hint`; `null` = surfaced by a control-local chip),
     and `ORDER` slot, so conflicts are visible at a glance. The **`ShortcutProvider`**
-    (one per window, `main.tsx`) binds every KEYMAP entry once — a static `KeyBinding`
+    (one per window, `main.tsx`) binds every SHORTCUTS entry once — a static `KeyBinding`
     per row, `enabled`/`callback` looked up at keypress — so components never touch the
     key engine (`react-hotkeys-hook` appears only inside the provider; never call
     `useHotkeys` elsewhere). Components contribute only behavior:
-    `useShortcut(id, { enabled, callback, hint? })` (`hint` overrides for dynamic labels
-    like `↵ complete`/`restore`); `enabled` gates BOTH firing and the chip.
+    `useShortcut(id, { enabled, callback })`; `enabled` gates BOTH firing and the chip.
+    **Chips come only from the table**: every hint is a `HINTS` entry (keyed by the
+    binding, so one hint per physical key with the app-wide verb — `⌘↵ confirm`,
+    `Esc cancel`, `←→ switch`, `↵ toggle`), referenced by the SHORTCUTS rows and enforced
+    by a dev-time check in `shortcuts.ts`. There are no use-site hint overrides.
   - **There is no scope system.** A shortcut works exactly while a mounted component
     keeps it enabled: mounting separates the windows/screens, and overlay exclusivity is
     plain `enabled` logic — `TaskList` computes one `enabled` boolean (`no editor, no
@@ -167,9 +170,9 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
     conditions being mutually exclusive.
   - **The statusline is a view over the provider's table.** The footer (and the in-card
     rows in capture/auth) render `<Hints />` — `useHints()` subscribes and returns the
-    chips of every enabled entry (`ORDER`-sorted, KEYMAP order breaking ties), so the row
+    chips of every enabled entry (`ORDER`-sorted, SHORTCUTS order breaking ties), so the row
     always shows exactly what works right now, overlays included. A key surfaced by a
-    control-local chip declares `hint: null` in the KEYMAP (section toggles `b`/`c`/`a`,
+    control-local chip declares `hint: null` in the SHORTCUTS (section toggles `b`/`c`/`a`,
     filter-bar `n`/`r`/`⌘⌫`, the sign-out menu item, clickable `AuthAction`s).
   - **Structure**: `TaskList` is a thin orchestrator (owns the cursor, delete flow, and group
     filter) that composes `components/tasks/` presentational pieces. Stateful logic lives in
@@ -228,11 +231,11 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   the focus flow (`tabIndex={-1}` + `preventDefault` on mousedown).
 - **No emoji in the app UI.** Icons via `lucide-react`. One cursor everywhere (`cursor: default`),
   UI text not selectable.
-- **Keyboard shortcuts go through the `KEYMAP`** (`lib/shortcuts/keymap.ts`): add the entry
+- **Keyboard shortcuts go through the `SHORTCUTS`** (`lib/shortcuts/shortcuts.ts`): add the entry
   there, enable it with `useShortcut(id, { when, run })` — never raw `useHotkeys` or a
   hand-rolled `window.addEventListener('keydown', …)`. The exceptions: `ShortcutRecorder`
   (*records* arbitrary combos, not a fixed binding) and input-local `onKeyDown` behavior
-  (the archive search's Esc-to-clear). Set `opts.enableOnFormTags` on the keymap entry
+  (the archive search's Esc-to-clear). Set `opts.enableOnFormTags` on the SHORTCUTS entry
   when a command must fire while a field is focused (capture panels, editor, auth forms).
 - **Render keys with the shared `Kbd` chip** (`components/ui/kbd.tsx`), and a row of
   key+label hints with `HintRow` (`components/HintRow.tsx`) — never plain

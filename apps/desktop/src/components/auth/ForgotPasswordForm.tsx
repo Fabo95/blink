@@ -1,6 +1,6 @@
 import { Input } from '@/components/ui/input';
 import type { LoginFlow } from '@/hooks/useLoginFlow';
-import { AuthAction } from './AuthAction';
+import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { AuthCard } from './AuthCard';
 import { AuthForm } from './AuthForm';
 import { Field } from './Field';
@@ -9,17 +9,11 @@ import { Field } from './Field';
 export function ForgotPasswordForm({ flow }: { flow: LoginFlow }) {
   const { fields, error, busy, setField, submitResetRequest, back } = flow;
 
+  useShortcut('auth.back', { callback: back });
+
   return (
     <AuthCard description="Enter your account email and we'll send you a reset code">
-      <AuthForm
-        label="Send reset code"
-        busyLabel="Sending…"
-        busy={busy}
-        onSubmit={() => void submitResetRequest()}
-        actions={
-          <AuthAction display="Esc" command="auth.back" label="back to sign in" onAction={back} />
-        }
-      >
+      <AuthForm busyLabel="Sending…" busy={busy} onSubmit={() => void submitResetRequest()}>
         <Field label="Email" id="email">
           <Input
             id="email"

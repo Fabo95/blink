@@ -19,7 +19,6 @@ export function GroupFilterBar({ view }: { view: TaskGroupsView }) {
   // The name prompt's commands live here because the (uncontrolled) input does; the
   // `group-prompt` scope itself is activated by useTaskGroups.
   useShortcut('groupPrompt.submit', {
-    hint: { keys: '⌘↵', label: view.prompt === 'rename' ? 'rename group' : 'create group' },
     enabled: view.prompt !== null,
     callback: () => void view.submitPrompt(promptInputRef.current?.value ?? ''),
   });

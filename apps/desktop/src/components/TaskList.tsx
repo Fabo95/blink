@@ -92,10 +92,9 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
   } = useListCursor(navItems, (t) => t.id, { enabled });
 
   // The focused row's actions — enabled here (not in the cursor) because their gates
-  // and dynamic labels need the task's data.
+  // need the task's data.
   const focusedEnabled = enabled && focusedTask !== null;
   useShortcut('task.toggle', {
-    hint: { keys: '↵', label: focusedTask?.status === 'done' ? 'restore' : 'complete' },
     enabled: focusedEnabled,
     callback: () => {
       if (!focusedTask) return;
