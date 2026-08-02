@@ -82,6 +82,7 @@ pub fn run() {
             commands::copy_capture::dismiss_copy_capture,
             commands::manual_capture::dismiss_manual_capture,
             commands::ai::improve_text,
+            commands::ai::generate_task_prompt,
             commands::tasks::list_tasks,
             commands::tasks::save_task,
             commands::tasks::delete_task,

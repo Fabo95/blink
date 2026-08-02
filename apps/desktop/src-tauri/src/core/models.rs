@@ -76,6 +76,8 @@ pub struct SanitizeResult {
 pub struct Task {
     pub id: String,
     pub text: String,
+    /// The post-sanitization, pre-edit captured text — frozen at capture, never updated.
+    pub raw_text: String,
     pub status: String,
     pub improved: bool,
     pub link: Option<String>,
@@ -91,6 +93,9 @@ pub struct Task {
 #[serde(rename_all = "camelCase")]
 pub struct NewTask {
     pub text: String,
+    /// The captured text before any edit or AI improve; the repository falls back to
+    /// `text` when this is empty (a copy capture that opened blank and was typed into).
+    pub raw_text: String,
     /// True when the text was already AI-optimized before saving (e.g. via the
     /// copy-capture "Optimize with AI" action), so the inbox won't offer it again.
     pub improved: bool,

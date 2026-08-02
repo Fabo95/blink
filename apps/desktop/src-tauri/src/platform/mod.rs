@@ -3,6 +3,7 @@
 //! `window` (capture-panel placement) are the cross-platform glue built on top.
 //! Callers reach OS ops as `platform::os::…`.
 
+pub mod clipboard;
 pub mod os;
 pub mod shortcut;
 pub mod window;

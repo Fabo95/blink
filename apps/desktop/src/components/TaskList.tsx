@@ -1,5 +1,5 @@
 import { Inbox } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CaptureCard } from '@/components/CaptureCard';
 import { ArchivePage } from '@/components/tasks/ArchivePage';
 import { GroupFilterBar } from '@/components/tasks/GroupFilterBar';
@@ -27,6 +27,12 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
   const [error, setError] = useState('');
   const [deletingTask, setDeletingTask] = useState<Task | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  // The `p` prompt action for a single row: `loading` while generating, `copied` for a
+  // brief confirmation. The copied state auto-clears via the ref'd timeout below.
+  const [promptState, setPromptState] = useState<{ id: string; status: 'loading' | 'copied' } | null>(
+    null,
+  );
+  const promptResetTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The Archive is its own page, reached with `a` — while it's open the inbox (capture card,
   // filter bar, Inbox/Completed) is replaced by the archive view. Lifted here (above the two
   // hooks that read it) so both the group filter and the archive derivation stay in sync.
@@ -66,6 +72,26 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
       await api.openLink(task.link);
     } catch (e) {
       report(e, 'Could not open link');
+    }
+  };
+
+  // Generate an AI prompt for the task and copy it to the clipboard (the Rust command does
+  // the copy). Ignore re-presses while one is in flight; clear any pending copied-reset so a
+  // stale timer can't wipe a newer row's state.
+  const generatePrompt = async (task: Task) => {
+    if (promptState?.status === 'loading') return;
+    if (promptResetTimeout.current) {
+      clearTimeout(promptResetTimeout.current);
+      promptResetTimeout.current = null;
+    }
+    setPromptState({ id: task.id, status: 'loading' });
+    try {
+      await api.generateTaskPrompt(task.id);
+      setPromptState({ id: task.id, status: 'copied' });
+      promptResetTimeout.current = setTimeout(() => setPromptState(null), 2000);
+    } catch (e) {
+      setPromptState(null);
+      report(e, 'Could not generate prompt');
     }
   };
 
@@ -114,6 +140,12 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
     enabled: focusedEnabled && focusedTask?.link != null,
     callback: () => {
       if (focusedTask) void openLink(focusedTask);
+    },
+  });
+  useShortcut('task.prompt', {
+    enabled: focusedEnabled,
+    callback: () => {
+      if (focusedTask) void generatePrompt(focusedTask);
     },
   });
   useShortcut('task.delete', {
@@ -175,6 +207,14 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
     document.querySelector(`[data-task-id="${focusedId}"]`)?.scrollIntoView({ block: 'nearest' });
   }, [focusedId]);
 
+  // Don't let the copied-reset timer fire after unmount.
+  useEffect(
+    () => () => {
+      if (promptResetTimeout.current) clearTimeout(promptResetTimeout.current);
+    },
+    [],
+  );
+
   const confirmDelete = async () => {
     const task = deletingTask;
     if (!task) return;
@@ -214,6 +254,7 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
           ? groupNames.get(task.taskGroupId)
           : undefined
       }
+      promptStatus={promptState?.id === task.id ? promptState.status : undefined}
       onSelect={(t) => setFocusedId(t.id)}
       onToggleComplete={toggleComplete}
       onOpenLink={openLink}

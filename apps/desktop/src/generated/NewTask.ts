@@ -3,6 +3,11 @@ import type { CaptureSource } from "./CaptureSource";
 
 export type NewTask = { text: string, 
 /**
+ * The captured text before any edit or AI improve; the repository falls back to
+ * `text` when this is empty (a copy capture that opened blank and was typed into).
+ */
+rawText: string, 
+/**
  * True when the text was already AI-optimized before saving (e.g. via the
  * copy-capture "Optimize with AI" action), so the inbox won't offer it again.
  */

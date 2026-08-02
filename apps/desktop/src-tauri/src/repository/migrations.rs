@@ -48,5 +48,11 @@ pub(super) fn migrations() -> Migrations<'static> {
             ALTER TABLE tasks ADD COLUMN task_group_id TEXT \
                 REFERENCES task_groups(id) ON DELETE SET NULL;",
         ),
+        // The immutable captured text, frozen at capture. Backfill from `text` so the
+        // prompt action works uniformly on tasks that predate this column.
+        M::up(
+            "ALTER TABLE tasks ADD COLUMN raw_text TEXT NOT NULL DEFAULT '';
+             UPDATE tasks SET raw_text = text;",
+        ),
     ])
 }

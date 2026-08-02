@@ -55,9 +55,13 @@ impl TaskRepository {
 
     pub fn insert(&self, new: NewTask) -> AppResult<Task> {
         let now = Utc::now().to_rfc3339();
+        // A copy capture that opened blank and was typed into has no frozen raw text yet —
+        // fall back to the saved text so every task carries a raw_text to prompt from.
+        let raw_text = if new.raw_text.trim().is_empty() { new.text.clone() } else { new.raw_text };
         let task = Task {
             id: Uuid::new_v4().to_string(),
             text: new.text,
+            raw_text,
             status: "inbox".to_string(),
             improved: new.improved,
             link: new.link,
@@ -70,10 +74,10 @@ impl TaskRepository {
         let params = to_params_named(TaskRow::from(&task)).map_err(serde_err)?;
         let conn = self.db.lock()?;
         conn.execute(
-            "INSERT INTO tasks (id, text, status, app_id, app_name, window_title, \
+            "INSERT INTO tasks (id, text, raw_text, status, app_id, app_name, window_title, \
              captured_at, created_at, updated_at, improved, link, completed_at, \
              task_group_id) \
-             VALUES (:id, :text, :status, :app_id, :app_name, :window_title, \
+             VALUES (:id, :text, :raw_text, :status, :app_id, :app_name, :window_title, \
              :captured_at, :created_at, :updated_at, :improved, :link, :completed_at, \
              :task_group_id)",
             params.to_slice().as_slice(),
@@ -87,6 +91,12 @@ impl TaskRepository {
         )
         .map_err(store_err)?;
         Ok(task)
+    }
+
+    /// Fetch a single task by id.
+    pub fn get(&self, id: &str) -> AppResult<Task> {
+        let conn = self.db.lock()?;
+        fetch_one(&conn, id)
     }
 
     /// Swap the ordering of two tasks — used to nudge a task up or down the inbox.
@@ -198,6 +208,7 @@ fn fetch_one(conn: &Connection, id: &str) -> AppResult<Task> {
 struct TaskRow {
     id: String,
     text: String,
+    raw_text: String,
     status: String,
     app_id: String,
     app_name: String,
@@ -216,6 +227,7 @@ impl From<&Task> for TaskRow {
         Self {
             id: task.id.clone(),
             text: task.text.clone(),
+            raw_text: task.raw_text.clone(),
             status: task.status.clone(),
             app_id: task.source.app_id.clone(),
             app_name: task.source.app_name.clone(),
@@ -236,6 +248,7 @@ impl From<TaskRow> for Task {
         Self {
             id: row.id,
             text: row.text,
+            raw_text: row.raw_text,
             status: row.status,
             improved: row.improved,
             link: row.link,

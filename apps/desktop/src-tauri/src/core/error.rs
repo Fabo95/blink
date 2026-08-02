@@ -19,6 +19,8 @@ pub enum AppError {
     Shortcut(String),
     /// Opening a task's link failed (bad URL or the OS opener errored).
     Link(String),
+    /// Writing to the system clipboard failed.
+    Clipboard(String),
 }
 
 impl fmt::Display for AppError {
@@ -29,6 +31,7 @@ impl fmt::Display for AppError {
             AppError::Auth(msg) => write!(f, "auth error: {msg}"),
             AppError::Shortcut(msg) => write!(f, "shortcut error: {msg}"),
             AppError::Link(msg) => write!(f, "link error: {msg}"),
+            AppError::Clipboard(msg) => write!(f, "clipboard error: {msg}"),
         }
     }
 }

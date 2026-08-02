@@ -81,6 +81,9 @@ export const api = {
   dismissManualCapture: () => invoke<void>('dismiss_manual_capture'),
   /** Ask OpenAI to improve raw captured text (returns the cleaned text). */
   improveText: (text: string) => invoke<string>('improve_text', { text }),
+  /** Generate a ready-to-paste assistant prompt from a task's raw text and copy it to
+   *  the clipboard (returns the prompt). */
+  generateTaskPrompt: (id: string) => invoke<string>('generate_task_prompt', { id }),
   /** The current global hotkey for a capture method (Tauri accelerator syntax). */
   getCaptureShortcut: (method: CaptureMethod) => invoke<string>('get_capture_shortcut', { method }),
   /** Bind a new hotkey for a capture method; rejects if invalid or already in use. */
@@ -119,9 +122,11 @@ function seedMockStore(): Task[] {
     completedHoursAgo: number,
     src: CaptureSource,
     link: string | null = null,
+    rawText: string = text,
   ): Task => ({
     id: crypto.randomUUID(),
     text,
+    rawText,
     status: 'done',
     improved: false,
     link,
@@ -136,9 +141,11 @@ function seedMockStore(): Task[] {
     src: CaptureSource,
     link: string | null = null,
     taskGroupId: string | null = null,
+    rawText: string = text,
   ): Task => ({
     id: crypto.randomUUID(),
     text,
+    rawText,
     status: 'inbox',
     improved: false,
     link,
@@ -163,6 +170,9 @@ function seedMockStore(): Task[] {
       chrome,
       'https://linear.app/blink/issue/BLK-142',
       work,
+      'need auth middleware on the sync server — verify the bearer token from the ' +
+        'set-auth-token header, reject unauthenticated requests, and set app.current_user_id ' +
+        'so RLS scopes the query. blocked on BLK-142',
     ),
     active('Reply to the security questionnaire', mail),
     active('Book the Tuesday climbing slot', notion, null, sport),
@@ -248,6 +258,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       const task: Task = {
         id: crypto.randomUUID(),
         text: input.text,
+        rawText: input.rawText.trim() ? input.rawText : input.text,
         status: 'inbox',
         improved: input.improved,
         link: input.link,
@@ -353,6 +364,26 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
     case 'improve_text':
       // Browser mock can't reach OpenAI — echo the input back.
       return String(args?.text ?? '') as T;
+    case 'generate_task_prompt': {
+      // No OpenAI in the browser — build a deterministic prompt from the task's fields,
+      // same honesty level as the improve_text echo above.
+      const task = mockStore.find((t) => t.id === args?.id);
+      if (!task) throw new Error('task not found');
+      const parts = [
+        `Help me complete this task: ${task.text}`,
+        `\nOriginal captured text:\n${task.rawText}`,
+      ];
+      const source = task.source.appName || task.source.appId;
+      if (source) parts.push(`\nCaptured from: ${source}`);
+      if (task.link) parts.push(`Link: ${task.link}`);
+      const prompt = parts.join('\n');
+      try {
+        await navigator.clipboard.writeText(prompt);
+      } catch {
+        // No clipboard permission in the browser — the returned prompt still drives the UI.
+      }
+      return prompt as T;
+    }
     case 'open_link':
       window.open(String(args?.url ?? ''), '_blank', 'noopener');
       return undefined as T;

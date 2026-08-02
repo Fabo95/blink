@@ -16,6 +16,7 @@ import { api, isTauri } from '@/lib/api';
 import { normalizeLink } from '@/lib/link';
 import { Hints } from '@/lib/shortcuts/Hints';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
+import { errorMessage } from '@/lib/utils';
 
 /** The initial content a capture method drops into the panel when it opens. */
 export interface CaptureContent {
@@ -24,6 +25,8 @@ export interface CaptureContent {
   redactionCount: number;
   /** Pre-filled link (e.g. the source page URL for a browser copy-capture). */
   link?: string;
+  /** Frozen raw text (copy capture); absent = freeze at the first improve. */
+  rawText?: string;
 }
 
 /** Everything that differs between capture methods; the panel owns the rest. */
@@ -48,6 +51,9 @@ export interface CaptureKind {
  */
 export function CapturePanel({ kind }: { kind: CaptureKind }) {
   const [text, setText] = useState('');
+  // The immutable captured text. `null` = not yet frozen: a manual capture freezes it at
+  // the first improve, a copy capture arrives already frozen (the sanitized prefill).
+  const [rawText, setRawText] = useState<string | null>(null);
   const [link, setLink] = useState('');
   const [source, setSource] = useState<CaptureSource | null>(null);
   const [redactions, setRedactions] = useState(0);
@@ -70,6 +76,7 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
       api.getActiveTaskGroup(),
     ]);
     setText(content.text);
+    setRawText(content.rawText ?? null);
     setLink(content.link ?? '');
     setSource(content.source);
     setRedactions(content.redactionCount);
@@ -82,6 +89,7 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
 
   const hide = useCallback(async () => {
     setText('');
+    setRawText(null);
     setLink('');
     setRedactions(0);
     setTaskGroupId(null);
@@ -95,38 +103,39 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
     const trimmed = text.trim();
     if (!trimmed || !source) return;
     // Accept a bare domain (`github.com`) — default it to https so it opens later.
-    await api.saveTask({ text: trimmed, improved, link: normalizeLink(link), taskGroupId, source });
+    // Never improved and never a copy-capture prefill → the raw is the saved text itself.
+    await api.saveTask({
+      text: trimmed,
+      rawText: rawText ?? trimmed,
+      improved,
+      link: normalizeLink(link),
+      taskGroupId,
+      source,
+    });
     if (isTauri) {
       // Only the main (inbox) window cares — target it directly.
       const { emitTo } = await import('@tauri-apps/api/event');
       await emitTo('main', 'task-saved');
     }
     await hide();
-  }, [text, improved, link, taskGroupId, source, hide]);
+  }, [text, rawText, improved, link, taskGroupId, source, hide]);
 
   const improve = useCallback(async () => {
     if (!text.trim()) return;
     setImproving(true);
     setError('');
     try {
+      // Freeze the raw at the first improve (manual capture); later improves don't re-freeze,
+      // and a copy capture is already frozen from its prefill.
+      if (rawText === null) setRawText(text);
       setText(await api.improveText(text));
       setImproved(true);
     } catch (e) {
-      // Tauri rejects a command's Err with our AppError object `{ kind, message }`,
-      // which isn't an Error instance — pull the message from whatever shape it is.
-      const message =
-        e instanceof Error
-          ? e.message
-          : typeof e === 'string'
-            ? e
-            : e && typeof e === 'object' && 'message' in e
-              ? String((e as { message: unknown }).message)
-              : 'Could not improve text';
-      setError(message);
+      setError(errorMessage(e, 'Could not improve text'));
     } finally {
       setImproving(false);
     }
-  }, [text]);
+  }, [text, rawText]);
 
   // (Re)load on mount and whenever the hotkey re-opens the panel.
   useEffect(() => {

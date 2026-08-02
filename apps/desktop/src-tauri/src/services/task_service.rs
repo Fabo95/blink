@@ -21,6 +21,10 @@ impl TaskService {
         self.task_repository.list()
     }
 
+    pub fn get(&self, id: &str) -> AppResult<Task> {
+        self.task_repository.get(id)
+    }
+
     pub fn save(&self, task: NewTask) -> AppResult<Task> {
         self.task_repository.insert(task)
     }

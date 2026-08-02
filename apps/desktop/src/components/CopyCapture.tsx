@@ -14,6 +14,7 @@ const copyKind: CaptureKind = {
     const draft = await api.readCopyCapture();
     return {
       text: draft.text,
+      rawText: draft.text,
       source: draft.source,
       redactionCount: draft.redactionCount,
       link: draft.link ?? undefined,
