@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CaptureCard } from '@/components/CaptureCard';
 import { Header } from '@/components/Header';
 import { HintRow } from '@/components/HintRow';
 import { TaskList } from '@/components/TaskList';
@@ -43,7 +42,6 @@ export function Inbox() {
     <div className="mx-auto flex h-full max-w-3xl flex-col">
       <Header account={user} onSignOut={signOut} />
       <main className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-6">
-        <CaptureCard />
         <TaskList tasks={tasks} onChanged={refresh} />
       </main>
       {/* One statusline: the most specific shortcuts for where you are, plus the always-on

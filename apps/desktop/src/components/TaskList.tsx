@@ -1,6 +1,7 @@
 import { Inbox } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { ArchiveSection } from '@/components/tasks/ArchiveSection';
+import { CaptureCard } from '@/components/CaptureCard';
+import { ArchivePage } from '@/components/tasks/ArchivePage';
 import { GroupFilterBar } from '@/components/tasks/GroupFilterBar';
 import { TaskEditor } from '@/components/tasks/TaskEditor';
 import { TaskRow } from '@/components/tasks/TaskRow';
@@ -26,6 +27,10 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
   const [error, setError] = useState('');
   const [deletingTask, setDeletingTask] = useState<Task | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  // The Archive is its own page, reached with `a` — while it's open the inbox (capture card,
+  // filter bar, Inbox/Completed) is replaced by the archive view. Lifted here (above the two
+  // hooks that read it) so both the group filter and the archive derivation stay in sync.
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const report = (e: unknown, fallback: string) => setError(errorMessage(e, fallback));
 
   const editor = useTaskEditor({ onSaved: onChanged, setError });
@@ -34,7 +39,7 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
   // group prompt, help sheet) owns the keyboard — each overlay's own shortcuts enable on
   // its state.
   const baseEnabled = !isEditing && deletingTask === null && !helpOpen;
-  const taskGroups = useTaskGroups({ enabled: baseEnabled });
+  const taskGroups = useTaskGroups({ enabled: baseEnabled, canManage: !archiveOpen });
   const enabled = baseEnabled && !taskGroups.busy;
 
   // Filtering before the split keeps every section (and its count) on the same filter.
@@ -44,7 +49,7 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
       : tasks.filter((t) => t.taskGroupId === taskGroups.selectedId);
   const { active, recentCompleted, archived } = splitTasks(visible);
   const groupNames = new Map(taskGroups.groups.map((g) => [g.id, g.name]));
-  const archive = useArchive(archived, { enabled });
+  const archive = useArchive(archived, { enabled, open: archiveOpen, setOpen: setArchiveOpen });
 
   const toggleComplete = async (task: Task) => {
     try {
@@ -77,9 +82,9 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
     }
   };
 
-  // One cursor over everything currently visible — Inbox and Completed are always open;
-  // the collapsed Archive drops out so the cursor never lands on a hidden row.
-  const navItems = [...active, ...recentCompleted, ...(archive.open ? archive.items : [])];
+  // One cursor over whichever page is showing: the inbox (Inbox + Completed, both always
+  // open) or the archive page (its current, searched, paged slice) — never both at once.
+  const navItems = archiveOpen ? archive.items : [...active, ...recentCompleted];
   const {
     focusedId,
     setFocusedId,
@@ -131,17 +136,24 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
     },
   });
 
-  // One horizontal axis, arrows + vim like ↑↓/jk: while the archive is open its pager
-  // owns ←→/hl (enabled in useArchive), otherwise they cycle the group filter.
-  const canCycleGroups = enabled && !archive.open && taskGroups.groups.length > 0;
+  // One horizontal axis, arrows + vim like ↑↓/jk: on the archive page its pager owns ←→/hl
+  // (enabled in useArchive), on the inbox they cycle the group filter.
+  const canCycleGroups = enabled && !archiveOpen && taskGroups.groups.length > 0;
   useShortcut('filter.prev', { enabled: canCycleGroups, callback: () => taskGroups.cycle(-1) });
   useShortcut('filter.next', { enabled: canCycleGroups, callback: () => taskGroups.cycle(1) });
 
-  // `⌫` deletes the selected group — but only while no task is focused, so it stays
-  // mutually exclusive with `task.delete` (same key).
+  // `⌫` deletes the selected group — inbox only, and only while no task is focused, so it
+  // stays mutually exclusive with `task.delete` (same key).
   useShortcut('group.delete', {
-    enabled: enabled && focusedTask === null && taskGroups.selected !== null,
+    enabled: enabled && !archiveOpen && focusedTask === null && taskGroups.selected !== null,
     callback: taskGroups.requestDelete,
+  });
+
+  // `Esc` leaves the archive page — but only with no row focused, so a focused row's Esc
+  // clears the selection first (`a` always toggles the page, regardless of focus).
+  useShortcut('archive.close', {
+    enabled: enabled && archiveOpen && focusedTask === null,
+    callback: () => setArchiveOpen(false),
   });
 
   // `v` flips every hint chip between the standard keys and their vim synonyms — always
@@ -214,31 +226,34 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
 
   return (
     <>
-      <GroupFilterBar view={taskGroups} />
-      <TaskSection title="Inbox" count={active.length}>
-        {active.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-6 text-muted-foreground">
-            <Inbox className="size-6" />
-            <p className="text-sm">
-              {recentCompleted.length + archived.length > 0
-                ? 'Inbox zero — all caught up.'
-                : 'No tasks yet — capture something above.'}
-            </p>
-          </div>
-        ) : (
-          <ul className="space-y-2">{active.map(renderRow)}</ul>
-        )}
-        {error && <p className="mt-2 line-clamp-2 text-[11px] text-destructive">{error}</p>}
-      </TaskSection>
+      {archiveOpen ? (
+        <ArchivePage archive={archive} totalCount={archived.length} renderRow={renderRow} />
+      ) : (
+        <>
+          <CaptureCard />
+          <GroupFilterBar view={taskGroups} />
+          <TaskSection title="Inbox" count={active.length}>
+            {active.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-6 text-muted-foreground">
+                <Inbox className="size-6" />
+                <p className="text-sm">
+                  {recentCompleted.length + archived.length > 0
+                    ? 'Inbox zero — all caught up.'
+                    : 'No tasks yet — capture something above.'}
+                </p>
+              </div>
+            ) : (
+              <ul className="space-y-2">{active.map(renderRow)}</ul>
+            )}
+            {error && <p className="mt-2 line-clamp-2 text-[11px] text-destructive">{error}</p>}
+          </TaskSection>
 
-      {recentCompleted.length > 0 && (
-        <TaskSection title="Completed" count={recentCompleted.length}>
-          <ul className="space-y-2">{recentCompleted.map(renderRow)}</ul>
-        </TaskSection>
-      )}
-
-      {archived.length > 0 && (
-        <ArchiveSection archive={archive} totalCount={archived.length} renderRow={renderRow} />
+          {recentCompleted.length > 0 && (
+            <TaskSection title="Completed" count={recentCompleted.length}>
+              <ul className="space-y-2">{recentCompleted.map(renderRow)}</ul>
+            </TaskSection>
+          )}
+        </>
       )}
 
       <ShortcutHelp open={helpOpen} onOpenChange={setHelpOpen} />

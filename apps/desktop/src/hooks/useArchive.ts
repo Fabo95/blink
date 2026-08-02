@@ -26,17 +26,20 @@ export interface ArchiveView {
 interface Options {
   /** False while an overlay (editor, dialog, prompt) owns the keyboard. */
   enabled: boolean;
+  /** Whether the archive page is showing. Lifted to TaskList so the group filter and
+   *  archive derivation can both read it without a circular hook order. */
+  open: boolean;
+  setOpen: (open: boolean) => void;
 }
 
 /**
- * The archive's view state over a list of older completions: expand/collapse, a text
- * search, and pagination, plus the `a` (toggle), `←→`/`hl` (page), and `/` (focus
- * search) shortcuts. While the archive is open its pager owns the horizontal keys —
- * TaskList's filter cycle only enables when it's closed. Derivation is pure — the
- * current page is sorted most-recent-first, sliced, then day-grouped.
+ * The archive's view state over a list of older completions: a text search and pagination,
+ * plus the `a` (toggle the archive page), `←→`/`hl` (page), and `s` (focus search)
+ * shortcuts. While the archive page is open its pager owns the horizontal keys — TaskList's
+ * filter cycle only enables when it's closed. Derivation is pure — the current page is
+ * sorted most-recent-first, sliced, then day-grouped.
  */
-export function useArchive(archived: Task[], { enabled }: Options): ArchiveView {
-  const [open, setOpen] = useState(false);
+export function useArchive(archived: Task[], { enabled, open, setOpen }: Options): ArchiveView {
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -68,8 +71,12 @@ export function useArchive(archived: Task[], { enabled }: Options): ArchiveView 
     setPage(Math.max(0, Math.min(pageCount - 1, next)));
   };
 
-  useShortcut('archive.toggle', { enabled: enabled && archived.length > 0, callback: toggle });
-  // `/` (vim search) focuses the box; the default preventDefault keeps the slash out of it.
+  // `a` opens the archive page from the inbox and closes it again — once open it stays
+  // toggleable even if the list emptied (restored its last item), so you can always leave.
+  useShortcut('archive.toggle', {
+    enabled: enabled && (open || archived.length > 0),
+    callback: toggle,
+  });
   useShortcut('archive.search', {
     enabled: enabled && open,
     callback: () => searchRef.current?.focus(),

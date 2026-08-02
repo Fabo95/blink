@@ -44,7 +44,7 @@ generated/          ts-rs output — never hand-edit; run gen:types after changi
 components/
   auth/             LoginScreen, CredentialsForm, VerifyForm, ForgotPasswordForm,
                     ResetPasswordForm, AuthCard, Field
-  tasks/            TaskSection, ArchiveSection, TaskRow, TaskEditor, GroupFilterBar,
+  tasks/            TaskSection, ArchivePage, TaskRow, TaskEditor, GroupFilterBar,
                     DeleteTaskPopover, DeleteGroupPopover (in-row confirms)
   CapturePanel.tsx  shared capture UI; CopyCapture/ManualCapture are thin config wrappers
   TaskList.tsx      inbox orchestrator (cursor + delete flow + group filter)
@@ -139,16 +139,22 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   it resolves the pressed shortcut back to its method (`method_of`) and dispatches. `set` refuses
   a combo already owned by another method. UI is one `ShortcutRecorder` per method in the capture
   card; the commands `get/set_capture_shortcut` take a `method` arg.
-- **Inbox is keyboard-first** (`TaskList`): three stacked sections — **Inbox** (active) and
-  **Completed** (done in the last 24h), both always open, and a collapsible **Archive** (older
-  completions, expanded in place with `a` — the only section that toggles). The archive is searchable and paginated (8/page), day-grouped
-  (Today / Yesterday / weekday / date via `lib/completed.ts::groupByDay`); `←→`/`hl` page while
-  it's open, `s` focuses its search box. A virtual cursor (`useListCursor`, built on `react-hotkeys-hook`) walks everything
-  visible (Inbox → Completed → open archive page): `↑↓`/`jk` move it, `↵` completes/restores the
-  focused task, `e`/`i` edit, `o` opens its link, `⌫`/`d` delete (in-row confirm popover, `⌘↵`
-  confirms), `⌥↑↓`/`⌥KJ` reorder it (Inbox only — see below), `Esc` unselects. `Tab` is swallowed
-  while browsing the inbox (the cursor drives selection, not DOM focus); it works normally in
-  every input elsewhere (the editor fields, capture panel, login).
+- **Inbox is keyboard-first** (`TaskList`): two stacked sections — **Inbox** (active) and
+  **Completed** (done in the last 24h), both always open — above the capture card and group
+  filter bar. **The Archive is its own page** (`ArchivePage`), reached with `a`: it replaces the
+  whole inbox (capture card, filter bar, both sections) with a searchable, paginated (8/page),
+  day-grouped list of older completions (Today / Yesterday / weekday / date via
+  `lib/completed.ts::groupByDay`). On the archive page `s` focuses its search box, `←→`/`hl`
+  page, and `a` or `Esc` return to the inbox (`Esc` only with no row focused — a focused row's
+  `Esc` clears the selection first). `archiveOpen` lives in `TaskList` (lifted above
+  `useTaskGroups`/`useArchive` so both read it); while it's true the group-management keys
+  (`n`/`r`/`⌫`) and filter cycling stand down. A virtual cursor (`useListCursor`, built on
+  `react-hotkeys-hook`) walks whichever page is showing — the inbox (Inbox → Completed) or the
+  archive page's current slice: `↑↓`/`jk` move it, `↵` completes/restores the focused task,
+  `e`/`i` edit, `o` opens its link, `⌫`/`d` delete (in-row confirm popover, `⌘↵` confirms),
+  `⌥↑↓`/`⌥KJ` reorder it (Inbox only — see below), `Esc` unselects. `Tab` is swallowed while
+  browsing (the cursor drives selection, not DOM focus); it works normally in every input
+  elsewhere (the editor fields, capture panel, login).
   Editing is an in-row **Popover** (text/source/link/group fields; `⇥`/`⇧⇥` move between the
   fields and wrap, `⌘↵` save, `⌘I` improve, `Esc` cancel). There are **no action buttons** —
   every action is a shortcut; rows also click-to-select and double-click-to-complete.

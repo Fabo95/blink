@@ -32,6 +32,9 @@ export interface TaskGroupsView {
 interface Options {
   /** False while another overlay (editor, task-delete dialog) owns the keyboard. */
   enabled: boolean;
+  /** False on the archive page — the filter bar is hidden there, so its management keys
+   *  (`n`/`r`) must stand down. */
+  canManage: boolean;
 }
 
 /**
@@ -42,7 +45,7 @@ interface Options {
  * and must stand down when a task is focused. Filter cycling (`←→`/`hl`) is likewise bound
  * in TaskList. Deleting a group un-groups its tasks.
  */
-export function useTaskGroups({ enabled }: Options): TaskGroupsView {
+export function useTaskGroups({ enabled, canManage }: Options): TaskGroupsView {
   const [groups, setGroups] = useState<TaskGroup[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState<GroupPrompt | null>(null);
@@ -115,7 +118,7 @@ export function useTaskGroups({ enabled }: Options): TaskGroupsView {
   // Management keys stand down while any overlay — including this hook's own prompt and
   // delete dialog — owns the keyboard.
   const busy = prompt !== null || deleting;
-  const manage = enabled && !busy;
+  const manage = enabled && canManage && !busy;
   useShortcut('group.new', { enabled: manage, callback: () => setPrompt('create') });
   useShortcut('group.rename', {
     enabled: manage && selected !== null,

@@ -118,8 +118,17 @@ export const SHORTCUTS = {
     keys: 'a',
     hint: HINTS.a,
     level: 1,
-    describe: 'Show or hide the Archive',
+    describe: 'Open or leave the Archive',
     order: 52,
+  },
+  // Second way out of the archive page: Esc when no row is focused (a focused row's Esc
+  // clears the selection first). Same key as every other Esc — mutually exclusive by state.
+  'archive.close': {
+    keys: 'escape',
+    hint: HINTS.escape,
+    level: 1,
+    describe: 'Leave the Archive',
+    order: 90,
   },
   'group.new': {
     keys: 'n',
@@ -352,7 +361,10 @@ export const SHORTCUT_IDS = Object.keys(SHORTCUTS) as ShortcutId[];
  *  chip comes from its `hint`, its explanation from `describe` — one source of truth. */
 export const CHEATSHEET: { title: string; ids: ShortcutId[] }[] = [
   { title: 'Task groups', ids: ['group.new', 'group.rename', 'group.delete', 'filter.prev'] },
-  { title: 'Archive', ids: ['archive.toggle', 'archive.search', 'archive.prevPage'] },
+  {
+    title: 'Archive',
+    ids: ['archive.toggle', 'archive.search', 'archive.prevPage', 'archive.close'],
+  },
   {
     title: 'Tasks',
     ids: [
