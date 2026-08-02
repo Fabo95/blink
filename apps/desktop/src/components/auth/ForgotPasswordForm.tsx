@@ -1,19 +1,27 @@
 import { Input } from '@/components/ui/input';
-import type { LoginFlow } from '@/hooks/useLoginFlow';
+import type { LoginState } from '@/hooks/useLoginState';
+import { useSession } from '@/hooks/useSession';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { AuthCard } from './AuthCard';
 import { AuthForm } from './AuthForm';
 import { Field } from './Field';
 
 /** Reset step 1: confirm the account email; a reset code is sent to it. */
-export function ForgotPasswordForm({ flow }: { flow: LoginFlow }) {
-  const { fields, error, busy, setField, submitResetRequest, back } = flow;
+export function ForgotPasswordForm({ state }: { state: LoginState }) {
+  const { requestPasswordReset } = useSession();
+  const { fields, error, busy, setField, setStep, back, run } = state;
+
+  const submit = () =>
+    run(async () => {
+      await requestPasswordReset(fields.email.trim());
+      setStep('resetPassword');
+    });
 
   useShortcut('auth.back', { callback: back });
 
   return (
     <AuthCard description="Enter your account email and we'll send you a reset code">
-      <AuthForm busyLabel="Sending…" busy={busy} onSubmit={() => void submitResetRequest()}>
+      <AuthForm busyLabel="Sending…" busy={busy} onSubmit={() => void submit()}>
         <Field label="Email" id="email">
           <Input
             id="email"

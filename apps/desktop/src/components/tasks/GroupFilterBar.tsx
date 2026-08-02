@@ -1,5 +1,4 @@
 import { useRef } from 'react';
-import { type Hint, HintRow } from '@/components/HintRow';
 import { DeleteGroupDialog } from '@/components/tasks/DeleteGroupDialog';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
@@ -23,17 +22,6 @@ export function GroupFilterBar({ view }: { view: TaskGroupsView }) {
     callback: () => void view.submitPrompt(promptInputRef.current?.value ?? ''),
   });
   useShortcut('groupPrompt.cancel', { enabled: view.prompt !== null, callback: view.closePrompt });
-
-  // Management keys only — the movement key (←→ filter) lives in the footer statusline.
-  const hints: Hint[] = [
-    { keys: 'n', label: 'new' },
-    ...(view.selected
-      ? [
-          { keys: 'r', label: 'rename' },
-          { keys: '⌘⌫', label: 'delete' },
-        ]
-      : []),
-  ];
 
   return (
     <div className="space-y-1.5">
@@ -73,7 +61,6 @@ export function GroupFilterBar({ view }: { view: TaskGroupsView }) {
           </PopoverContent>
         )}
       </Popover>
-      <HintRow className="pt-1.5" hints={hints} />
       {view.error && view.prompt === null && (
         <p className="line-clamp-2 text-[11px] text-destructive">{view.error}</p>
       )}

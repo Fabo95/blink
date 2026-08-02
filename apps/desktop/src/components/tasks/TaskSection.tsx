@@ -3,7 +3,6 @@ import { CollapsibleSection } from '@/components/tasks/CollapsibleSection';
 
 interface TaskSectionProps {
   title: string;
-  toggleKey: string;
   open: boolean;
   onToggle: () => void;
   count: number;
@@ -12,22 +11,9 @@ interface TaskSectionProps {
 
 /** A collapsible titled section (Inbox, Completed) with a count. Shortcut hints live in
  *  the footer statusline, not on sections. */
-export function TaskSection({
-  title,
-  toggleKey,
-  open,
-  onToggle,
-  count,
-  children,
-}: TaskSectionProps) {
+export function TaskSection({ title, open, onToggle, count, children }: TaskSectionProps) {
   return (
-    <CollapsibleSection
-      title={title}
-      toggleKey={toggleKey}
-      open={open}
-      onToggle={onToggle}
-      meta={`${count} task(s)`}
-    >
+    <CollapsibleSection title={title} open={open} onToggle={onToggle} meta={`${count} task(s)`}>
       {children}
     </CollapsibleSection>
   );

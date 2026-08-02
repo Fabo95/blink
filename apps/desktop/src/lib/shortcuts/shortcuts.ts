@@ -13,6 +13,10 @@ export const ORDER = {
 export interface Shortcut {
   keys: string;
   hint: Hint | null;
+  /** Which statusline row the chip shows in: `'context'` (default — depends on what's
+   *  focused or which overlay is open) or `'global'` (always-available management:
+   *  section toggles, group CRUD, filter switch). */
+  group?: 'global' | 'context';
   order: number;
   opts?: { enableOnFormTags?: boolean; preventDefault?: boolean };
 }
@@ -40,6 +44,13 @@ const HINTS = {
   'mod+r': { keys: '⌘r', label: 'resend' },
   'mod+n': { keys: '⌘n', label: 'switch' },
   'mod+f': { keys: '⌘f', label: 'forgot' },
+  // global row — always-available management keys
+  b: { keys: 'b', label: 'inbox' },
+  c: { keys: 'c', label: 'completed' },
+  a: { keys: 'a', label: 'archive' },
+  n: { keys: 'n', label: 'new' },
+  r: { keys: 'r', label: 'rename' },
+  'mod+backspace': { keys: '⌘⌫', label: 'delete' },
 } satisfies Record<string, Hint>;
 
 /**
@@ -71,14 +82,25 @@ export const SHORTCUTS = {
   },
   'task.moveDown': { keys: 'alt+down, alt+j', hint: null, order: ORDER.action + 3 },
   // ←→/hl pair with archive paging below: filter cycles only while the archive is closed.
-  'filter.prev': { keys: 'left, h', hint: HINTS['left, h'], order: ORDER.context },
+  // filter cycling is a global (always-available) key; archive paging (same key) is context.
+  'filter.prev': {
+    keys: 'left, h',
+    hint: HINTS['left, h'],
+    group: 'global',
+    order: ORDER.context + 6,
+  },
   'filter.next': { keys: 'right, l', hint: null, order: ORDER.context },
-  'group.new': { keys: 'n', hint: null, order: ORDER.context },
-  'group.rename': { keys: 'r', hint: null, order: ORDER.context },
-  'group.delete': { keys: 'mod+backspace', hint: null, order: ORDER.context },
-  'section.inbox': { keys: 'b', hint: null, order: ORDER.context },
-  'section.completed': { keys: 'c', hint: null, order: ORDER.context },
-  'archive.toggle': { keys: 'a', hint: null, order: ORDER.context },
+  'group.new': { keys: 'n', hint: HINTS.n, group: 'global', order: ORDER.context + 3 },
+  'group.rename': { keys: 'r', hint: HINTS.r, group: 'global', order: ORDER.context + 4 },
+  'group.delete': {
+    keys: 'mod+backspace',
+    hint: HINTS['mod+backspace'],
+    group: 'global',
+    order: ORDER.context + 5,
+  },
+  'section.inbox': { keys: 'b', hint: HINTS.b, group: 'global', order: ORDER.context },
+  'section.completed': { keys: 'c', hint: HINTS.c, group: 'global', order: ORDER.context + 1 },
+  'archive.toggle': { keys: 'a', hint: HINTS.a, group: 'global', order: ORDER.context + 2 },
   'archive.search': { keys: '/', hint: HINTS['/'], order: ORDER.context },
   'archive.prevPage': { keys: 'left, h', hint: HINTS['left, h'], order: ORDER.context + 1 },
   'archive.nextPage': { keys: 'right, l', hint: null, order: ORDER.context + 1 },

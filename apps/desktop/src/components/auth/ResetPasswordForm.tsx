@@ -1,13 +1,35 @@
 import { Input } from '@/components/ui/input';
-import type { LoginFlow } from '@/hooks/useLoginFlow';
+import type { LoginState } from '@/hooks/useLoginState';
+import { useSession } from '@/hooks/useSession';
+import { errorMessage } from '@/lib/errorMessage';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { AuthCard } from './AuthCard';
 import { AuthForm } from './AuthForm';
 import { Field } from './Field';
 
 /** Reset step 2: the emailed code + a new password; then the flow signs back in. */
-export function ResetPasswordForm({ flow }: { flow: LoginFlow }) {
-  const { fields, error, busy, setField, submitReset, resend, back } = flow;
+export function ResetPasswordForm({ state }: { state: LoginState }) {
+  const { resetPassword, requestPasswordReset, signIn } = useSession();
+  const { fields, error, busy, setField, setError, back, run } = state;
+
+  const submit = () =>
+    run(async () => {
+      const email = fields.email.trim();
+      await resetPassword(email, fields.otp.trim(), fields.password);
+      const result = await signIn(email, fields.password); // new password → session
+      if (result.status !== 'authenticated') {
+        throw new Error('Password reset, but sign-in failed. Please try again.');
+      }
+    });
+
+  const resend = async () => {
+    setError(null);
+    try {
+      await requestPasswordReset(fields.email.trim());
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
 
   useShortcut('auth.resend', { enabled: !busy, callback: () => void resend() });
   useShortcut('auth.back', { callback: back });
@@ -25,7 +47,7 @@ export function ResetPasswordForm({ flow }: { flow: LoginFlow }) {
         busyLabel="Resetting…"
         busy={busy}
         disabled={busy || fields.otp.length < 6}
-        onSubmit={() => void submitReset()}
+        onSubmit={() => void submit()}
       >
         <Field label="Reset code" id="otp">
           <Input

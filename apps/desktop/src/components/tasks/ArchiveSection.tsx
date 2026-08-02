@@ -20,7 +20,6 @@ export function ArchiveSection({ archive, totalCount, renderRow }: ArchiveSectio
   return (
     <CollapsibleSection
       title="Archive"
-      toggleKey="a"
       open={open}
       onToggle={toggle}
       meta={`${totalCount} completed`}

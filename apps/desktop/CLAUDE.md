@@ -45,7 +45,7 @@ components/
   auth/             LoginScreen, CredentialsForm, VerifyForm, ForgotPasswordForm,
                     ResetPasswordForm, AuthCard, Field
   tasks/            TaskSection, ArchiveSection, TaskRow, TaskEditor, GroupFilterBar,
-                    DeleteTaskDialog, DeleteGroupDialog
+                    DeleteTaskPopover (in-row confirm), DeleteGroupDialog
   CapturePanel.tsx  shared capture UI; CopyCapture/ManualCapture are thin config wrappers
   TaskList.tsx      inbox orchestrator (cursor + delete flow + group filter)
 hooks/              useTaskEditor, useTaskGroups, useArchive, useListCursor, useSession
@@ -100,12 +100,15 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   profile is cached in `settings` so `current_session` gates offline (token present + cached
   user). Webview side: `AuthGate` is the SPA's route-middleware stand-in (renders `LoginScreen`
   until authenticated), and `useSession` reads the provider's context. The token never enters
-  the webview. Capture windows stay local (not gated). The auth screens are button-free like
-  the rest of the app: `⌘↵` is the only submit (shared `AuthForm` — `requestSubmit()` keeps
-  native validation, plain Enter is swallowed), `Esc` steps back, `⌘R` resends the code,
-  `⌘N` toggles sign-in ↔ sign-up, `⌘F` opens forgot-password — each surfaced by `AuthAction`
-  (shortcut + hint chip + Pill-style secondary click). `⌘⇧Q` signs out (hinted on the
-  header menu item).
+  the webview. Capture windows stay local (not gated). The auth screens are keyboard-first and
+  button-free like the rest of the app, with the shortcut statusline pinned to the bottom of
+  `LoginScreen` (like the inbox footer): `⌘↵` is the only submit (shared `AuthForm` —
+  `requestSubmit()` keeps native validation, plain Enter is swallowed), `Esc` steps back, `⌘R`
+  resends the code, `⌘N` toggles sign-in ↔ sign-up, `⌘F` opens forgot-password — each a plain
+  `useShortcut` whose chip shows in the statusline (no clickable chips). `⌘⇧Q` signs out (hinted
+  on the header menu item). `useLoginState` holds only what spans steps (`step` + the
+  email/password carried forward + busy/error + navigation); each form owns its own
+  submit/resend via `useSession`.
 - **Capture methods**: each is a variant of `platform::shortcut::CaptureMethod`, and owns a
   global hotkey + a frameless window + a component. `main.tsx` branches on
   `getCurrentWindow().label` to render the right one. Both windows render the shared
@@ -142,38 +145,54 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   (Today / Yesterday / weekday / date via `lib/completed.ts::groupByDay`); `←→`/`hl` page while
   it's open, `/` focuses its search box. A virtual cursor (`useListCursor`, built on `react-hotkeys-hook`) walks everything
   visible (Inbox → Completed → open archive page): `↑↓`/`jk` move it, `↵` completes/restores the
-  focused task, `e`/`i` edit, `o` opens its link, `⌫`/`d` delete (confirm `AlertDialog`, `⌘↵` to
-  confirm), `⌥↑↓`/`⌥KJ` reorder it (Inbox only — see below), `Esc` unselects. `Tab` is swallowed
-  in the main window (the cursor drives selection, not DOM focus) except inside the open editor.
+  focused task, `e`/`i` edit, `o` opens its link, `⌫`/`d` delete (in-row confirm popover, `⌘↵`
+  confirms), `⌥↑↓`/`⌥KJ` reorder it (Inbox only — see below), `Esc` unselects. `Tab` is swallowed
+  while browsing the inbox (the cursor drives selection, not DOM focus); it works normally in
+  every input elsewhere (the editor fields, capture panel, login).
   Editing is an in-row **Popover** (text/source/link/group fields; `⇥`/`⇧⇥` move between the
   fields and wrap, `⌘↵` save, `⌘I` improve, `Esc` cancel). There are **no action buttons** —
   every action is a shortcut; rows also click-to-select and double-click-to-complete.
-  - **Shortcuts are declared once** (`lib/shortcuts/`). The **`SHORTCUTS`** table (`shortcuts.ts`)
-    is the single place keys are assigned — every entry owns its keys (synonyms
-    comma-separated), statusline chip (`hint`; `null` = surfaced by a control-local chip),
-    and `ORDER` slot, so conflicts are visible at a glance. The **`ShortcutProvider`**
-    (one per window, `main.tsx`) binds every SHORTCUTS entry once — a static `KeyBinding`
-    per row, `enabled`/`callback` looked up at keypress — so components never touch the
-    key engine (`react-hotkeys-hook` appears only inside the provider; never call
-    `useHotkeys` elsewhere). Components contribute only behavior:
-    `useShortcut(id, { enabled, callback })`; `enabled` gates BOTH firing and the chip.
-    **Chips come only from the table**: every hint is a `HINTS` entry (keyed by the
-    binding, so one hint per physical key with the app-wide verb — `⌘↵ confirm`,
-    `Esc cancel`, `←→ switch`, `↵ toggle`), referenced by the SHORTCUTS rows and enforced
-    by a dev-time check in `shortcuts.ts`. There are no use-site hint overrides.
-  - **There is no scope system.** A shortcut works exactly while a mounted component
-    keeps it enabled: mounting separates the windows/screens, and overlay exclusivity is
-    plain `enabled` logic — `TaskList` computes one `enabled` boolean (`no editor, no
-    delete dialog, no group prompt`) and threads it into
-    `useListCursor`/`useArchive`/`useTaskGroups`, while each overlay's own shortcuts
-    enable on its open state. Entries sharing keys (Esc, `⌘↵`, `←→`/`hl`) rely on those
-    conditions being mutually exclusive.
-  - **The statusline is a view over the provider's table.** The footer (and the in-card
-    rows in capture/auth) render `<Hints />` — `useHints()` subscribes and returns the
-    chips of every enabled entry (`ORDER`-sorted, SHORTCUTS order breaking ties), so the row
-    always shows exactly what works right now, overlays included. A key surfaced by a
-    control-local chip declares `hint: null` in the SHORTCUTS (section toggles `b`/`c`/`a`,
-    filter-bar `n`/`r`/`⌘⌫`, the sign-out menu item, clickable `AuthAction`s).
+  - **Shortcuts live in one table** (`lib/shortcuts/`). **`SHORTCUTS`** (`shortcuts.ts`) is the
+    single place keys are assigned — one row per action (`'task.delete'`, `'editor.save'`, …),
+    each owning its `keys` (synonyms comma-separated), statusline chip (`hint`), `ORDER` slot,
+    and `opts` (`enableOnFormTags`/`preventDefault`). Chips come from **`HINTS`** (also in
+    `shortcuts.ts`), keyed by the binding so there is **one hint per physical key** with an
+    app-wide verb (`⌘↵ confirm`, `Esc cancel`, `←→ switch`, `↵ toggle`); a dev-time check fails
+    if two rows on the same key diverge. `hint: null` = no chip (silent half of a pair, or a
+    key surfaced by its own control-local chip). There are no use-site hint overrides.
+  - **The `ShortcutProvider`** (one per window, `main.tsx`) binds every SHORTCUTS row once — a
+    static `KeyBinding` per row whose enablement is looked up at keypress, so nothing
+    re-registers and components never touch the key engine. `react-hotkeys-hook` appears
+    **only** inside the provider — never call `useHotkeys` elsewhere. *Gotcha:* the provider
+    applies `preventDefault` itself in its dispatch callback and passes `preventDefault: false`
+    to the library, because the library applies its own `preventDefault` *before* the enabled
+    check and our bindings are always attached — so the library option would swallow keys
+    (notably `Tab` in inputs) even where the shortcut is disabled. Leave it that way.
+  - **Components contribute only behavior**: `useShortcut(id, { enabled, callback })`; `enabled`
+    gates BOTH firing and the chip. There is **no scope system** — a shortcut works exactly
+    while a mounted component keeps it enabled: mounting separates the windows/screens (capture
+    panel, login screen), and overlay exclusivity is plain `enabled` logic (`TaskList` threads
+    one `enabled` boolean — no editor / delete-confirm / group prompt open — into
+    `useListCursor`/`useArchive`/`useTaskGroups`, and each overlay's shortcuts enable on its own
+    open state). Rows sharing a key (Esc, `⌘↵`, `←→`/`hl`) rely on those conditions being
+    mutually exclusive.
+  - **The statusline is the one place shortcuts are shown.** `<Hints group>` (`useHints(group)`)
+    renders the chips of every enabled row, `ORDER`-sorted (SHORTCUTS order breaks ties). The
+    inbox splits them into two bands (`Inbox`): a **global toolbar** under the `Header`
+    (`group="global"` — always-available management: section toggles `b`/`c`/`a`, group CRUD
+    `n`/`r`/`⌘⌫`, filter switch `←→`, plus the `v` dialect toggle at its right) and a **context
+    footer** at the bottom (`group="context"` — focus/overlay-dependent: navigate, the
+    focused-row actions, `Esc`, archive `/`+paging, and any open overlay's keys). Each
+    `SHORTCUTS` row's `group` field picks the band (`'context'` is the default); global sits at
+    the top because those keys drive the pills/sections there, keeping the bottom bar light. The
+    **login screen** and **capture panels** render a single ungrouped `<Hints />`. **New UI
+    surfaces its keys through the statusline — never a local hint row, and never a chip on a
+    section header or the filter bar.** Only two keys stay off it (`hint: null`): `v` (drawn by
+    `HintStyleToggle`) and `⌘⇧q` sign-out (on the header menu).
+  - **Overlays are in-row popovers, not modals** — the editor and the delete-confirm both anchor
+    to the task row through one Radix `Popover` (`TaskRow`), so they sit beside the task and
+    leave the statusline visible; their `⌘↵`/`Esc` are ordinary shortcuts shown in the
+    statusline. Follow this for any new per-item confirm.
   - **Structure**: `TaskList` is a thin orchestrator (owns the cursor, delete flow, and group
     filter) that composes `components/tasks/` presentational pieces. Stateful logic lives in
     hooks: `useTaskEditor` (editor shortcuts: `⇥`/`⌘i`/`⌘↵`/`Esc`), `useTaskGroups` (filter +

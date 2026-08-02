@@ -1,7 +1,6 @@
 import { Inbox } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { ArchiveSection } from '@/components/tasks/ArchiveSection';
-import { DeleteTaskDialog } from '@/components/tasks/DeleteTaskDialog';
 import { GroupFilterBar } from '@/components/tasks/GroupFilterBar';
 import { TaskEditor } from '@/components/tasks/TaskEditor';
 import { TaskRow } from '@/components/tasks/TaskRow';
@@ -141,7 +140,7 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
   useShortcut('filter.prev', { enabled: canCycleGroups, callback: () => taskGroups.cycle(-1) });
   useShortcut('filter.next', { enabled: canCycleGroups, callback: () => taskGroups.cycle(1) });
 
-  // Section toggles are surfaced by the header chips. `i` belongs to the cursor's edit
+  // Section toggles are global-row statusline chips. `i` belongs to the cursor's edit
   // action, vim-style, hence `b` for the Inbox.
   useShortcut('section.inbox', { enabled, callback: () => setInboxOpen((o) => !o) });
   useShortcut('section.completed', {
@@ -193,6 +192,7 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
       task={task}
       focused={focusedId === task.id}
       editing={editor.isEditing(task.id)}
+      confirmingDelete={deletingTask?.id === task.id}
       groupName={
         // Redundant while a group filter is active — every visible row shares it.
         taskGroups.selectedId === null && task.taskGroupId
@@ -203,6 +203,7 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
       onToggleComplete={toggleComplete}
       onOpenLink={openLink}
       onCancelEdit={editor.cancel}
+      onCancelDelete={() => setDeletingTask(null)}
     >
       <TaskEditor editor={editor} error={error} groups={taskGroups.groups} />
     </TaskRow>
@@ -213,7 +214,6 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
       <GroupFilterBar view={taskGroups} />
       <TaskSection
         title="Inbox"
-        toggleKey="b"
         open={inboxOpen}
         onToggle={() => setInboxOpen((o) => !o)}
         count={active.length}
@@ -236,7 +236,6 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
       {recentCompleted.length > 0 && (
         <TaskSection
           title="Completed"
-          toggleKey="c"
           open={completedOpen}
           onToggle={() => setCompletedOpen((o) => !o)}
           count={recentCompleted.length}
@@ -248,11 +247,6 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
       {archived.length > 0 && (
         <ArchiveSection archive={archive} totalCount={archived.length} renderRow={renderRow} />
       )}
-
-      <DeleteTaskDialog
-        task={deletingTask}
-        onOpenChange={(open) => !open && setDeletingTask(null)}
-      />
     </>
   );
 }

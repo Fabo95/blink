@@ -4,17 +4,21 @@ import { Popover, PopoverAnchor } from '@/components/ui/popover';
 import type { Task } from '@/generated/Task';
 import { linkLabel } from '@/lib/link';
 import { cn } from '@/lib/utils';
+import { DeleteTaskPopover } from './DeleteTaskPopover';
 
 interface TaskRowProps {
   task: Task;
   focused: boolean;
   editing: boolean;
+  /** True while this row's delete-confirm popover is open. */
+  confirmingDelete: boolean;
   /** The task's group name, shown as a chip (omitted while a group filter is active). */
   groupName?: string;
   onSelect: (task: Task) => void;
   onToggleComplete: (task: Task) => void;
   onOpenLink: (task: Task) => void;
   onCancelEdit: () => void;
+  onCancelDelete: () => void;
   /** The editor's `PopoverContent`, rendered only while this row is being edited. */
   children?: ReactNode;
 }
@@ -23,18 +27,30 @@ export function TaskRow({
   task,
   focused,
   editing,
+  confirmingDelete,
   groupName,
   onSelect,
   onToggleComplete,
   onOpenLink,
   onCancelEdit,
+  onCancelDelete,
   children,
 }: TaskRowProps) {
   const done = task.status === 'done';
   const source = task.source.appName || task.source.appId;
+  // The editor and the delete-confirm share the row's one popover — they're mutually
+  // exclusive (you cancel one to open the other).
+  const overlayOpen = editing || confirmingDelete;
 
   return (
-    <Popover open={editing} onOpenChange={(open) => !open && onCancelEdit()}>
+    <Popover
+      open={overlayOpen}
+      onOpenChange={(open) => {
+        if (open) return;
+        if (editing) onCancelEdit();
+        else if (confirmingDelete) onCancelDelete();
+      }}
+    >
       <PopoverAnchor asChild>
         <li
           data-task-id={task.id}
@@ -42,6 +58,7 @@ export function TaskRow({
             'group relative rounded-xl border border-border/60 bg-card/40 px-3.5 py-3 transition-colors',
             focused && 'border-primary/40 bg-card/70',
             editing && 'border-primary/40 bg-card/70 ring-2 ring-primary/30',
+            confirmingDelete && 'border-destructive/50 bg-card/70 ring-2 ring-destructive/30',
           )}
         >
           {/* Whole-card click target: single-click selects (then ↵ completes), double-click
@@ -56,7 +73,7 @@ export function TaskRow({
             onDoubleClick={() => onToggleComplete(task)}
             className="absolute inset-0 rounded-xl"
           />
-          {focused && !editing && (
+          {focused && !overlayOpen && (
             <span className="pointer-events-none absolute inset-y-2 left-0 w-[3px] rounded-full bg-primary" />
           )}
           {/* Content sits above the overlay but ignores pointer events, so clicks fall
@@ -110,6 +127,7 @@ export function TaskRow({
         </li>
       </PopoverAnchor>
       {editing && children}
+      {confirmingDelete && <DeleteTaskPopover task={task} />}
     </Popover>
   );
 }

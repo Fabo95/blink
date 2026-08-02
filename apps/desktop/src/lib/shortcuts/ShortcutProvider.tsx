@@ -67,8 +67,19 @@ export function ShortcutProvider({ children }: { children: ReactNode }) {
     (id: ShortcutId) => store.shortcutOptions.get(id)?.enabled ?? false,
     [store],
   );
+  // preventDefault lives here, not on the useHotkeys option: the library applies its
+  // preventDefault BEFORE the enabled check, and our bindings are always attached (a
+  // function `enabled` never unbinds), so the option would swallow keys — notably Tab
+  // inside inputs — even where the shortcut is disabled. This callback only runs after
+  // the enabled check passes, so preventDefault happens exactly when the shortcut fires.
   const shortcutCallback = useCallback(
-    (id: ShortcutId, e: KeyboardEvent) => store.shortcutOptions.get(id)?.callback(e),
+    (id: ShortcutId, e: KeyboardEvent) => {
+      const options = store.shortcutOptions.get(id);
+      if (!options?.enabled) return;
+      const shortcut: Shortcut = SHORTCUTS[id];
+      if (shortcut.opts?.preventDefault ?? true) e.preventDefault();
+      options.callback(e);
+    },
     [store],
   );
 
@@ -103,9 +114,10 @@ function KeyBinding({
   shortcutCallback: (id: ShortcutId, e: KeyboardEvent) => void;
 }) {
   const shortcut: Shortcut = SHORTCUTS[id];
+  // preventDefault is applied in `shortcutCallback` (see note there), never here.
   useHotkeys(shortcut.keys, (e) => shortcutCallback(id, e), {
     enabled: () => isEnabled(id),
-    preventDefault: shortcut.opts?.preventDefault ?? true,
+    preventDefault: false,
     enableOnFormTags: shortcut.opts?.enableOnFormTags,
   });
   return null;

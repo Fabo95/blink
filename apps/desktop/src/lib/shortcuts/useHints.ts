@@ -7,11 +7,12 @@ import { SHORTCUT_IDS, SHORTCUTS, type Shortcut, type ShortcutId } from './short
 const SHORTCUT_INDEX = new Map<ShortcutId, number>(SHORTCUT_IDS.map((id, index) => [id, index]));
 
 /**
- * The chips for every shortcut enabled right now — a pure view over the
- * ShortcutProvider's table. Entries without a hint (surfaced by control-local chips)
- * never show here.
+ * The chips for every shortcut enabled right now, `ORDER`-sorted — a pure view over the
+ * ShortcutProvider's table. Pass a `group` to narrow to that statusline row (`'global'`
+ * = always-available management, `'context'` = focus/overlay-dependent, the default for
+ * entries that don't set one); omit it to include every enabled chip.
  */
-export function useHints(): Hint[] {
+export function useHints(group?: 'global' | 'context'): Hint[] {
   const { subscribeToShortcutOptions, getShortcutOptions } = useShortcutContext();
   const shortcutOptions = useSyncExternalStore(subscribeToShortcutOptions, getShortcutOptions);
 
@@ -20,6 +21,7 @@ export function useHints(): Hint[] {
     if (!options.enabled) continue;
     const shortcut: Shortcut = SHORTCUTS[id];
     if (!shortcut.hint) continue;
+    if (group && (shortcut.group ?? 'context') !== group) continue;
     entries.push({
       hint: shortcut.hint,
       order: shortcut.order,
