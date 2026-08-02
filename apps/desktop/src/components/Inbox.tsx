@@ -42,19 +42,18 @@ export function Inbox() {
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col">
       <Header account={user} onSignOut={signOut} />
-      {/* Global statusline: always-available structural keys (sections, groups, filter) +
-          the vim toggle — a toolbar band next to the controls they drive. */}
-      <div className="flex items-start justify-between gap-4 border-b border-border/50 px-6 py-2">
-        <Hints group="global" />
-        <HintStyleToggle />
-      </div>
       <main className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-6">
         <CaptureCard />
         <TaskList tasks={tasks} onChanged={refresh} />
       </main>
-      {/* Context statusline: what the focused row / open overlay can do right now. */}
-      <footer className="border-t border-border/50 px-6 py-3">
-        <Hints group="context" />
+      {/* One statusline: the most specific shortcuts for where you are, plus the always-on
+          `c` help and vim toggle. */}
+      <footer className="flex items-center justify-between gap-4 border-t border-border/50 px-6 py-3">
+        <Hints />
+        <div className="flex shrink-0 items-center gap-3">
+          <HintRow hints={[{ keys: 'c', label: 'help' }]} />
+          <HintStyleToggle />
+        </div>
       </footer>
     </div>
   );

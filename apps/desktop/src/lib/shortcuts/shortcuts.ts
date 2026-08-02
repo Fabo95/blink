@@ -1,22 +1,18 @@
 import type { Hint } from '@/components/HintRow';
 
-/** Statusline slots — every shortcut picks one, so every row keeps the shared grammar
- *  (navigate · primary · actions · context · Esc). Ties keep SHORTCUTS declaration order. */
-export const ORDER = {
-  navigate: 10,
-  primary: 20,
-  action: 30,
-  context: 50,
-  esc: 90,
-} as const;
-
 export interface Shortcut {
   keys: string;
   hint: Hint | null;
-  /** Which statusline row the chip shows in: `'context'` (default — depends on what's
-   *  focused or which overlay is open) or `'global'` (always-available management:
-   *  section toggles, group CRUD, filter switch). */
-  group?: 'global' | 'context';
+  /** Statusline specificity — higher wins, like a z-index. The bar shows the highest
+   *  active level, so it reflects the most specific thing you can do:
+   *  `0` navigate (base list) · `1` browse (sections/groups) · `2` task (focused row) ·
+   *  `3` overlay (editor / dialog / prompt). Omit for keys with no statusline chip. */
+  level?: number;
+  /** Full description for the `?` cheat-sheet (the chip's terse label isn't enough). */
+  describe?: string;
+  /** Sort slot within a level's row — the shared grammar, gaps left for siblings:
+   *  `10` navigate · `20` primary · `30` actions · `50` context · `90` Esc. Ties keep
+   *  SHORTCUTS declaration order. */
   order: number;
   opts?: { enableOnFormTags?: boolean; preventDefault?: boolean };
 }
@@ -38,19 +34,15 @@ const HINTS = {
   'mod+g': { keys: '⌘g', label: 'group' },
   'backspace, delete, d': { keys: '⌫', vim: 'd', label: 'delete' },
   'alt+up, alt+k': { keys: '⌥↑↓', vim: '⌥kj', label: 'reorder' },
-  '/': { keys: '/', label: 'search' },
+  s: { keys: 's', label: 'search' },
   'left, h': { keys: '←→', vim: 'hl', label: 'switch' },
   escape: { keys: 'Esc', label: 'cancel' },
   'mod+r': { keys: '⌘r', label: 'resend' },
   'mod+n': { keys: '⌘n', label: 'switch' },
   'mod+f': { keys: '⌘f', label: 'forgot' },
-  // global row — always-available management keys
-  b: { keys: 'b', label: 'inbox' },
-  c: { keys: 'c', label: 'completed' },
   a: { keys: 'a', label: 'archive' },
   n: { keys: 'n', label: 'new' },
   r: { keys: 'r', label: 'rename' },
-  'mod+backspace': { keys: '⌘⌫', label: 'delete' },
 } satisfies Record<string, Hint>;
 
 /**
@@ -63,158 +55,278 @@ const HINTS = {
  * the cursor's Esc otherwise).
  */
 export const SHORTCUTS = {
-  // ── browsing the inbox (main window) ──────────────────────────────────────────────
-  'cursor.down': { keys: 'down, j', hint: HINTS['down, j'], order: ORDER.navigate },
-  'cursor.up': { keys: 'up, k', hint: null, order: ORDER.navigate },
-  'cursor.unselect': { keys: 'escape', hint: HINTS.escape, order: ORDER.esc },
-  'task.toggle': { keys: 'enter', hint: HINTS.enter, order: ORDER.primary },
-  'task.edit': { keys: 'e, i', hint: HINTS['e, i'], order: ORDER.action },
-  'task.open': { keys: 'o', hint: HINTS.o, order: ORDER.action + 1 },
+  // ── task: the focused row ───────────────────────────────────────────────────────────
+  'cursor.down': {
+    keys: 'down, j',
+    hint: HINTS['down, j'],
+    level: 0,
+    describe: 'Move between tasks',
+    order: 10,
+  },
+  'cursor.up': { keys: 'up, k', hint: null, level: 0, order: 10 },
+  'task.toggle': {
+    keys: 'enter',
+    hint: HINTS.enter,
+    level: 2,
+    describe: 'Complete or restore the task',
+    order: 20,
+  },
+  'task.edit': {
+    keys: 'e, i',
+    hint: HINTS['e, i'],
+    level: 2,
+    describe: 'Edit the task',
+    order: 30,
+  },
+  'task.open': {
+    keys: 'o',
+    hint: HINTS.o,
+    level: 2,
+    describe: 'Open the task’s link',
+    order: 31,
+  },
   'task.delete': {
     keys: 'backspace, delete, d',
     hint: HINTS['backspace, delete, d'],
-    order: ORDER.action + 2,
+    level: 2,
+    describe: 'Delete the task',
+    order: 32,
   },
   'task.moveUp': {
     keys: 'alt+up, alt+k',
     hint: HINTS['alt+up, alt+k'],
-    order: ORDER.action + 3,
+    level: 2,
+    describe: 'Reorder the task (Inbox only)',
+    order: 33,
   },
-  'task.moveDown': { keys: 'alt+down, alt+j', hint: null, order: ORDER.action + 3 },
-  // ←→/hl pair with archive paging below: filter cycles only while the archive is closed.
-  // filter cycling is a global (always-available) key; archive paging (same key) is context.
+  'task.moveDown': {
+    keys: 'alt+down, alt+j',
+    hint: null,
+    level: 2,
+    order: 33,
+  },
+  'cursor.unselect': {
+    keys: 'escape',
+    hint: HINTS.escape,
+    level: 2,
+    describe: 'Clear the selection',
+    order: 90,
+  },
+
+  // ── browse: archive, groups (shown when nothing is focused) ─────────────────────────
+  'archive.toggle': {
+    keys: 'a',
+    hint: HINTS.a,
+    level: 1,
+    describe: 'Show or hide the Archive',
+    order: 52,
+  },
+  'group.new': {
+    keys: 'n',
+    hint: HINTS.n,
+    level: 1,
+    describe: 'Create a task group',
+    order: 53,
+  },
+  'group.rename': {
+    keys: 'r',
+    hint: HINTS.r,
+    level: 1,
+    describe: 'Rename the current group',
+    order: 54,
+  },
+  // Same key as task delete — disambiguated by focus: a focused task deletes the task, no
+  // focus (browsing) + a selected group deletes the group. Enabled in TaskList (needs the
+  // cursor's focus to stay mutually exclusive with `task.delete`).
+  'group.delete': {
+    keys: 'backspace, delete, d',
+    hint: HINTS['backspace, delete, d'],
+    level: 1,
+    describe: 'Delete the current group',
+    order: 55,
+  },
+  // ←→/hl is horizontal navigation (level 0, like ↑↓) — shown at every list level, not
+  // just browsing. Filter cycling and archive paging share the key, mutually exclusive:
+  // filter while the archive is closed, paging while it's open.
   'filter.prev': {
     keys: 'left, h',
     hint: HINTS['left, h'],
-    group: 'global',
-    order: ORDER.context + 6,
+    level: 0,
+    describe: 'Switch between groups',
+    order: 15,
   },
-  'filter.next': { keys: 'right, l', hint: null, order: ORDER.context },
-  'group.new': { keys: 'n', hint: HINTS.n, group: 'global', order: ORDER.context + 3 },
-  'group.rename': { keys: 'r', hint: HINTS.r, group: 'global', order: ORDER.context + 4 },
-  'group.delete': {
-    keys: 'mod+backspace',
-    hint: HINTS['mod+backspace'],
-    group: 'global',
-    order: ORDER.context + 5,
+  'filter.next': { keys: 'right, l', hint: null, level: 0, order: 15 },
+  'archive.search': {
+    keys: 's',
+    hint: HINTS.s,
+    level: 1,
+    describe: 'Search completed tasks',
+    order: 57,
   },
-  'section.inbox': { keys: 'b', hint: HINTS.b, group: 'global', order: ORDER.context },
-  'section.completed': { keys: 'c', hint: HINTS.c, group: 'global', order: ORDER.context + 1 },
-  'archive.toggle': { keys: 'a', hint: HINTS.a, group: 'global', order: ORDER.context + 2 },
-  'archive.search': { keys: '/', hint: HINTS['/'], order: ORDER.context },
-  'archive.prevPage': { keys: 'left, h', hint: HINTS['left, h'], order: ORDER.context + 1 },
-  'archive.nextPage': { keys: 'right, l', hint: null, order: ORDER.context + 1 },
+  'archive.prevPage': {
+    keys: 'left, h',
+    hint: HINTS['left, h'],
+    level: 0,
+    describe: 'Page through completed tasks',
+    order: 15,
+  },
+  'archive.nextPage': {
+    keys: 'right, l',
+    hint: null,
+    level: 0,
+    order: 15,
+  },
   // The list is cursor-driven, not focus-driven — swallow Tab while browsing.
   'browse.swallowTab': {
     keys: 'tab, shift+tab',
     hint: null,
-    order: ORDER.context,
+    order: 50,
     opts: { enableOnFormTags: true },
   },
 
-  // ── overlays: enabled while open (editor popover, dialogs, group prompt) ──────────
+  // ── overlays: the editor popover, delete confirms, group prompt ─────────────────────
   'editor.field': {
     keys: 'tab, shift+tab',
     hint: HINTS['tab, shift+tab'],
-    order: ORDER.navigate,
+    level: 3,
+    describe: 'Move between fields',
+    order: 10,
     opts: { enableOnFormTags: true, preventDefault: false },
   },
   'editor.save': {
     keys: 'mod+enter',
     hint: HINTS['mod+enter'],
-    order: ORDER.primary,
+    level: 3,
+    describe: 'Save your changes',
+    order: 20,
     opts: { enableOnFormTags: true },
   },
   'editor.improve': {
     keys: 'mod+i',
     hint: HINTS['mod+i'],
-    order: ORDER.action,
+    level: 3,
+    describe: 'Rewrite the text with AI',
+    order: 30,
     opts: { enableOnFormTags: true },
   },
   'editor.cancel': {
     keys: 'escape',
     hint: HINTS.escape,
-    order: ORDER.esc,
+    level: 3,
+    describe: 'Discard and close',
+    order: 90,
     opts: { enableOnFormTags: true },
   },
-  'taskDelete.confirm': { keys: 'mod+enter', hint: HINTS['mod+enter'], order: ORDER.primary },
-  'taskDelete.cancel': { keys: 'escape', hint: HINTS.escape, order: ORDER.esc },
-  'groupDelete.confirm': { keys: 'mod+enter', hint: HINTS['mod+enter'], order: ORDER.primary },
-  'groupDelete.cancel': { keys: 'escape', hint: HINTS.escape, order: ORDER.esc },
+  'taskDelete.confirm': {
+    keys: 'mod+enter',
+    hint: HINTS['mod+enter'],
+    level: 3,
+    order: 20,
+  },
+  'taskDelete.cancel': {
+    keys: 'escape',
+    hint: HINTS.escape,
+    level: 3,
+    order: 90,
+  },
+  'groupDelete.confirm': {
+    keys: 'mod+enter',
+    hint: HINTS['mod+enter'],
+    level: 3,
+    order: 20,
+  },
+  'groupDelete.cancel': {
+    keys: 'escape',
+    hint: HINTS.escape,
+    level: 3,
+    order: 90,
+  },
   'groupPrompt.submit': {
     keys: 'mod+enter',
     hint: HINTS['mod+enter'],
-    order: ORDER.primary,
+    level: 3,
+    order: 20,
     opts: { enableOnFormTags: true },
   },
   'groupPrompt.cancel': {
     keys: 'escape',
     hint: HINTS.escape,
-    order: ORDER.esc,
+    level: 3,
+    order: 90,
     opts: { enableOnFormTags: true },
   },
 
-  // ── capture: the capture panel windows ────────────────────────────────────────────
+  // ── capture: the capture panel windows (own window → own bar) ───────────────────────
   'capture.save': {
     keys: 'mod+enter',
     hint: HINTS['mod+enter'],
-    order: ORDER.primary,
+    level: 3,
+    order: 20,
     opts: { enableOnFormTags: true },
   },
   'capture.improve': {
     keys: 'mod+i',
     hint: HINTS['mod+i'],
-    order: ORDER.action,
+    level: 3,
+    order: 30,
     opts: { enableOnFormTags: true },
   },
   'capture.group': {
     keys: 'mod+g',
     hint: HINTS['mod+g'],
-    order: ORDER.action + 1,
+    level: 3,
+    order: 31,
     opts: { enableOnFormTags: true },
   },
   'capture.cancel': {
     keys: 'escape',
     hint: HINTS.escape,
-    order: ORDER.esc,
+    level: 3,
+    order: 90,
     opts: { enableOnFormTags: true },
   },
 
-  // ── auth: the login screens (keyboard-only; hints show in the LoginScreen statusline) ─
+  // ── auth: the login screens (own screen → own bar) ──────────────────────────────────
   'auth.submit': {
     keys: 'mod+enter',
     hint: HINTS['mod+enter'],
-    order: ORDER.primary,
+    level: 3,
+    order: 20,
     opts: { enableOnFormTags: true },
   },
   'auth.back': {
     keys: 'escape',
     hint: HINTS.escape,
-    order: ORDER.esc,
+    level: 3,
+    order: 90,
     opts: { enableOnFormTags: true },
   },
   'auth.resend': {
     keys: 'mod+r',
     hint: HINTS['mod+r'],
-    order: ORDER.action,
+    level: 3,
+    order: 30,
     opts: { enableOnFormTags: true },
   },
   'auth.toggleMode': {
     keys: 'mod+n',
     hint: HINTS['mod+n'],
-    order: ORDER.action,
+    level: 3,
+    order: 30,
     opts: { enableOnFormTags: true },
   },
   'auth.forgot': {
     keys: 'mod+f',
     hint: HINTS['mod+f'],
-    order: ORDER.action,
+    level: 3,
+    order: 30,
     opts: { enableOnFormTags: true },
   },
 
-  // ── always on ─────────────────────────────────────────────────────────────────────
-  'app.hintDialect': { keys: 'v', hint: null, order: ORDER.context },
-  'app.signOut': { keys: 'mod+shift+q', hint: null, order: ORDER.context },
+  // ── always on (no statusline chip; surfaced by their own affordance) ────────────────
+  'app.help': { keys: 'c', hint: null, order: 50 },
+  'app.hintDialect': { keys: 'v', hint: null, order: 50 },
+  'app.signOut': { keys: 'mod+shift+q', hint: null, order: 50 },
 } satisfies Record<string, Shortcut>;
 
 // Same keys ⇒ same hint: the statusline may never show two different chips for one
@@ -235,3 +347,26 @@ if (import.meta.env.DEV) {
 export type ShortcutId = keyof typeof SHORTCUTS;
 
 export const SHORTCUT_IDS = Object.keys(SHORTCUTS) as ShortcutId[];
+
+/** The `?` cheat-sheet, grouped by the three shortcut types the user thinks in. Each id's
+ *  chip comes from its `hint`, its explanation from `describe` — one source of truth. */
+export const CHEATSHEET: { title: string; ids: ShortcutId[] }[] = [
+  { title: 'Task groups', ids: ['group.new', 'group.rename', 'group.delete', 'filter.prev'] },
+  { title: 'Archive', ids: ['archive.toggle', 'archive.search', 'archive.prevPage'] },
+  {
+    title: 'Tasks',
+    ids: [
+      'cursor.down',
+      'task.toggle',
+      'task.edit',
+      'task.open',
+      'task.delete',
+      'task.moveUp',
+      'cursor.unselect',
+    ],
+  },
+  {
+    title: 'Editing a task',
+    ids: ['editor.field', 'editor.improve', 'editor.save', 'editor.cancel'],
+  },
+];

@@ -13,6 +13,7 @@ import { useTaskGroups } from '@/hooks/useTaskGroups';
 import { api } from '@/lib/api';
 import { splitTasks } from '@/lib/completed';
 import { toggleHintStyle } from '@/lib/hintStyle';
+import { ShortcutHelp } from '@/lib/shortcuts/ShortcutHelp';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { errorMessage } from '@/lib/utils';
 
@@ -24,15 +25,15 @@ interface TaskListProps {
 export function TaskList({ tasks, onChanged }: TaskListProps) {
   const [error, setError] = useState('');
   const [deletingTask, setDeletingTask] = useState<Task | null>(null);
-  const [inboxOpen, setInboxOpen] = useState(true);
-  const [completedOpen, setCompletedOpen] = useState(true);
+  const [helpOpen, setHelpOpen] = useState(false);
   const report = (e: unknown, fallback: string) => setError(errorMessage(e, fallback));
 
   const editor = useTaskEditor({ onSaved: onChanged, setError });
   const isEditing = editor.task !== null;
   // The browsing shortcuts are enabled exactly while no overlay (editor, delete dialogs,
-  // group prompt) owns the keyboard — each overlay's own shortcuts enable on its state.
-  const baseEnabled = !isEditing && deletingTask === null;
+  // group prompt, help sheet) owns the keyboard — each overlay's own shortcuts enable on
+  // its state.
+  const baseEnabled = !isEditing && deletingTask === null && !helpOpen;
   const taskGroups = useTaskGroups({ enabled: baseEnabled });
   const enabled = baseEnabled && !taskGroups.busy;
 
@@ -76,13 +77,9 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
     }
   };
 
-  // One cursor over everything currently visible — each collapsed section drops out, so
-  // the cursor never lands on a hidden row.
-  const navItems = [
-    ...(inboxOpen ? active : []),
-    ...(completedOpen ? recentCompleted : []),
-    ...(archive.open ? archive.items : []),
-  ];
+  // One cursor over everything currently visible — Inbox and Completed are always open;
+  // the collapsed Archive drops out so the cursor never lands on a hidden row.
+  const navItems = [...active, ...recentCompleted, ...(archive.open ? archive.items : [])];
   const {
     focusedId,
     setFocusedId,
@@ -120,7 +117,7 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
       if (focusedTask) setDeletingTask(focusedTask);
     },
   });
-  const reorderable = focusedEnabled && inboxOpen && active.some((t) => t.id === focusedTask?.id);
+  const reorderable = focusedEnabled && active.some((t) => t.id === focusedTask?.id);
   useShortcut('task.moveUp', {
     enabled: reorderable,
     callback: () => {
@@ -140,16 +137,22 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
   useShortcut('filter.prev', { enabled: canCycleGroups, callback: () => taskGroups.cycle(-1) });
   useShortcut('filter.next', { enabled: canCycleGroups, callback: () => taskGroups.cycle(1) });
 
-  // Section toggles are global-row statusline chips. `i` belongs to the cursor's edit
-  // action, vim-style, hence `b` for the Inbox.
-  useShortcut('section.inbox', { enabled, callback: () => setInboxOpen((o) => !o) });
-  useShortcut('section.completed', {
-    enabled: enabled && recentCompleted.length > 0,
-    callback: () => setCompletedOpen((o) => !o),
+  // `⌫` deletes the selected group — but only while no task is focused, so it stays
+  // mutually exclusive with `task.delete` (same key).
+  useShortcut('group.delete', {
+    enabled: enabled && focusedTask === null && taskGroups.selected !== null,
+    callback: taskGroups.requestDelete,
   });
+
   // `v` flips every hint chip between the standard keys and their vim synonyms — always
   // on, surfaced by the footer's own toggle chip.
   useShortcut('app.hintDialect', { callback: toggleHintStyle });
+  // `c` toggles the cheat-sheet. Enabled independent of `helpOpen` so it also closes it;
+  // gated off during the editor/delete overlays so `c` types normally in their fields.
+  useShortcut('app.help', {
+    enabled: !isEditing && deletingTask === null,
+    callback: () => setHelpOpen((o) => !o),
+  });
   // The list is driven by the cursor, not DOM focus — while browsing, Tab would just
   // throw a stray focus ring around, so swallow it (preventDefault is the whole action).
   useShortcut('browse.swallowTab', { enabled: !isEditing, callback: () => {} });
@@ -212,12 +215,7 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
   return (
     <>
       <GroupFilterBar view={taskGroups} />
-      <TaskSection
-        title="Inbox"
-        open={inboxOpen}
-        onToggle={() => setInboxOpen((o) => !o)}
-        count={active.length}
-      >
+      <TaskSection title="Inbox" count={active.length}>
         {active.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-6 text-muted-foreground">
             <Inbox className="size-6" />
@@ -234,12 +232,7 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
       </TaskSection>
 
       {recentCompleted.length > 0 && (
-        <TaskSection
-          title="Completed"
-          open={completedOpen}
-          onToggle={() => setCompletedOpen((o) => !o)}
-          count={recentCompleted.length}
-        >
+        <TaskSection title="Completed" count={recentCompleted.length}>
           <ul className="space-y-2">{recentCompleted.map(renderRow)}</ul>
         </TaskSection>
       )}
@@ -247,6 +240,8 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
       {archived.length > 0 && (
         <ArchiveSection archive={archive} totalCount={archived.length} renderRow={renderRow} />
       )}
+
+      <ShortcutHelp open={helpOpen} onOpenChange={setHelpOpen} />
     </>
   );
 }

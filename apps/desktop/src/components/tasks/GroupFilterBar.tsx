@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { DeleteGroupDialog } from '@/components/tasks/DeleteGroupDialog';
+import { DeleteGroupPopover } from '@/components/tasks/DeleteGroupPopover';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import type { TaskGroupsView } from '@/hooks/useTaskGroups';
@@ -8,10 +8,10 @@ import { cn } from '@/lib/utils';
 
 /**
  * The group filter above the inbox: an All pill plus one per group. Keyboard-only
- * management — `n` creates, `r` renames, `⌘⌫` deletes; switching (`←→`/`hl`) is bound in
- * TaskList and hinted in the footer statusline. The name prompt is a small popover opened
- * exclusively by those keys. Pills click-to-select (parity with rows), but carry no
- * management affordances.
+ * management — `n` creates, `r` renames, `⌫` deletes; switching (`←→`/`hl`) is bound in
+ * TaskList and hinted in the footer statusline. The name prompt and the delete confirm are
+ * popovers anchored to the pill row, opened exclusively by those keys. Pills
+ * click-to-select (parity with rows), but carry no management affordances.
  */
 export function GroupFilterBar({ view }: { view: TaskGroupsView }) {
   const promptInputRef = useRef<HTMLInputElement>(null);
@@ -25,7 +25,14 @@ export function GroupFilterBar({ view }: { view: TaskGroupsView }) {
 
   return (
     <div className="space-y-1.5">
-      <Popover open={view.prompt !== null} onOpenChange={(open) => !open && view.closePrompt()}>
+      <Popover
+        open={view.prompt !== null || view.deleting}
+        onOpenChange={(open) => {
+          if (open) return;
+          if (view.prompt !== null) view.closePrompt();
+          else view.cancelDelete();
+        }}
+      >
         <PopoverAnchor asChild>
           <div className="flex flex-wrap items-center gap-1.5">
             <Pill
@@ -60,14 +67,11 @@ export function GroupFilterBar({ view }: { view: TaskGroupsView }) {
             )}
           </PopoverContent>
         )}
+        {view.deleting && view.selected && <DeleteGroupPopover group={view.selected} />}
       </Popover>
       {view.error && view.prompt === null && (
         <p className="line-clamp-2 text-[11px] text-destructive">{view.error}</p>
       )}
-      <DeleteGroupDialog
-        group={view.deleting ? view.selected : null}
-        onOpenChange={(open) => !open && view.cancelDelete()}
-      />
     </div>
   );
 }

@@ -45,7 +45,7 @@ components/
   auth/             LoginScreen, CredentialsForm, VerifyForm, ForgotPasswordForm,
                     ResetPasswordForm, AuthCard, Field
   tasks/            TaskSection, ArchiveSection, TaskRow, TaskEditor, GroupFilterBar,
-                    DeleteTaskPopover (in-row confirm), DeleteGroupDialog
+                    DeleteTaskPopover, DeleteGroupPopover (in-row confirms)
   CapturePanel.tsx  shared capture UI; CopyCapture/ManualCapture are thin config wrappers
   TaskList.tsx      inbox orchestrator (cursor + delete flow + group filter)
 hooks/              useTaskEditor, useTaskGroups, useArchive, useListCursor, useSession
@@ -139,11 +139,11 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   it resolves the pressed shortcut back to its method (`method_of`) and dispatches. `set` refuses
   a combo already owned by another method. UI is one `ShortcutRecorder` per method in the capture
   card; the commands `get/set_capture_shortcut` take a `method` arg.
-- **Inbox is keyboard-first** (`TaskList`): three stacked sections — **Inbox** (active),
-  **Completed** (done in the last 24h), and a collapsible **Archive** (older completions,
-  expanded in place with `a`). The archive is searchable and paginated (8/page), day-grouped
+- **Inbox is keyboard-first** (`TaskList`): three stacked sections — **Inbox** (active) and
+  **Completed** (done in the last 24h), both always open, and a collapsible **Archive** (older
+  completions, expanded in place with `a` — the only section that toggles). The archive is searchable and paginated (8/page), day-grouped
   (Today / Yesterday / weekday / date via `lib/completed.ts::groupByDay`); `←→`/`hl` page while
-  it's open, `/` focuses its search box. A virtual cursor (`useListCursor`, built on `react-hotkeys-hook`) walks everything
+  it's open, `s` focuses its search box. A virtual cursor (`useListCursor`, built on `react-hotkeys-hook`) walks everything
   visible (Inbox → Completed → open archive page): `↑↓`/`jk` move it, `↵` completes/restores the
   focused task, `e`/`i` edit, `o` opens its link, `⌫`/`d` delete (in-row confirm popover, `⌘↵`
   confirms), `⌥↑↓`/`⌥KJ` reorder it (Inbox only — see below), `Esc` unselects. `Tab` is swallowed
@@ -154,7 +154,7 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   every action is a shortcut; rows also click-to-select and double-click-to-complete.
   - **Shortcuts live in one table** (`lib/shortcuts/`). **`SHORTCUTS`** (`shortcuts.ts`) is the
     single place keys are assigned — one row per action (`'task.delete'`, `'editor.save'`, …),
-    each owning its `keys` (synonyms comma-separated), statusline chip (`hint`), `ORDER` slot,
+    each owning its `keys` (synonyms comma-separated), statusline chip (`hint`), `order` slot,
     and `opts` (`enableOnFormTags`/`preventDefault`). Chips come from **`HINTS`** (also in
     `shortcuts.ts`), keyed by the binding so there is **one hint per physical key** with an
     app-wide verb (`⌘↵ confirm`, `Esc cancel`, `←→ switch`, `↵ toggle`); a dev-time check fails
@@ -176,19 +176,26 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
     `useListCursor`/`useArchive`/`useTaskGroups`, and each overlay's shortcuts enable on its own
     open state). Rows sharing a key (Esc, `⌘↵`, `←→`/`hl`) rely on those conditions being
     mutually exclusive.
-  - **The statusline is the one place shortcuts are shown.** `<Hints group>` (`useHints(group)`)
-    renders the chips of every enabled row, `ORDER`-sorted (SHORTCUTS order breaks ties). The
-    inbox splits them into two bands (`Inbox`): a **global toolbar** under the `Header`
-    (`group="global"` — always-available management: section toggles `b`/`c`/`a`, group CRUD
-    `n`/`r`/`⌘⌫`, filter switch `←→`, plus the `v` dialect toggle at its right) and a **context
-    footer** at the bottom (`group="context"` — focus/overlay-dependent: navigate, the
-    focused-row actions, `Esc`, archive `/`+paging, and any open overlay's keys). Each
-    `SHORTCUTS` row's `group` field picks the band (`'context'` is the default); global sits at
-    the top because those keys drive the pills/sections there, keeping the bottom bar light. The
-    **login screen** and **capture panels** render a single ungrouped `<Hints />`. **New UI
-    surfaces its keys through the statusline — never a local hint row, and never a chip on a
-    section header or the filter bar.** Only two keys stay off it (`hint: null`): `v` (drawn by
-    `HintStyleToggle`) and `⌘⇧q` sign-out (on the header menu).
+  - **The statusline is a single, specificity-driven bar.** `<Hints />` (`useHints()`) shows
+    only the **highest active level** so the bar reflects *where you are* and stays one line:
+    each `SHORTCUTS` row has a numeric `level` (higher = more specific, like a z-index): `3`
+    overlay (an open editor/dialog/prompt) > `2` task (a focused row) > `1` browse (archive
+    `a`, groups `n`/`r`/`⌫`) > `0` navigate (the base list level — `↑↓` between rows and `←→`
+    to switch filter / page the archive; rides along under browse/task, only enabled outside
+    overlays, so it drops away when one is up). So browsing shows the structural keys, focusing a task swaps to its actions,
+    opening the editor swaps to its keys. Rendered in the `Inbox` footer with the always-on `c help` and `v` dialect toggle at
+    its right; the **login screen** and **capture panels** render the same `<Hints />` (their
+    keys are all `overlay`-level, so all show). **New UI surfaces its keys through the statusline
+    — never a local hint row, and never a chip on a section header or the filter bar.** Keys with
+    no chip (`hint: null`): `c`/`v`/`⌘⇧q` (their own affordances) and the silent halves of pairs.
+    (Bindings are matched by physical key code, so single letters are used over layout-shifted
+    symbols like `/` or `?` that break on non-US keyboards.)
+  - **`c` opens the cheat-sheet** (`ShortcutHelp`, an `AlertDialog`; `c` toggles, `Esc` closes):
+    a reference of every shortcut grouped by the three types the user thinks in — **Sections /
+    Task groups / Tasks / Editing** (`CHEATSHEET` in `shortcuts.ts`), each row's chip from its
+    `hint` and its sentence from `describe`. It shows *all* keys (not just enabled ones); the
+    always-on bar shows the relevant subset. While it's open, browse/task shortcuts gate off
+    (`helpOpen` in `TaskList`'s `baseEnabled`).
   - **Overlays are in-row popovers, not modals** — the editor and the delete-confirm both anchor
     to the task row through one Radix `Popover` (`TaskRow`), so they sit beside the task and
     leave the statusline visible; their `⌘↵`/`Esc` are ordinary shortcuts shown in the
@@ -207,9 +214,10 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   - **Filter bar** (`GroupFilterBar` + `useTaskGroups`): pills for **All** + each group above
     the inbox. `←→`/`hl` cycle the filter (wraps; while the archive is open these keys page it
     instead — bound in `TaskList`, which sees both states; hinted in the statusline), `n`
-    creates, `r` renames (popover prompt), `⌘⌫` deletes (confirm `⌘↵` in `DeleteGroupDialog` —
-    deleting moves its tasks back to All). Filtering happens before `splitTasks`, so all
-    sections respect it.
+    creates, `r` renames (popover prompt), `⌫` deletes (the same delete key as a task —
+    bound in `TaskList` and gated on no task being focused, so the two never collide; confirm
+    `⌘↵` in the `DeleteGroupPopover`, deleting moves its tasks back to All). Filtering happens
+    before `splitTasks`, so all sections respect it.
   - **Assignment**: the editor gains a group field in the `⇥` cycle (Radix dropdown, arrow keys
     + `↵`); `update_task` clears the group when sent an empty string (same pattern as `link`).
     `CapturePanel` shows a group picker (`⌘G`) when groups exist, **defaulting to the inbox's

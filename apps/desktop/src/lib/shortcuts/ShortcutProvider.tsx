@@ -126,5 +126,6 @@ function KeyBinding({
 export function useShortcutContext(): ShortcutContextValue {
   const value = useContext(ShortcutContext);
   if (value === null) throw new Error('useShortcutContext requires a <ShortcutProvider>');
+
   return value;
 }

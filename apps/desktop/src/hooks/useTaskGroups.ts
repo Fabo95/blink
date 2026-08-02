@@ -18,8 +18,11 @@ export interface TaskGroupsView {
   prompt: GroupPrompt | null;
   closePrompt: () => void;
   submitPrompt: (name: string) => Promise<void>;
-  /** True while the delete-confirm dialog is open. */
+  /** True while the delete-confirm popover is open. */
   deleting: boolean;
+  /** Open the delete-confirm for the selected group (bound to `⌫` in TaskList, so it can
+   *  be gated on no task being focused — same key as deleting a task). */
+  requestDelete: () => void;
   cancelDelete: () => void;
   /** True while the name prompt or the delete dialog owns the keyboard. */
   busy: boolean;
@@ -34,9 +37,10 @@ interface Options {
 /**
  * The inbox's group filter: the list of groups, the selected one (persisted as the
  * `active_task_group` setting so capture windows default to it), and the keyboard-only
- * management flows — `n` creates, `r` renames, `⌘⌫` deletes (`⌘↵` confirms). Filter
- * cycling (`←→`/`hl`) is exposed as `cycle` and enabled in TaskList, which knows when the
- * archive pager owns those keys. Deleting a group un-groups its tasks.
+ * management flows — `n` creates, `r` renames, `⌫` deletes (`⌘↵` confirms). Deleting is
+ * bound in TaskList (via `requestDelete`) because it shares the `⌫` key with task delete
+ * and must stand down when a task is focused. Filter cycling (`←→`/`hl`) is likewise bound
+ * in TaskList. Deleting a group un-groups its tasks.
  */
 export function useTaskGroups({ enabled }: Options): TaskGroupsView {
   const [groups, setGroups] = useState<TaskGroup[]>([]);
@@ -117,11 +121,8 @@ export function useTaskGroups({ enabled }: Options): TaskGroupsView {
     enabled: manage && selected !== null,
     callback: () => setPrompt('rename'),
   });
-  useShortcut('group.delete', {
-    enabled: manage && selected !== null,
-    callback: () => setDeleting(true),
-  });
-  // The confirm dialog has no buttons — ⌘↵ confirms; Esc (also Radix's backdrop) cancels.
+  // group.delete is bound in TaskList (needs focus to disambiguate from task delete).
+  // The confirm popover has no buttons — ⌘↵ confirms; Esc (also Radix's backdrop) cancels.
   useShortcut('groupDelete.confirm', {
     enabled: deleting,
     callback: () => void confirmDelete(),
@@ -138,6 +139,7 @@ export function useTaskGroups({ enabled }: Options): TaskGroupsView {
     closePrompt,
     submitPrompt,
     deleting,
+    requestDelete: () => setDeleting(true),
     cancelDelete,
     busy,
     error,
