@@ -1,24 +1,21 @@
 //! Persistence layer — the encrypted database ([`Db`]) and the [`Repository`]
-//! facade, which owns the connection and exposes one entity repository per table.
+//! facade, which shares the connection across one entity repository per table.
 
 mod db;
 mod migrations;
-mod settings;
-mod task_groups;
-mod tasks;
+mod settings_repository;
+mod task_group_repository;
+mod task_repository;
 
-use std::path::Path;
 use std::sync::Arc;
 
-use crate::core::error::AppResult;
-
 pub use db::Db;
-pub use settings::SettingsRepository;
-pub use task_groups::TaskGroupRepository;
-pub use tasks::{TaskPatch, TaskRepository};
+pub use settings_repository::SettingsRepository;
+pub use task_group_repository::TaskGroupRepository;
+pub use task_repository::{TaskPatch, TaskRepository};
 
-/// The data-access facade: opens the shared [`Db`] once and hands it to an entity
-/// repository per table. Adding a table = add a field here + its `*Repository`.
+/// The data-access facade: hands the shared [`Db`] to an entity repository per
+/// table. Adding a table = add a field here + its `*Repository`.
 pub struct Repository {
     pub tasks: TaskRepository,
     pub task_groups: TaskGroupRepository,
@@ -26,12 +23,11 @@ pub struct Repository {
 }
 
 impl Repository {
-    pub fn open(path: &Path) -> AppResult<Self> {
-        let db = Arc::new(Db::open(path)?);
-        Ok(Self {
+    pub fn new(db: Arc<Db>) -> Self {
+        Self {
             tasks: TaskRepository::new(db.clone()),
             task_groups: TaskGroupRepository::new(db.clone()),
             settings: SettingsRepository::new(db),
-        })
+        }
     }
 }

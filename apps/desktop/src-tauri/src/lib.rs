@@ -5,13 +5,15 @@ mod platform;
 mod repository;
 mod services;
 
+use std::sync::Arc;
+
 use tauri::Manager;
 
 use crate::clients::openai_client::OpenAiClient;
 use crate::clients::server_client::ServerClient;
 use crate::core::config::config;
 use crate::core::state::{PendingCapture, PendingSource};
-use crate::repository::Repository;
+use crate::repository::{Db, Repository};
 use crate::services::ai_service::AiService;
 use crate::services::auth_service::AuthService;
 use crate::services::capture_service::CaptureService;
@@ -40,9 +42,6 @@ pub fn run() {
         .manage(PendingSource::default())
         .manage(PendingCapture::default())
         .setup(|app| {
-            // The encrypted DB lives in the per-user app data dir; create it on
-            // first run. The Repository opens the shared connection and its entity
-            // repositories, so future tables (settings, …) reuse the same `Db`.
             let data_dir = app
                 .path()
                 .app_data_dir()
@@ -50,7 +49,8 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir)
                 .map_err(|e| format!("could not create data dir: {e}"))?;
 
-            let repository = Repository::open(&data_dir.join("blink.db"))?;
+            let db = Arc::new(Db::open(&data_dir.join("blink.db"))?);
+            let repository = Repository::new(db);
 
             // The DB-backed services are built here (not up top with the others)
             // because their repositories only exist once the Repository is open.
