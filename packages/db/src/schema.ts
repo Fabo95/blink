@@ -1,7 +1,6 @@
-import { sql } from 'drizzle-orm';
 import {
   bigint,
-  check,
+  bigserial,
   index,
   integer,
   jsonb,
@@ -16,14 +15,14 @@ import {
 export * from './auth-schema.js';
 
 /**
- * Opaque E2EE envelope stored verbatim in a `*_cipher` column. Structurally
- * identical to `@blink/crypto`'s `EncryptedEnvelope` — declared locally so this
- * emitting package doesn't pull another workspace's TS source into its build.
+ * Opaque AES-GCM ciphertext stored verbatim in a `cipher`/`wrapped_vmk` column;
+ * the DB never sees plaintext. Structurally identical to `@blink/contract`'s
+ * `RecordCipher` — declared locally so this emitting package doesn't pull another
+ * workspace's TS source into its build.
  */
-export interface CipherEnvelope {
+export interface RecordCipher {
   ciphertext: string;
   iv: string;
-  kdf: { algorithm: 'PBKDF2'; hash: 'SHA-256'; iterations: number; salt: string };
 }
 
 // Tenancy root (Phase 3 SSO/IAM). Groups users, workspaces and policies.
@@ -33,35 +32,46 @@ export const organizations = pgTable('organizations', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-// The zero-knowledge task store. `*_cipher` columns hold opaque E2EE envelopes;
-// the DB never sees plaintext. Tenancy is enforced by RLS (see the rls migration).
-export const tasks = pgTable(
-  'tasks',
+// The zero-knowledge sync store: one opaque encrypted blob per client row, of any
+// kind (task, group, setting). The server understands nothing but ownership + clocks.
+export const records = pgTable(
+  'records',
   {
-    id: uuid('id').primaryKey().defaultRandom(),
-    // TODO(phase-3): NOT NULL once workspaces/orgs are provisioned at sign-in.
-    orgId: uuid('org_id').references(() => organizations.id, { onDelete: 'cascade' }),
+    // Client-generated UUID — the same id on every device, so it's the stable LWW
+    // conflict key. No defaultRandom: the client owns it, not the server.
+    id: uuid('id').primaryKey(),
     ownerId: uuid('owner_id').notNull(),
-    status: text('status').notNull().default('inbox').$type<TaskStatus>(),
 
-    titleCipher: jsonb('title_cipher').notNull().$type<CipherEnvelope>(),
-    bodyCipher: jsonb('body_cipher').notNull().$type<CipherEnvelope>(),
+    // The entire client row, serialized and encrypted under the VMK. Opaque.
+    cipher: jsonb('cipher').notNull().$type<RecordCipher>(),
 
-    // CRDT Hybrid Logical Clock. Non-sensitive ordering metadata.
+    // Hybrid Logical Clock — edit-time ordering, decides LWW conflicts.
     hlcPhysical: bigint('hlc_physical', { mode: 'number' }).notNull(),
     hlcCounter: integer('hlc_counter').notNull(),
     hlcNodeId: text('hlc_node_id').notNull(),
 
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    // Server-assigned monotonic cursor for pull ("give me everything since N").
+    // Immune to device clock skew, unlike the HLC. Bumped on every upsert.
+    seq: bigserial('seq', { mode: 'number' }).notNull(),
+
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    index('tasks_org_idx').on(t.orgId),
-    index('tasks_owner_idx').on(t.ownerId),
-    check('tasks_status_check', sql`${t.status} in ('inbox', 'active', 'exported', 'archived')`),
-  ],
+  (t) => [index('records_owner_seq_idx').on(t.ownerId, t.seq)],
 );
 
-export type TaskStatus = 'inbox' | 'active' | 'exported' | 'archived';
-export type TaskRow = typeof tasks.$inferSelect;
-export type NewTaskRow = typeof tasks.$inferInsert;
+// One row per user: the 2SKD account keyset. `wrapped_vmk` is the Vault Master Key
+// encrypted under the KEK (opaque); the KDF params let a new device re-derive the
+// KEK from the master password + Secret Key. The server can never derive the KEK.
+export const syncKeysets = pgTable('sync_keysets', {
+  ownerId: uuid('owner_id').primaryKey(),
+  wrappedVmk: jsonb('wrapped_vmk').notNull().$type<RecordCipher>(),
+  kdfSalt: text('kdf_salt').notNull(),
+  kdfIterations: integer('kdf_iterations').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type RecordRow = typeof records.$inferSelect;
+export type NewRecordRow = typeof records.$inferInsert;
+export type KeysetRow = typeof syncKeysets.$inferSelect;
+export type NewKeysetRow = typeof syncKeysets.$inferInsert;

@@ -29,6 +29,27 @@
       "when": 1785001691000,
       "tag": "0003_auth_grants",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786217092688,
+      "tag": "0004_add_records_and_keysets",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786217114993,
+      "tag": "0005_drop_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786217130000,
+      "tag": "0006_records_rls_policies",
+      "breakpoints": true
     }
   ]
 }

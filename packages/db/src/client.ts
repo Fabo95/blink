@@ -5,7 +5,7 @@ import * as schema from './schema.js';
 
 export type BlinkDb = ReturnType<typeof createDb>;
 
-/** The transaction handle passed to {@link withUser}. */
+/** The transaction handle Drizzle passes to a `db.transaction(...)` callback. */
 export type BlinkTx = Parameters<Parameters<BlinkDb['transaction']>[0]>[0];
 
 export function createDb(connectionString: string): ReturnType<typeof drizzle<typeof schema>> {
@@ -14,20 +14,11 @@ export function createDb(connectionString: string): ReturnType<typeof drizzle<ty
 }
 
 /**
- * Run `fn` inside a transaction scoped to `userId`. Setting the session variable
- * that Row-Level Security reads (`app.current_user_id`) inside the same
- * transaction is what makes RLS enforce per-user isolation — the sync API
- * connects as a least-privilege role, so this is the only thing granting access
- * to the caller's rows. `set_config(..., true)` is transaction-local (like
- * `SET LOCAL`) but, unlike `SET`, accepts a bound parameter.
+ * Stamp the caller's id onto the transaction so Row-Level Security scopes rows to
+ * them. Every model-service transaction must call this first. `set_config(..., true)`
+ * is transaction-local, so it can't leak across pooled connections; an unset value
+ * makes the policies match zero rows (fail-closed).
  */
-export async function withUser<T>(
-  db: BlinkDb,
-  userId: string,
-  fn: (tx: BlinkTx) => Promise<T>,
-): Promise<T> {
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`select set_config('app.current_user_id', ${userId}, true)`);
-    return fn(tx);
-  });
+export async function setRlsUser(tx: BlinkTx, userId: string): Promise<void> {
+  await tx.execute(sql`select set_config('app.current_user_id', ${userId}, true)`);
 }

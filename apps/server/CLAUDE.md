@@ -1,8 +1,10 @@
 # Blink sync server (`apps/server`)
 
 Fastify 5 + zod 4 + awilix DI + Drizzle/Postgres 17 (RLS) + Better Auth. The desktop core is the
-only client — it authenticates here today (email/password + OTP email flows); zero-knowledge
-encrypted task sync is Phase 2. Monorepo-wide rules live in the root `CLAUDE.md` — this file is
+only client — it authenticates here (email/password + OTP email flows) and syncs an opaque,
+zero-knowledge blob store: `/v1/sync/push` + `/v1/sync/pull` over the `records` table (server sees
+only ciphertext + owner + clocks) plus `/v1/keyset` for the 2SKD account keyset. The desktop→sync
+bridge (Rust) is still in progress. Monorepo-wide rules live in the root `CLAUDE.md` — this file is
 the server-specific guide.
 
 ## Layout — `src`
@@ -13,11 +15,11 @@ server.ts           Fastify app: trustProxy, cors, zod validator/serializer, @fa
                     awilix DI, routes, error handler (ApiError → response envelope)
 router.ts           registers the route modules
 routes/             one folder per endpoint, handler in latest.ts (versioned convention):
-                    auth/ (Better Auth catch-all), sync/pull, sync/push, health-check.ts
+                    auth/ (Better Auth catch-all), sync/pull, sync/push, keyset, health-check.ts
 clients/            transport to external systems: authClient.ts (the Better Auth instance),
                     emailClient.ts (Resend)
-services/common/    business logic (authService, syncService)
-services/model/     thin Drizzle wrappers (tasksModelService) — no business logic
+services/common/    business logic (authService, syncService, keysetService)
+services/model/     thin Drizzle wrappers (recordsModelService, keysetsModelService) — no logic
 setup/database/     the postgres/Drizzle connection (getDb)
 setup/dependencies/ awilix wiring: singletonCradle + requestCradle + setup + types
 setup/logger.ts     pino config
@@ -31,7 +33,8 @@ env.ts              zod-validated env — no defaults, all required
 
 - **DI (awilix)**: `createSingletonCradle()` registers app-lifetime singletons (`db`,
   `emailClient`, `authClient`) via `asValue`; `createRequestCradle()` registers per-request
-  services (`tasksModelService`, `authService`, `syncService`) via `asClass(...).scoped()`.
+  services (`recordsModelService`, `keysetsModelService`, `authService`, `syncService`,
+  `keysetService`) via `asClass(...).scoped()`.
   Both go on `diContainer` in `setup.ts`; `types.ts` augments `@fastify/awilix`'s `Cradle` /
   `RequestCradle`. Services take a single `{ dep }` object (awilix PROXY injection). Handlers
   resolve via `req.diScope.cradle`. Add a service = a class + a cradle-type field + a cradle
@@ -49,10 +52,12 @@ env.ts              zod-validated env — no defaults, all required
   `utils/functions/renderOtpEmail.ts` (verification + password reset). `AuthClient` holds the
   `emailClient` and sends OTPs from the `emailOTP` callback — routes never touch email directly.
 - **Auth on sync routes**: handlers call `authService.authenticate(headers)` → `getSession` →
-  `userId`, and RLS (`FORCE ROW LEVEL SECURITY` on `tasks`, set via `@blink/db`'s `withUser`)
-  scopes rows to that user.
+  `userId`, and RLS (`FORCE ROW LEVEL SECURITY` on `records`/`sync_keysets`) scopes rows to that
+  user — each model-service method opens a transaction and runs
+  `set_config('app.current_user_id', userId, true)`, which the policies read.
 - **DB roles (least-privilege)**: the server connects as `blink_api`, a non-owner role with only
-  the grants it needs (`tasks`/`organizations` in `0001`, the Better Auth tables in `0003`), so
+  the grants it needs (`organizations` in `0001`, the Better Auth tables in `0003`,
+  `records`/`sync_keysets` + the `records_seq_seq` sequence in `0006`), so
   RLS is enforced and a compromise can't touch the schema. The owner `blink` is used **only** for
   migrations/DDL + `GRANT`s (the compose `migrate` service). Grants are hand-written SQL
   migrations in `@blink/db` — Drizzle can't express roles/grants/policies — so a new server-read

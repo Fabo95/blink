@@ -1,15 +1,15 @@
-import type { SyncPacket } from '@blink/contract/wire';
-import type { NewTaskRow, TaskRow } from '@blink/db/schema';
-import type { TasksModelService } from '@/services/model/tasksModelService.js';
+import type { SyncPacket, SyncRecord } from '@blink/contract/wire';
+import type { NewRecordRow, RecordRow } from '@blink/db/schema';
+import type { RecordsModelService } from '@/services/model/recordsModelService.js';
 
 interface SyncServiceDeps {
-  tasksModelService: TasksModelService;
+  recordsModelService: RecordsModelService;
 }
 
 /**
  * Bidirectional sync orchestration. Maps between the client wire format
  * ({@link SyncPacket}) and DB rows. The server only ever moves ciphertext — it
- * never decrypts `encrypted.*`.
+ * never decrypts `cipher`.
  */
 export class SyncService {
   private deps: SyncServiceDeps;
@@ -20,34 +20,32 @@ export class SyncService {
 
   async push(userId: string, packets: SyncPacket[]): Promise<number> {
     const rows = packets.map((packet) => packetToRow(userId, packet));
-    await this.deps.tasksModelService.upsertMany(userId, rows);
+    await this.deps.recordsModelService.upsertMany(userId, rows);
     return packets.length;
   }
 
-  async pull(userId: string, sincePhysical: number): Promise<SyncPacket[]> {
-    const rows = await this.deps.tasksModelService.listSince(userId, sincePhysical);
-    return rows.map(rowToPacket);
+  async pull(userId: string, sinceSeq: number): Promise<SyncRecord[]> {
+    const rows = await this.deps.recordsModelService.listSince(userId, sinceSeq);
+    return rows.map(rowToRecord);
   }
 }
 
-function packetToRow(userId: string, packet: SyncPacket): NewTaskRow {
+function packetToRow(userId: string, packet: SyncPacket): NewRecordRow {
   return {
-    id: packet.taskId,
+    id: packet.id,
     ownerId: userId,
-    status: packet.status,
-    titleCipher: packet.encrypted.title,
-    bodyCipher: packet.encrypted.body,
+    cipher: packet.cipher,
     hlcPhysical: packet.clock.physical,
     hlcCounter: packet.clock.counter,
     hlcNodeId: packet.clock.nodeId,
   };
 }
 
-function rowToPacket(row: TaskRow): SyncPacket {
+function rowToRecord(row: RecordRow): SyncRecord {
   return {
-    taskId: row.id,
+    id: row.id,
     clock: { physical: row.hlcPhysical, counter: row.hlcCounter, nodeId: row.hlcNodeId },
-    status: row.status,
-    encrypted: { title: row.titleCipher, body: row.bodyCipher },
+    cipher: row.cipher,
+    seq: row.seq,
   };
 }
