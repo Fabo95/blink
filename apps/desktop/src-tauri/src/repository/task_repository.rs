@@ -121,6 +121,27 @@ impl TaskRepository {
         Ok(())
     }
 
+    /// Record that a task changed locally: write its Hybrid Logical Clock version
+    /// (`physical`/`counter`/`node_id`) + `dirty = 1`, so the sync loop finds and pushes
+    /// the change. The task service calls this (with a fresh clock stamp) after each
+    /// mutation.
+    pub fn record_change(
+        &self,
+        id: &str,
+        physical: i64,
+        counter: i64,
+        node_id: &str,
+    ) -> AppResult<()> {
+        let conn = self.db.lock()?;
+        conn.execute(
+            "UPDATE tasks SET hlc_physical = ?1, hlc_counter = ?2, hlc_node_id = ?3, dirty = 1 \
+             WHERE id = ?4",
+            params![physical, counter, node_id, id],
+        )
+        .map_err(store_err)?;
+        Ok(())
+    }
+
     /// Apply a [`TaskPatch`], writing each `Some` field. Returns the updated task (or a
     /// not-found error, surfaced by the final fetch).
     pub fn update(&self, id: &str, patch: TaskPatch) -> AppResult<Task> {

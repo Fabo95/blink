@@ -14,7 +14,7 @@ use crate::core::error::{AppError, AppResult};
 use super::migrations::migrations;
 
 /// The shared SQLCipher database handle. Opened, unlocked, and migrated once;
-/// repositories borrow the connection via [`Db::lock`] rather than owning it.
+/// callers borrow the connection via [`Db::lock`] rather than owning it.
 pub struct Db {
     // rusqlite's Connection is Send but not Sync; the Mutex makes the DB shareable
     // across Tauri's command threads.

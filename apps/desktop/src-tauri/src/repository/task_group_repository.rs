@@ -71,6 +71,27 @@ impl TaskGroupRepository {
         fetch_one(&conn, id)
     }
 
+    /// Record that a group changed locally: write its Hybrid Logical Clock version
+    /// (`physical`/`counter`/`node_id`) + `dirty = 1`, so the sync loop finds and pushes
+    /// the change. The group service calls this (with a fresh clock stamp) after each
+    /// mutation.
+    pub fn record_change(
+        &self,
+        id: &str,
+        physical: i64,
+        counter: i64,
+        node_id: &str,
+    ) -> AppResult<()> {
+        let conn = self.db.lock()?;
+        conn.execute(
+            "UPDATE task_groups SET hlc_physical = ?1, hlc_counter = ?2, hlc_node_id = ?3, \
+             dirty = 1 WHERE id = ?4",
+            params![physical, counter, node_id, id],
+        )
+        .map_err(store_err)?;
+        Ok(())
+    }
+
     /// Delete a group; its tasks fall back to ungrouped. The explicit UPDATE (rather
     /// than relying on the FK's ON DELETE SET NULL alone) keeps the behavior
     /// independent of pragma state and both statements under one lock.

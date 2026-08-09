@@ -258,6 +258,14 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   SessionTokenService`) — not an abbreviation like `client`/`tokens`. One file per service/client,
   named after it (`auth_service.rs`, `server_client.rs`). Commands never touch a repository —
   always through a service; services never import `tauri`.
+- **A service reaches persistence only through a repository — never the raw `Db`.** If a service
+  needs a table, add a `*Repository` for it (holding `Arc<Db>`, locking internally) and inject that,
+  the way `AuthService` takes `SettingsRepository` and `HlcService` takes `SyncStateRepository`.
+  `Db` stays `pub(super)` inside `repository/`; only repositories hold it. Row writes belong on the
+  owning repository (e.g. `TaskRepository::record_change(id, physical, counter, node_id)` — raw
+  column values, so the repo never depends on a service type like `Hlc`); the entity service
+  composes them — `HlcService::next()` mints the clock stamp, the service's own `mark_dirty` hands
+  its fields to `repo.record_change` after each write — so a service never runs raw table SQL.
 - **No buttons, anywhere.** Every action is a keyboard shortcut, surfaced via `HintRow`.
   **`⌘↵` confirms** every commit/destructive action (save, delete-task, delete-group) — never
   plain `Enter`. Mouse affordances (pill click, row double-click) are secondary and stay out of

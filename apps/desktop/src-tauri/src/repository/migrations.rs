@@ -54,5 +54,28 @@ pub(super) fn migrations() -> Migrations<'static> {
             "ALTER TABLE tasks ADD COLUMN raw_text TEXT NOT NULL DEFAULT '';
              UPDATE tasks SET raw_text = text;",
         ),
+        // Sync tracking. Each synced row carries a Hybrid Logical Clock (edit-time
+        // ordering for last-write-wins), a `dirty` flag (has local changes to push),
+        // and a `deleted` tombstone (so a delete can propagate; the delete→tombstone
+        // behavior itself lands with the sync loop). `sync_state` is device-local
+        // bookkeeping (node id, pull cursor) that never syncs. Existing rows default
+        // to dirty=1 so the first sync pushes them; their hlc stays 0/'' until the
+        // next edit or the first push stamps them.
+        M::up(
+            "CREATE TABLE IF NOT EXISTS sync_state (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+            ALTER TABLE tasks ADD COLUMN hlc_physical INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE tasks ADD COLUMN hlc_counter  INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE tasks ADD COLUMN hlc_node_id  TEXT    NOT NULL DEFAULT '';
+            ALTER TABLE tasks ADD COLUMN dirty        INTEGER NOT NULL DEFAULT 1;
+            ALTER TABLE tasks ADD COLUMN deleted      INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE task_groups ADD COLUMN hlc_physical INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE task_groups ADD COLUMN hlc_counter  INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE task_groups ADD COLUMN hlc_node_id  TEXT    NOT NULL DEFAULT '';
+            ALTER TABLE task_groups ADD COLUMN dirty        INTEGER NOT NULL DEFAULT 1;
+            ALTER TABLE task_groups ADD COLUMN deleted      INTEGER NOT NULL DEFAULT 0;",
+        ),
     ])
 }

@@ -17,6 +17,7 @@ use crate::repository::{Db, Repository};
 use crate::services::ai_service::AiService;
 use crate::services::auth_service::AuthService;
 use crate::services::capture_service::CaptureService;
+use crate::services::hlc_service::HlcService;
 use crate::services::security_service::SecurityService;
 use crate::services::session_token_service::SessionTokenService;
 use crate::services::shortcut_service::ShortcutService;
@@ -52,6 +53,8 @@ pub fn run() {
             let db = Arc::new(Db::open(&data_dir.join("blink.db"))?);
             let repository = Repository::new(db);
 
+            let hlc_service = Arc::new(HlcService::new(repository.sync_state.clone())?);
+
             // The DB-backed services are built here (not up top with the others)
             // because their repositories only exist once the Repository is open.
             app.manage(AuthService::new(
@@ -59,10 +62,11 @@ pub fn run() {
                 SessionTokenService::new(),
                 repository.settings.clone(),
             ));
-            app.manage(TaskService::new(repository.tasks.clone()));
+            app.manage(TaskService::new(repository.tasks.clone(), hlc_service.clone()));
             app.manage(TaskGroupService::new(
                 repository.task_groups.clone(),
                 repository.settings.clone(),
+                hlc_service.clone(),
             ));
             app.manage(ShortcutService::new(repository.settings.clone()));
 

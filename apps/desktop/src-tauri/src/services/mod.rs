@@ -7,6 +7,7 @@
 pub mod ai_service;
 pub mod auth_service;
 pub mod capture_service;
+pub mod hlc_service;
 pub mod security_service;
 pub mod session_token_service;
 pub mod shortcut_service;
