@@ -28,7 +28,7 @@ impl TaskGroupRepository {
     pub fn list(&self) -> AppResult<Vec<TaskGroup>> {
         let conn = self.db.lock()?;
         let mut stmt = conn
-            .prepare("SELECT * FROM task_groups ORDER BY created_at ASC, name ASC")
+            .prepare("SELECT * FROM task_groups WHERE deleted = 0 ORDER BY created_at ASC, name ASC")
             .map_err(store_err)?;
         let rows = stmt.query([]).map_err(store_err)?;
         from_rows::<TaskGroupRow>(rows)
@@ -92,19 +92,29 @@ impl TaskGroupRepository {
         Ok(())
     }
 
-    /// Delete a group; its tasks fall back to ungrouped. The explicit UPDATE (rather
-    /// than relying on the FK's ON DELETE SET NULL alone) keeps the behavior
-    /// independent of pragma state and both statements under one lock.
-    pub fn delete(&self, id: &str) -> AppResult<()> {
+    /// Soft-delete a group (tombstone, so the deletion syncs) and un-group its tasks.
+    /// Returns the ids of the un-grouped tasks so the service can stamp them (their
+    /// `task_group_id` changed and must sync too). The group's unique `name` is freed
+    /// (set to its `id`) so the same name can be reused.
+    pub fn delete(&self, id: &str) -> AppResult<Vec<String>> {
         let conn = self.db.lock()?;
+        let affected = {
+            let mut stmt = conn
+                .prepare("SELECT id FROM tasks WHERE task_group_id = ?1")
+                .map_err(store_err)?;
+            let rows = stmt
+                .query_map([id], |row| row.get::<_, String>(0))
+                .map_err(store_err)?;
+            rows.collect::<Result<Vec<String>, _>>().map_err(store_err)?
+        };
         conn.execute(
             "UPDATE tasks SET task_group_id = NULL WHERE task_group_id = ?1",
             [id],
         )
         .map_err(store_err)?;
-        conn.execute("DELETE FROM task_groups WHERE id = ?1", [id])
+        conn.execute("UPDATE task_groups SET deleted = 1, name = id WHERE id = ?1", [id])
             .map_err(store_err)?;
-        Ok(())
+        Ok(affected)
     }
 }
 
@@ -127,7 +137,7 @@ fn name_taken_err(e: rusqlite::Error) -> AppError {
 
 fn fetch_one(conn: &Connection, id: &str) -> AppResult<TaskGroup> {
     let mut stmt = conn
-        .prepare("SELECT * FROM task_groups WHERE id = ?1")
+        .prepare("SELECT * FROM task_groups WHERE id = ?1 AND deleted = 0")
         .map_err(store_err)?;
     let rows = stmt.query([id]).map_err(store_err)?;
     let row = from_rows::<TaskGroupRow>(rows)

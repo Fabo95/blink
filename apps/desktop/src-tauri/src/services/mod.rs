@@ -13,3 +13,4 @@ pub mod session_token_service;
 pub mod shortcut_service;
 pub mod task_group_service;
 pub mod task_service;
+pub mod vault_service;

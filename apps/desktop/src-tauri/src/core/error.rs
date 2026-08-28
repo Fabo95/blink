@@ -21,6 +21,9 @@ pub enum AppError {
     Link(String),
     /// Writing to the system clipboard failed.
     Clipboard(String),
+    /// An encryption/decryption or key-derivation failure in the sync crypto layer
+    /// (e.g. a wrong master password / Secret Key, or tampered ciphertext).
+    Crypto(String),
 }
 
 impl fmt::Display for AppError {
@@ -32,6 +35,7 @@ impl fmt::Display for AppError {
             AppError::Shortcut(msg) => write!(f, "shortcut error: {msg}"),
             AppError::Link(msg) => write!(f, "link error: {msg}"),
             AppError::Clipboard(msg) => write!(f, "clipboard error: {msg}"),
+            AppError::Crypto(msg) => write!(f, "crypto error: {msg}"),
         }
     }
 }

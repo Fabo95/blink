@@ -1,12 +1,14 @@
-//! Client for the Blink sync server — the only thing that talks to it (auth today,
-//! encrypted task sync later). One public method per endpoint we call; each owns its
-//! path + request body and returns the raw response for the service to interpret.
-//! Base URL overridable via `BLINK_SERVER_URL`.
+//! Client for the Blink sync server — the only thing that talks to it (auth +
+//! zero-knowledge record/keyset sync). One public method per endpoint we call; each
+//! owns its path + request body and returns the raw response for the service to
+//! interpret. Base URL overridable via `BLINK_SERVER_URL`.
 
 use reqwest::Response;
 use serde::Serialize;
 
 use crate::core::config::config;
+use crate::core::crypto::Keyset;
+use crate::core::wire::SyncPacket;
 
 pub struct ServerClient {
     http: reqwest::Client,
@@ -102,6 +104,40 @@ impl ServerClient {
             .send()
             .await
     }
+
+    /// `POST /v1/sync/push` — upload locally-changed encrypted records.
+    pub async fn push_records(
+        &self,
+        token: &str,
+        packets: &[SyncPacket],
+    ) -> reqwest::Result<Response> {
+        self.http
+            .post(url("v1/sync/push"))
+            .bearer_auth(token)
+            .json(&PushBody { packets })
+            .send()
+            .await
+    }
+
+    /// `GET /v1/sync/pull?since=<seq>` — download records changed after the cursor.
+        pub async fn pull_records(&self, token: &str, since_seq: i64) -> reqwest::Result<Response> {
+        self.http
+            .get(url("v1/sync/pull"))
+            .bearer_auth(token)
+            .query(&[("since", since_seq)])
+            .send()
+            .await
+    }
+
+    /// `GET /v1/keyset` — fetch the account keyset (its `data.keyset` is null until setup).
+    pub async fn get_keyset(&self, token: &str) -> reqwest::Result<Response> {
+        self.http.get(url("v1/keyset")).bearer_auth(token).send().await
+    }
+
+    /// `PUT /v1/keyset` — store the account keyset (first-time setup or password change).
+    pub async fn put_keyset(&self, token: &str, keyset: &Keyset) -> reqwest::Result<Response> {
+        self.http.put(url("v1/keyset")).bearer_auth(token).json(keyset).send().await
+    }
 }
 
 /// Join a path onto the configured server base URL.
@@ -111,6 +147,11 @@ fn url(path: &str) -> String {
         config().server_url.trim_end_matches('/'),
         path.trim_start_matches('/')
     )
+}
+
+#[derive(Serialize)]
+struct PushBody<'a> {
+    packets: &'a [SyncPacket],
 }
 
 #[derive(Serialize)]

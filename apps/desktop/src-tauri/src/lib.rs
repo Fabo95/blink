@@ -23,6 +23,7 @@ use crate::services::session_token_service::SessionTokenService;
 use crate::services::shortcut_service::ShortcutService;
 use crate::services::task_group_service::TaskGroupService;
 use crate::services::task_service::TaskService;
+use crate::services::vault_service::VaultService;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -40,6 +41,9 @@ pub fn run() {
         .manage(AiService::new(
             config().openai_api_key.clone().map(OpenAiClient::new),
         ))
+        // The encryption vault (keychain-backed VMK) has no DB dependency, so it's
+        // built here with the other non-DB services.
+        .manage(VaultService::new())
         .manage(PendingSource::default())
         .manage(PendingCapture::default())
         .setup(|app| {
@@ -66,6 +70,7 @@ pub fn run() {
             app.manage(TaskGroupService::new(
                 repository.task_groups.clone(),
                 repository.settings.clone(),
+                repository.tasks.clone(),
                 hlc_service.clone(),
             ));
             app.manage(ShortcutService::new(repository.settings.clone()));

@@ -37,7 +37,8 @@ impl TaskService {
     }
 
     pub fn delete(&self, id: &str) -> AppResult<()> {
-        self.task_repository.delete(id)
+        self.task_repository.delete(id)?;
+        self.mark_dirty(id)
     }
 
     /// Swap the inbox order of two tasks (moving `first` and `second` past each other).

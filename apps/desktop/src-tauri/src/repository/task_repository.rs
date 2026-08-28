@@ -45,7 +45,7 @@ impl TaskRepository {
     pub fn list(&self) -> AppResult<Vec<Task>> {
         let conn = self.db.lock()?;
         let mut stmt = conn
-            .prepare("SELECT * FROM tasks ORDER BY position DESC")
+            .prepare("SELECT * FROM tasks WHERE deleted = 0 ORDER BY position DESC")
             .map_err(store_err)?;
         let rows = stmt.query([]).map_err(store_err)?;
         from_rows::<TaskRow>(rows)
@@ -114,9 +114,12 @@ impl TaskRepository {
         Ok(())
     }
 
+    /// Soft-delete: flag the task as a tombstone (`deleted = 1`) rather than removing
+    /// the row, so the deletion can sync to other devices. Reads filter tombstones out;
+    /// the task service stamps it afterwards so the tombstone is pushed.
     pub fn delete(&self, id: &str) -> AppResult<()> {
         let conn = self.db.lock()?;
-        conn.execute("DELETE FROM tasks WHERE id = ?1", [id])
+        conn.execute("UPDATE tasks SET deleted = 1 WHERE id = ?1", [id])
             .map_err(store_err)?;
         Ok(())
     }
@@ -212,7 +215,7 @@ impl TaskRepository {
 /// Fetch a single task by id — used after an update to return the fresh row.
 fn fetch_one(conn: &Connection, id: &str) -> AppResult<Task> {
     let mut stmt = conn
-        .prepare("SELECT * FROM tasks WHERE id = ?1")
+        .prepare("SELECT * FROM tasks WHERE id = ?1 AND deleted = 0")
         .map_err(store_err)?;
     let rows = stmt.query([id]).map_err(store_err)?;
     let row = from_rows::<TaskRow>(rows)
