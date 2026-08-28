@@ -11,6 +11,7 @@ pub mod hlc_service;
 pub mod security_service;
 pub mod session_token_service;
 pub mod shortcut_service;
+pub mod sync_service;
 pub mod task_group_service;
 pub mod task_service;
 pub mod vault_service;

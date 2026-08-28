@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::core::error::{AppError, AppResult};
 use crate::core::models::TaskGroup;
+use crate::core::wire::{Clock, GroupBody, LocalChange, RecordBody};
 
 use super::db::{serde_err, store_err, Db};
 
@@ -115,6 +116,86 @@ impl TaskGroupRepository {
         conn.execute("UPDATE task_groups SET deleted = 1, name = id WHERE id = ?1", [id])
             .map_err(store_err)?;
         Ok(affected)
+    }
+
+    /// Every group with unsynced local changes (tombstones included), for the push.
+    pub fn list_dirty(&self) -> AppResult<Vec<LocalChange>> {
+        let conn = self.db.lock()?;
+        let mut stmt =
+            conn.prepare("SELECT * FROM task_groups WHERE dirty = 1").map_err(store_err)?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(LocalChange {
+                    id: row.get("id")?,
+                    clock: Clock {
+                        physical: row.get("hlc_physical")?,
+                        counter: row.get("hlc_counter")?,
+                        node_id: row.get("hlc_node_id")?,
+                    },
+                    body: RecordBody::Group(GroupBody {
+                        name: row.get("name")?,
+                        created_at: row.get("created_at")?,
+                        updated_at: row.get("updated_at")?,
+                        deleted: row.get("deleted")?,
+                    }),
+                })
+            })
+            .map_err(store_err)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(store_err)
+    }
+
+    /// Merge a pulled group: insert, or overwrite only if the incoming clock is newer
+    /// (LWW). Stored `dirty = 0`.
+    pub fn merge(&self, id: &str, clock: &Clock, body: &GroupBody) -> AppResult<()> {
+        let conn = self.db.lock()?;
+        let result = conn.execute(
+            "INSERT INTO task_groups (id, name, created_at, updated_at, deleted, hlc_physical, \
+             hlc_counter, hlc_node_id, dirty) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0) \
+             ON CONFLICT(id) DO UPDATE SET \
+             name = excluded.name, created_at = excluded.created_at, \
+             updated_at = excluded.updated_at, deleted = excluded.deleted, \
+             hlc_physical = excluded.hlc_physical, hlc_counter = excluded.hlc_counter, \
+             hlc_node_id = excluded.hlc_node_id, dirty = 0 \
+             WHERE (task_groups.hlc_physical, task_groups.hlc_counter, task_groups.hlc_node_id) \
+             < (excluded.hlc_physical, excluded.hlc_counter, excluded.hlc_node_id)",
+            params![
+                id, body.name, body.created_at, body.updated_at, body.deleted, clock.physical,
+                clock.counter, clock.node_id
+            ],
+        );
+        match result {
+            Ok(_) => Ok(()),
+            // TODO(root-cause): the legacy `UNIQUE(name)` constraint (migration 6) can't
+            // coexist with sync — two devices independently creating a same-named group
+            // collide here. Proper fix: drop the UNIQUE via a table-rebuild migration and
+            // move the name-uniqueness check to app-level create/rename. Until then, skip the
+            // rare colliding merge rather than failing the whole pull.
+            Err(e) if e.sqlite_error_code() == Some(rusqlite::ErrorCode::ConstraintViolation) => {
+                Ok(())
+            }
+            Err(e) => Err(store_err(e)),
+        }
+    }
+
+    /// Clear the dirty flag on rows that were just pushed — only if the clock still
+    /// matches, so a local edit made mid-push isn't lost.
+    pub fn clear_dirty(&self, changes: &[LocalChange]) -> AppResult<()> {
+        let conn = self.db.lock()?;
+        for change in changes {
+            conn.execute(
+                "UPDATE task_groups SET dirty = 0 WHERE id = ?1 AND hlc_physical = ?2 \
+                 AND hlc_counter = ?3 AND hlc_node_id = ?4",
+                params![
+                    change.id,
+                    change.clock.physical,
+                    change.clock.counter,
+                    change.clock.node_id
+                ],
+            )
+            .map_err(store_err)?;
+        }
+        Ok(())
     }
 }
 

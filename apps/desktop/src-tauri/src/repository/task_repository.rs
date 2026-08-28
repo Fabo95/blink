@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::core::error::{AppError, AppResult};
 use crate::core::models::{CaptureSource, NewTask, Task};
+use crate::core::wire::{Clock, LocalChange, RecordBody, TaskBody};
 
 use super::db::{serde_err, store_err, Db};
 
@@ -209,6 +210,96 @@ impl TaskRepository {
         }
 
         fetch_one(&conn, id)
+    }
+
+    /// Every task with unsynced local changes (tombstones included), as [`LocalChange`]s
+    /// the sync service encrypts and pushes.
+    pub fn list_dirty(&self) -> AppResult<Vec<LocalChange>> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn.prepare("SELECT * FROM tasks WHERE dirty = 1").map_err(store_err)?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(LocalChange {
+                    id: row.get("id")?,
+                    clock: Clock {
+                        physical: row.get("hlc_physical")?,
+                        counter: row.get("hlc_counter")?,
+                        node_id: row.get("hlc_node_id")?,
+                    },
+                    body: RecordBody::Task(TaskBody {
+                        text: row.get("text")?,
+                        raw_text: row.get("raw_text")?,
+                        status: row.get("status")?,
+                        app_id: row.get("app_id")?,
+                        app_name: row.get("app_name")?,
+                        window_title: row.get("window_title")?,
+                        captured_at: row.get("captured_at")?,
+                        created_at: row.get("created_at")?,
+                        updated_at: row.get("updated_at")?,
+                        improved: row.get("improved")?,
+                        link: row.get("link")?,
+                        completed_at: row.get("completed_at")?,
+                        task_group_id: row.get("task_group_id")?,
+                        position: row.get("position")?,
+                        deleted: row.get("deleted")?,
+                    }),
+                })
+            })
+            .map_err(store_err)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(store_err)
+    }
+
+    /// Merge a pulled task: insert, or overwrite only if the incoming clock is newer
+    /// (last-write-wins). Stored `dirty = 0` — it came from the server, nothing to push.
+    pub fn merge(&self, id: &str, clock: &Clock, body: &TaskBody) -> AppResult<()> {
+        let conn = self.db.lock()?;
+        conn.execute(
+            "INSERT INTO tasks (id, text, raw_text, status, app_id, app_name, window_title, \
+             captured_at, created_at, updated_at, improved, link, completed_at, task_group_id, \
+             position, deleted, hlc_physical, hlc_counter, hlc_node_id, dirty) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, \
+             ?18, ?19, 0) \
+             ON CONFLICT(id) DO UPDATE SET \
+             text = excluded.text, raw_text = excluded.raw_text, status = excluded.status, \
+             app_id = excluded.app_id, app_name = excluded.app_name, \
+             window_title = excluded.window_title, captured_at = excluded.captured_at, \
+             created_at = excluded.created_at, updated_at = excluded.updated_at, \
+             improved = excluded.improved, link = excluded.link, \
+             completed_at = excluded.completed_at, task_group_id = excluded.task_group_id, \
+             position = excluded.position, deleted = excluded.deleted, \
+             hlc_physical = excluded.hlc_physical, hlc_counter = excluded.hlc_counter, \
+             hlc_node_id = excluded.hlc_node_id, dirty = 0 \
+             WHERE (tasks.hlc_physical, tasks.hlc_counter, tasks.hlc_node_id) \
+             < (excluded.hlc_physical, excluded.hlc_counter, excluded.hlc_node_id)",
+            params![
+                id, body.text, body.raw_text, body.status, body.app_id, body.app_name,
+                body.window_title, body.captured_at, body.created_at, body.updated_at,
+                body.improved, body.link, body.completed_at, body.task_group_id, body.position,
+                body.deleted, clock.physical, clock.counter, clock.node_id
+            ],
+        )
+        .map_err(store_err)?;
+        Ok(())
+    }
+
+    /// Clear the dirty flag on rows that were just pushed — but only if the row's clock
+    /// still matches what was pushed, so a local edit made mid-push isn't lost.
+    pub fn clear_dirty(&self, changes: &[LocalChange]) -> AppResult<()> {
+        let conn = self.db.lock()?;
+        for change in changes {
+            conn.execute(
+                "UPDATE tasks SET dirty = 0 WHERE id = ?1 AND hlc_physical = ?2 \
+                 AND hlc_counter = ?3 AND hlc_node_id = ?4",
+                params![
+                    change.id,
+                    change.clock.physical,
+                    change.clock.counter,
+                    change.clock.node_id
+                ],
+            )
+            .map_err(store_err)?;
+        }
+        Ok(())
     }
 }
 

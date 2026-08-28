@@ -21,6 +21,7 @@ use crate::services::hlc_service::HlcService;
 use crate::services::security_service::SecurityService;
 use crate::services::session_token_service::SessionTokenService;
 use crate::services::shortcut_service::ShortcutService;
+use crate::services::sync_service::SyncService;
 use crate::services::task_group_service::TaskGroupService;
 use crate::services::task_service::TaskService;
 use crate::services::vault_service::VaultService;
@@ -41,9 +42,6 @@ pub fn run() {
         .manage(AiService::new(
             config().openai_api_key.clone().map(OpenAiClient::new),
         ))
-        // The encryption vault (keychain-backed VMK) has no DB dependency, so it's
-        // built here with the other non-DB services.
-        .manage(VaultService::new())
         .manage(PendingSource::default())
         .manage(PendingCapture::default())
         .setup(|app| {
@@ -58,6 +56,8 @@ pub fn run() {
             let repository = Repository::new(db);
 
             let hlc_service = Arc::new(HlcService::new(repository.sync_state.clone())?);
+            // Shared encryption vault (keychain-backed VMK); the sync service holds it too.
+            let vault_service = Arc::new(VaultService::new());
 
             // The DB-backed services are built here (not up top with the others)
             // because their repositories only exist once the Repository is open.
@@ -74,6 +74,15 @@ pub fn run() {
                 hlc_service.clone(),
             ));
             app.manage(ShortcutService::new(repository.settings.clone()));
+            app.manage(vault_service.clone());
+            app.manage(SyncService::new(
+                ServerClient::new(),
+                vault_service,
+                SessionTokenService::new(),
+                repository.tasks.clone(),
+                repository.task_groups.clone(),
+                repository.sync_state.clone(),
+            ));
 
             platform::init(app)?;
             Ok(())
