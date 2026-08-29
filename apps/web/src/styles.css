@@ -1,0 +1,48 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@config "../tailwind.config.ts";
+
+@layer base {
+  :root {
+    --background: 256 33% 6%;
+    --foreground: 255 38% 94%;
+    --card: 260 24% 10%;
+    --card-foreground: 255 38% 94%;
+    --primary: 258 90% 66%;
+    --primary-foreground: 250 100% 98%;
+    --muted: 255 33% 14%;
+    --muted-foreground: 255 13% 63%;
+    --border: 254 29% 19%;
+    --radius: 0.5rem;
+    color-scheme: dark;
+  }
+
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    margin: 0;
+    font-family: Inter, system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Fixed violet aurora glow behind the content — the brand backdrop. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(60rem 40rem at 50% -10%, rgba(139, 92, 246, 0.18), transparent 70%),
+      radial-gradient(40rem 30rem at 90% 20%, rgba(167, 139, 250, 0.1), transparent 70%);
+  }
+}

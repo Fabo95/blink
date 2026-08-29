@@ -1,27 +1,25 @@
-name: Deploy server
+name: Deploy web
 
-# Build the server image, push it to Docker Hub, then SSH into the Hetzner box and
-# pull + (re)start the Blink services inside your existing Caddy/n8n compose.
-# Postgres is external (managed); Caddy reverse-proxies to the container over the
-# shared `web` network.
+# Mirror of deploy-server.yml: build the static download page into an nginx image,
+# push it to Docker Hub, then SSH into the box and (re)start the container inside the
+# existing Caddy/n8n compose. Caddy reverse-proxies to it over the shared `web`
+# network (see apps/web/deploy/). The download base URL is baked in at build time.
 on:
   push:
     branches: [master]
     paths:
-      - 'apps/server/**'
-      - 'packages/contract/**'
-      - 'packages/db/**'
+      - 'apps/web/**'
+      - 'packages/core/**'
       - 'pnpm-lock.yaml'
-      - '.github/workflows/deploy-server.yml'
+      - '.github/workflows/deploy-web.yml'
   workflow_dispatch:
 
-# Never let two deploys race on the box.
 concurrency:
-  group: deploy-server
+  group: deploy-web
   cancel-in-progress: false
 
 env:
-  IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/blink-server
+  IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/blink-web
 
 jobs:
   deploy:
@@ -41,8 +39,10 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: apps/server/Dockerfile
+          file: apps/web/Dockerfile
           push: true
+          build-args: |
+            VITE_DOWNLOADS_BASE_URL=${{ vars.DOWNLOADS_BASE_URL }}
           tags: |
             ${{ env.IMAGE }}:latest
             ${{ env.IMAGE }}:${{ github.sha }}
@@ -59,12 +59,9 @@ jobs:
             set -euo pipefail
             cd ${{ secrets.DEPLOY_COMPOSE_DIR }}
             echo "${{ secrets.DOCKERHUB_ACCESS_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
-            # Pin this deploy to the exact commit image (overrides the .env fallback).
-            # Var name must match the compose reference (${BLINK_SERVER_IMAGE}); a
-            # shell export takes precedence over the .env value.
-            export BLINK_SERVER_IMAGE="${{ env.IMAGE }}:${{ github.sha }}"
-            docker compose pull blink-migrate blink-server
-            # up blink-server runs blink-migrate first (depends_on), then starts the API.
-            docker compose up -d blink-server
+            # Pin this deploy to the exact commit image (overrides the compose :latest fallback).
+            export BLINK_WEB_IMAGE="${{ env.IMAGE }}:${{ github.sha }}"
+            docker compose pull blink-web
+            docker compose up -d blink-web
             docker image prune -f
             docker logout
