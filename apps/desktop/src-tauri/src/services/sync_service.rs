@@ -48,8 +48,12 @@ impl SyncService {
     }
 
     /// One sync cycle: pull remote changes first (so a fresh device fills in), then
-    /// push local ones.
+    /// push local ones. A no-op when not signed in or the vault is locked, so the
+    /// background loop can call it freely before the user has set sync up.
     pub async fn sync(&self) -> AppResult<()> {
+        if self.session_token_service.read()?.is_none() || !self.vault_service.is_unlocked() {
+            return Ok(());
+        }
         self.pull().await?;
         self.push().await?;
         Ok(())

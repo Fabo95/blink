@@ -75,7 +75,7 @@ pub fn run() {
             ));
             app.manage(ShortcutService::new(repository.settings.clone()));
             app.manage(vault_service.clone());
-            app.manage(SyncService::new(
+            let sync_service = Arc::new(SyncService::new(
                 ServerClient::new(),
                 vault_service,
                 SessionTokenService::new(),
@@ -83,6 +83,7 @@ pub fn run() {
                 repository.task_groups.clone(),
                 repository.sync_state.clone(),
             ));
+            app.manage(sync_service.clone());
 
             platform::init(app)?;
             Ok(())
@@ -115,6 +116,11 @@ pub fn run() {
             commands::link::open_link,
             commands::shortcut::get_capture_shortcut,
             commands::shortcut::set_capture_shortcut,
+            commands::sync::setup_vault,
+            commands::sync::unlock_vault,
+            commands::sync::sync_now,
+            commands::sync::is_vault_unlocked,
+            commands::sync::lock_vault,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Blink")

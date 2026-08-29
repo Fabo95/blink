@@ -89,6 +89,18 @@ export const api = {
   /** Bind a new hotkey for a capture method; rejects if invalid or already in use. */
   setCaptureShortcut: (method: CaptureMethod, shortcut: string) =>
     invoke<void>('set_capture_shortcut', { method, shortcut }),
+  /** First-time sync setup: create the vault + upload the keyset. Returns the Secret
+   *  Key to show the user **once** — they must save it (it's never sent to the server). */
+  setupVault: (masterPassword: string) => invoke<string>('setup_vault', { masterPassword }),
+  /** Unlock the vault on this device from the server-stored keyset. */
+  unlockVault: (masterPassword: string, secretKey: string) =>
+    invoke<void>('unlock_vault', { masterPassword, secretKey }),
+  /** Run one sync cycle (pull then push). Requires the vault unlocked. */
+  syncNow: () => invoke<void>('sync_now'),
+  /** Whether the vault is unlocked (the VMK is available) on this device. */
+  isVaultUnlocked: () => invoke<boolean>('is_vault_unlocked'),
+  /** Lock the vault (sign out of sync) — forgets the cached VMK. */
+  lockVault: () => invoke<void>('lock_vault'),
 };
 
 // --- Browser fallback -------------------------------------------------------
@@ -205,6 +217,9 @@ const mockShortcuts: Record<CaptureMethod, string> = {
 // Browser-only auth: accept any credentials so the login gate is developable
 // without the Rust core / a running server.
 let mockSession: AuthUser | null = null;
+// Browser-only vault state — no real crypto/server; just enough for the setup/unlock
+// UI to be developable. setup/unlock "unlock" it; lock clears it.
+let mockVaultUnlocked = false;
 
 async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   switch (cmd) {
@@ -394,6 +409,20 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       mockShortcuts[method] = String(args?.shortcut ?? '');
       return undefined as T;
     }
+    case 'setup_vault':
+      // No real crypto in the browser — return a plausible-looking Secret Key.
+      mockVaultUnlocked = true;
+      return 'A3-1a2b3c4d-5e6f7a8b-9c0d1e2f-3a4b5c6d' as T;
+    case 'unlock_vault':
+      mockVaultUnlocked = true;
+      return undefined as T;
+    case 'sync_now':
+      return undefined as T;
+    case 'is_vault_unlocked':
+      return mockVaultUnlocked as T;
+    case 'lock_vault':
+      mockVaultUnlocked = false;
+      return undefined as T;
     default:
       throw new Error(`Unknown command: ${cmd}`);
   }
