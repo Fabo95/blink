@@ -17,12 +17,11 @@ export function VaultError({ message, onRetry }: { message: string; onRetry: () 
         <AuthCard description="Couldn't reach sync">
           <AuthForm busyLabel="" busy={false} onSubmit={onRetry}>
             <p className="text-sm text-muted-foreground">
-              Couldn't check your sync vault — the sync server may be unreachable. Check
-              your connection and try again.
+              We couldn't reach the sync server to check your vault. Check your connection,
+              then try again — or sign out if you're on the wrong account.
             </p>
-            <p className="text-sm text-destructive">{message}</p>
-            <p className="text-xs text-muted-foreground">
-              Stale session or wrong account? Press ⌘⇧o to sign out, then sign back in.
+            <p className="break-words rounded-md border border-border/60 bg-muted/30 px-3 py-2 font-mono text-xs text-muted-foreground">
+              {message}
             </p>
           </AuthForm>
         </AuthCard>

@@ -41,6 +41,7 @@ const HINTS = {
   'mod+r': { keys: '⌘r', label: 'resend' },
   'mod+n': { keys: '⌘n', label: 'switch' },
   'mod+f': { keys: '⌘f', label: 'forgot' },
+  'mod+shift+o': { keys: '⌘⇧o', label: 'sign out' },
   a: { keys: 'a', label: 'archive' },
   n: { keys: 'n', label: 'new' },
   r: { keys: 'r', label: 'rename' },
@@ -340,10 +341,19 @@ export const SHORTCUTS = {
     opts: { enableOnFormTags: true },
   },
 
-  // ── always on (no statusline chip; surfaced by their own affordance) ────────────────
+  // ── always on ───────────────────────────────────────────────────────────────────────
+  // help + dialect toggle have their own footer affordances (no statusline chip).
   'app.help': { keys: 'c', hint: null, order: 50 },
   'app.hintDialect': { keys: 'v', hint: null, order: 50 },
-  'app.signOut': { keys: 'mod+shift+o', hint: null, order: 50 },
+  // Sign-out is a base-level (0) statusline chip so it shows wherever it's enabled — the
+  // inbox footer and, crucially, the vault gate (which has no header to hang it off).
+  'app.signOut': {
+    keys: 'mod+shift+o',
+    hint: HINTS['mod+shift+o'],
+    level: 0,
+    order: 50,
+    describe: 'Sign out of your account',
+  },
 } satisfies Record<string, Shortcut>;
 
 // Same keys ⇒ same hint: the statusline may never show two different chips for one

@@ -22,6 +22,6 @@ pub mod window;
 pub fn init(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     shortcut::register_listener(app)?;
     shortcut::bind_all(app.handle());
-    jobs::start(app.state::<Arc<SyncService>>().inner().clone());
+    jobs::start(app.handle().clone(), app.state::<Arc<SyncService>>().inner().clone());
     Ok(())
 }

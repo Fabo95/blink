@@ -8,7 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Kbd } from '@/components/ui/kbd';
+import { SyncIndicator } from '@/components/SyncIndicator';
 import type { AuthUser } from '@/generated/AuthUser';
 import { isTauri } from '@/lib/api';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
@@ -20,8 +20,6 @@ interface HeaderProps {
 }
 
 export function Header({ account, onSignOut }: HeaderProps) {
-  // ⌘⇧o signs out — always on, surfaced by the menu item's chip rather than the
-  // statusline. (Not ⌘⇧q: that's macOS's own Log Out chord and would end the session.)
   useShortcut('app.signOut', { callback: onSignOut });
 
   return (
@@ -33,6 +31,8 @@ export function Header({ account, onSignOut }: HeaderProps) {
         {brand.name}
       </h1>
       <div className="flex items-center gap-3">
+        <SyncIndicator />
+
         <Badge variant={isTauri ? 'secondary' : 'destructive'} className="gap-1.5">
           <span
             className={cn(
@@ -52,10 +52,7 @@ export function Header({ account, onSignOut }: HeaderProps) {
               {account.email}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={onSignOut}>
-              Sign out
-              <Kbd className="ml-auto">⌘⇧o</Kbd>
-            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={onSignOut}>Sign out</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

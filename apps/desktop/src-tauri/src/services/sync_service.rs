@@ -48,11 +48,19 @@ impl SyncService {
         }
     }
 
+    /// Whether a sync cycle would actually do anything: signed in and the vault
+    /// unlocked. The background loop checks this before signalling activity, so the UI
+    /// indicator doesn't flicker every cycle before the user has set sync up.
+    pub fn is_ready(&self) -> bool {
+        self.vault_service.is_unlocked()
+            && self.session_token_service.read().ok().flatten().is_some()
+    }
+
     /// One sync cycle: pull remote changes first (so a fresh device fills in), then
-    /// push local ones. A no-op when not signed in or the vault is locked, so the
-    /// background loop can call it freely before the user has set sync up.
+    /// push local ones. A no-op when not [`is_ready`](Self::is_ready), so callers can
+    /// invoke it freely before the user has set sync up.
     pub async fn sync(&self) -> AppResult<()> {
-        if self.session_token_service.read()?.is_none() || !self.vault_service.is_unlocked() {
+        if !self.is_ready() {
             return Ok(());
         }
         self.pull().await?;
