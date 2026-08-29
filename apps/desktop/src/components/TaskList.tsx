@@ -1,5 +1,6 @@
 import { Inbox } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { AiCard } from '@/components/AiCard';
 import { CaptureCard } from '@/components/CaptureCard';
 import { ArchivePage } from '@/components/tasks/ArchivePage';
 import { GroupFilterBar } from '@/components/tasks/GroupFilterBar';
@@ -7,6 +8,7 @@ import { TaskEditor } from '@/components/tasks/TaskEditor';
 import { TaskRow } from '@/components/tasks/TaskRow';
 import { TaskSection } from '@/components/tasks/TaskSection';
 import type { Task } from '@/generated/Task';
+import { useAiStatus } from '@/hooks/useAiStatus';
 import { useArchive } from '@/hooks/useArchive';
 import { useListCursor } from '@/hooks/useListCursor';
 import { useTaskEditor } from '@/hooks/useTaskEditor';
@@ -40,6 +42,7 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
   const report = (e: unknown, fallback: string) => setError(errorMessage(e, fallback));
 
   const editor = useTaskEditor({ onSaved: onChanged, setError });
+  const { enabled: aiEnabled } = useAiStatus();
   const isEditing = editor.task !== null;
   // The browsing shortcuts are enabled exactly while no overlay (editor, delete dialogs,
   // group prompt, help sheet) owns the keyboard — each overlay's own shortcuts enable on
@@ -143,7 +146,7 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
     },
   });
   useShortcut('task.prompt', {
-    enabled: focusedEnabled,
+    enabled: focusedEnabled && aiEnabled,
     callback: () => {
       if (focusedTask) void generatePrompt(focusedTask);
     },
@@ -277,6 +280,7 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
       ) : (
         <>
           <CaptureCard />
+          <AiCard />
           <GroupFilterBar view={taskGroups} />
           <TaskSection title="Inbox" count={active.length}>
             {active.length === 0 ? (

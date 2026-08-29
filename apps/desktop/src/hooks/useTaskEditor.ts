@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Task } from '@/generated/Task';
+import { useAiStatus } from '@/hooks/useAiStatus';
 import { api } from '@/lib/api';
 import { normalizeLink } from '@/lib/link';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
@@ -53,6 +54,7 @@ function wrapEditorFields(e: KeyboardEvent) {
  * sends only the fields that actually changed; an empty edit or link just cancels/clears.
  */
 export function useTaskEditor({ onSaved, setError }: Options): TaskEditor {
+  const { enabled: aiEnabled } = useAiStatus();
   const [task, setTask] = useState<Task | null>(null);
   const [draft, setDraftText] = useState('');
   const [link, setLink] = useState('');
@@ -138,7 +140,7 @@ export function useTaskEditor({ onSaved, setError }: Options): TaskEditor {
 
   useShortcut('editor.field', { enabled: task !== null, callback: wrapEditorFields });
   useShortcut('editor.improve', {
-    enabled: task !== null && !improved,
+    enabled: task !== null && !improved && aiEnabled,
     callback: () => void improve(),
   });
   useShortcut('editor.save', { enabled: task !== null, callback: () => void save() });

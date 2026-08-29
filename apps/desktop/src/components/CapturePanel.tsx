@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import type { CaptureSource } from '@/generated/CaptureSource';
 import type { TaskGroup } from '@/generated/TaskGroup';
+import { useAiStatus } from '@/hooks/useAiStatus';
 import { api, isTauri } from '@/lib/api';
 import { normalizeLink } from '@/lib/link';
 import { Hints } from '@/lib/shortcuts/Hints';
@@ -50,6 +51,7 @@ export interface CaptureKind {
  * common shell — the AI "improve" action, save, and the Esc / ⌘↵ keys.
  */
 export function CapturePanel({ kind }: { kind: CaptureKind }) {
+  const { enabled: aiEnabled } = useAiStatus();
   const [text, setText] = useState('');
   // The immutable captured text. `null` = not yet frozen: a manual capture freezes it at
   // the first improve, a copy capture arrives already frozen (the sanitized prefill).
@@ -154,7 +156,7 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
 
   useShortcut('capture.save', { callback: () => void save() });
   useShortcut('capture.improve', {
-    enabled: !improved && !improving,
+    enabled: aiEnabled && !improved && !improving,
     callback: () => void improve(),
   });
   useShortcut('capture.group', {

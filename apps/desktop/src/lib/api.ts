@@ -83,6 +83,13 @@ export const api = {
   dismissCopyCapture: () => invoke<void>('dismiss_copy_capture'),
   /** Close the manual-capture panel and return focus to the previous app. */
   dismissManualCapture: () => invoke<void>('dismiss_manual_capture'),
+  /** Whether a stored API key enables the AI features (gates the UI). */
+  aiStatus: () => invoke<boolean>('ai_status'),
+  /** Test an API key against the provider and, only if it works, store it in the
+   *  keychain. Rejects (without saving) when the connection test fails. */
+  setAiApiKey: (key: string) => invoke<void>('set_ai_api_key', { key }),
+  /** Forget the stored API key — disables the AI features. */
+  clearAiApiKey: () => invoke<void>('clear_ai_api_key'),
   /** Ask OpenAI to improve raw captured text (returns the cleaned text). */
   improveText: (text: string) => invoke<string>('improve_text', { text }),
   /** Generate a ready-to-paste assistant prompt from a task's raw text and copy it to
@@ -228,6 +235,8 @@ let mockSession: AuthUser | null = null;
 // Browser-only vault state — no real crypto/server; just enough for the setup/unlock
 // UI to be developable. setup/unlock "unlock" it; lock clears it.
 let mockVaultUnlocked = false;
+// Browser-only AI key — no real provider call; any non-empty key "connects".
+let mockAiKey: string | null = null;
 
 async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   switch (cmd) {
@@ -397,6 +406,18 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
     }
     case 'dismiss_copy_capture':
     case 'dismiss_manual_capture':
+      return undefined as T;
+    case 'ai_status':
+      return (mockAiKey !== null) as T;
+    case 'set_ai_api_key': {
+      const key = String(args?.key ?? '').trim();
+      if (!key) throw new Error('API key is empty');
+      // No real provider in the browser — accept any non-empty key as "connected".
+      mockAiKey = key;
+      return undefined as T;
+    }
+    case 'clear_ai_api_key':
+      mockAiKey = null;
       return undefined as T;
     case 'improve_text':
       // Browser mock can't reach OpenAI — echo the input back.

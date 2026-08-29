@@ -9,12 +9,11 @@ use std::sync::Arc;
 
 use tauri::Manager;
 
-use crate::clients::openai_client::OpenAiClient;
 use crate::clients::server_client::ServerClient;
-use crate::core::config::config;
 use crate::core::state::{PendingCapture, PendingSource};
 use crate::core::sync_channel;
 use crate::repository::{Db, Repository};
+use crate::services::ai_key_service::AiKeyService;
 use crate::services::ai_service::AiService;
 use crate::services::auth_service::AuthService;
 use crate::services::capture_service::CaptureService;
@@ -29,9 +28,10 @@ use crate::services::vault_service::VaultService;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Load a `.env` (e.g. OPENAI_API_KEY) — dev convenience so the key doesn't have
-    // to be exported in every shell. In dev, load the one next to the crate
-    // regardless of the working directory. Real env vars still win.
+    // Load a `.env` (e.g. BLINK_SERVER_URL) — dev convenience so vars don't have to
+    // be exported in every shell. In dev, load the one next to the crate regardless
+    // of the working directory. Real env vars still win. (The AI key is not an env —
+    // it's the user's own, stored in the keychain via AiKeyService.)
     #[cfg(all(desktop, debug_assertions))]
     let _ = dotenvy::from_filename(concat!(env!("CARGO_MANIFEST_DIR"), "/.env"));
     #[cfg(desktop)]
@@ -40,9 +40,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(CaptureService::new(SecurityService::with_defaults()))
-        .manage(AiService::new(
-            config().openai_api_key.clone().map(OpenAiClient::new),
-        ))
+        .manage(AiService::new(AiKeyService::new()))
         .manage(PendingSource::default())
         .manage(PendingCapture::default())
         .setup(|app| {
@@ -109,6 +107,9 @@ pub fn run() {
             commands::copy_capture::read_copy_capture,
             commands::copy_capture::dismiss_copy_capture,
             commands::manual_capture::dismiss_manual_capture,
+            commands::ai::ai_status,
+            commands::ai::set_ai_api_key,
+            commands::ai::clear_ai_api_key,
             commands::ai::improve_text,
             commands::ai::generate_task_prompt,
             commands::tasks::list_tasks,

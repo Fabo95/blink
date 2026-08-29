@@ -29,4 +29,14 @@ impl OpenAiClient {
             .send()
             .await
     }
+
+    /// GET the model list — a cheap authenticated request used only to validate an
+    /// API key (a 200 means it works; a 401 means it doesn't). Spends no tokens.
+    pub async fn list_models(&self) -> reqwest::Result<Response> {
+        self.http
+            .get(format!("{BASE_URL}/v1/models"))
+            .bearer_auth(&self.api_key)
+            .send()
+            .await
+    }
 }

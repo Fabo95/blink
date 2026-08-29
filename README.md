@@ -98,8 +98,9 @@ docker compose up   # Postgres + migrations (as the owner role) + the API (as bl
 
 The API listens on `:8787` — health check, Better Auth under `/v1/auth`, and the sync
 endpoints. Point the desktop core at it with `BLINK_SERVER_URL`
-(`apps/desktop/src-tauri/.env`); `OPENAI_API_KEY` in the same file enables `⌘I`.
-See `.env.example` for the server/Postgres variables.
+(`apps/desktop/src-tauri/.env`). AI features (`⌘I`) are enabled by pasting your own
+OpenAI key into the app's AI settings — it's tested, then stored in the OS keychain,
+never in a file. See `.env.example` for the server/Postgres variables.
 
 Schema changes go through Drizzle (`pnpm --filter @blink/db db:generate` / `db:migrate`);
 roles, grants, and RLS policies live in hand-written SQL migrations alongside, because an ORM

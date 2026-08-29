@@ -10,8 +10,6 @@ const DEFAULT_SERVER_URL: &str = "http://localhost:8787";
 pub struct Config {
     /// The Blink sync server base URL (`BLINK_SERVER_URL`).
     pub server_url: String,
-    /// The OpenAI API key (`OPENAI_API_KEY`) for the improve action; `None` when unset.
-    pub openai_api_key: Option<String>,
 }
 
 impl Config {
@@ -19,7 +17,6 @@ impl Config {
         Self {
             server_url: std::env::var("BLINK_SERVER_URL")
                 .unwrap_or_else(|_| DEFAULT_SERVER_URL.to_string()),
-            openai_api_key: std::env::var("OPENAI_API_KEY").ok(),
         }
     }
 }

@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { App } from '@/App';
 import { CopyCapture } from '@/components/CopyCapture';
 import { ManualCapture } from '@/components/ManualCapture';
+import { AiStatusProvider } from '@/hooks/useAiStatus';
 import { isTauri } from '@/lib/api';
 import { ShortcutProvider } from '@/lib/shortcuts/ShortcutProvider';
 import '@/styles.css';
@@ -32,7 +33,9 @@ async function main() {
   // it enabled, so the windows/screens separate themselves by what they mount.
   ReactDOM.createRoot(root).render(
     <React.StrictMode>
-      <ShortcutProvider>{captureView ?? <App />}</ShortcutProvider>
+      <ShortcutProvider>
+        <AiStatusProvider>{captureView ?? <App />}</AiStatusProvider>
+      </ShortcutProvider>
     </React.StrictMode>,
   );
 }

@@ -34,6 +34,7 @@ const HINTS = {
   p: { keys: 'p', label: 'prompt' },
   'mod+g': { keys: '⌘g', label: 'group' },
   'backspace, delete, d': { keys: '⌫', vim: 'd', label: 'delete' },
+  'mod+backspace, mod+delete': { keys: '⌘⌫', label: 'remove' },
   'alt+up, alt+k': { keys: '⌥↑↓', vim: '⌥kj', label: 'reorder' },
   s: { keys: 's', label: 'search' },
   'left, h': { keys: '←→', vim: 'hl', label: 'switch' },
@@ -310,6 +311,24 @@ export const SHORTCUTS = {
     hint: HINTS.escape,
     level: 3,
     order: 90,
+    opts: { enableOnFormTags: true },
+  },
+
+  // ── AI settings: the key field in the inbox's AI card (enabled while it's focused) ──
+  'ai.saveKey': {
+    keys: 'mod+enter',
+    hint: HINTS['mod+enter'],
+    level: 3,
+    describe: 'Test the API key and save it',
+    order: 20,
+    opts: { enableOnFormTags: true },
+  },
+  'ai.clearKey': {
+    keys: 'mod+backspace, mod+delete',
+    hint: HINTS['mod+backspace, mod+delete'],
+    level: 3,
+    describe: 'Remove the stored API key',
+    order: 30,
     opts: { enableOnFormTags: true },
   },
 

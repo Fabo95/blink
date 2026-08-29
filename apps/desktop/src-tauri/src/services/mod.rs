@@ -4,6 +4,7 @@
 //! lives one level up in [`crate::repository`] — commands go through a service,
 //! never a repository.
 
+pub mod ai_key_service;
 pub mod ai_service;
 pub mod auth_service;
 pub mod capture_service;

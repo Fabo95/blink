@@ -19,7 +19,8 @@ clients/            transport to external systems — one struct per system: Ser
 services/           business logic as structs, one file per service named after it
                     (auth_service.rs → AuthService); each holds its client(s)/repo(s) via DI and
                     is managed as Tauri state — AuthService (server auth + cached profile),
-                    AiService (improve), SecurityService (DLP filter), SessionTokenService
+                    AiService (improve; reads the key from AiKeyService), AiKeyService (keychain
+                    BYO OpenAI key), SecurityService (DLP filter), SessionTokenService
                     (keychain bearer token), TaskService + TaskGroupService (task/group CRUD),
                     CaptureService (capture drafts), ShortcutService (hotkey policy)
 repository/         persistence facade: Repository owns the shared Db (SQLCipher) and exposes
@@ -89,7 +90,8 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   reads the response.
 - **Config singleton**: `core::config::config()` reads the environment once (`OnceLock`) into a
   `Config`. Read env only there — never scatter `std::env::var`. A new var = a field + a line in
-  `from_env` (`BLINK_SERVER_URL`, `OPENAI_API_KEY`).
+  `from_env` (`BLINK_SERVER_URL`). The OpenAI key is **not** an env — it's the user's own,
+  stored in the keychain via `AiKeyService` (see the AI note below).
 - **Auth / login gate**: the main window is gated behind email/password sign-in (Better Auth on
   the server). `AuthService` drives the full flow via `ServerClient` — the commands are
   `sign_in`, `sign_up`, `verify_email`, `resend_verification`, `request_password_reset`,
@@ -245,6 +247,17 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   call it on `⌘I`, replace the field, and set an `improved` flag that gates re-improving (once per
   version, cleared when the text changes) and is persisted on save via `update_task`. The verb is
   **improve** everywhere.
+- **Bring-your-own AI key**: the OpenAI key is the user's own, never a bundled env. `AiService`
+  holds `AiKeyService` (keychain, account `openai-api-key`, same store as the DB key / session
+  token) and reads it **per call** — so it can be set at runtime. `AiService::save_key` tests the
+  key against `OpenAiClient::list_models` (`GET /v1/models`, spends no tokens) and stores it only
+  if it authenticates; `test_key` / `clear_key` / `is_enabled` back the `set_ai_api_key` /
+  `clear_ai_api_key` / `ai_status` commands. The webview never sees the key: `AiStatusProvider`
+  (one per window, like `ShortcutProvider`) tracks only whether one is set via `ai_status`, and
+  **every AI action gates on it** — `editor.improve`, `capture.improve`, `task.prompt` all add
+  `&& aiEnabled`, so with no key the shortcuts don't fire and their chips drop from the statusline.
+  The key is entered in `AiCard` (inbox, beside `CaptureCard`): a masked field where `⌘↵`
+  (`ai.saveKey`) tests-then-saves and `⌘⌫` (`ai.clearKey`) removes — the same no-buttons pattern.
 - **macOS specifics**: input simulation and window ops must run on the main thread
   (`run_on_main_thread`). Transparency needs `macOSPrivateApi`. The capture window uses native
   `hudWindow` vibrancy; the main window has an overlay title bar (`titleBarStyle: Overlay`).
@@ -293,7 +306,8 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
 
 ## Environment
 
-`apps/desktop/src-tauri/.env` (gitignored) holds the desktop core's env — `OPENAI_API_KEY` (the
-"Improve with AI" action) and `BLINK_SERVER_URL` (the sync server, default
-`http://localhost:8787`). Loaded by `dotenvy` at startup in dev, then read once via
-`core::config`; real env vars win.
+`apps/desktop/src-tauri/.env` (gitignored) holds the desktop core's env — just `BLINK_SERVER_URL`
+(the sync server, default `http://localhost:8787`). Loaded by `dotenvy` at startup in dev, then
+read once via `core::config`; real env vars win. The OpenAI key is **not** here — it's the user's
+own, entered in-app (AI card) after a connection test and stored in the OS keychain (account
+`openai-api-key`) via `AiKeyService`.
