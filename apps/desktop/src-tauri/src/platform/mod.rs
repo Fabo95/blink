@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use tauri::Manager;
 
+use crate::core::sync_channel::SyncSignalReceiver;
 use crate::services::sync_service::SyncService;
 
 pub mod clipboard;
@@ -16,12 +17,20 @@ pub mod shortcut;
 pub mod window;
 
 /// Wire the app's runtime hooks: bind the capture-shortcut listener + every method's
-/// saved (or default) hotkey, and start the recurring background jobs (periodic sync).
-/// A bad saved shortcut is logged per method inside `bind_all`, never fatal. Runs after
-/// the services are `manage`d, so it reads them from state.
-pub fn init(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+/// saved (or default) hotkey, and start the background sync loop (fed by `sync_receiver`,
+/// the write-path sync signal). A bad saved shortcut is logged per method inside
+/// `bind_all`, never fatal. Runs after the services are `manage`d, so it reads them from
+/// state.
+pub fn init(
+    app: &mut tauri::App,
+    sync_receiver: SyncSignalReceiver,
+) -> Result<(), Box<dyn std::error::Error>> {
     shortcut::register_listener(app)?;
     shortcut::bind_all(app.handle());
-    jobs::start(app.handle().clone(), app.state::<Arc<SyncService>>().inner().clone());
+    jobs::start(
+        app.handle().clone(),
+        app.state::<Arc<SyncService>>().inner().clone(),
+        sync_receiver,
+    );
     Ok(())
 }

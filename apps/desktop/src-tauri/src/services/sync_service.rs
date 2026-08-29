@@ -13,6 +13,7 @@ use crate::clients::server_client::ServerClient;
 use crate::core::crypto::Keyset;
 use crate::core::error::{AppError, AppResult};
 use crate::core::models::VaultStatus;
+use crate::core::sync_channel::SyncSignalSender;
 use crate::core::wire::{RecordBody, SyncPacket, SyncRecord};
 use crate::repository::{SyncStateRepository, TaskGroupRepository, TaskRepository};
 use crate::services::session_token_service::SessionTokenService;
@@ -27,6 +28,7 @@ pub struct SyncService {
     task_repository: TaskRepository,
     task_group_repository: TaskGroupRepository,
     sync_state_repository: SyncStateRepository,
+    sync_signal: SyncSignalSender,
 }
 
 impl SyncService {
@@ -37,6 +39,7 @@ impl SyncService {
         task_repository: TaskRepository,
         task_group_repository: TaskGroupRepository,
         sync_state_repository: SyncStateRepository,
+        sync_signal: SyncSignalSender,
     ) -> Self {
         Self {
             server_client,
@@ -45,6 +48,7 @@ impl SyncService {
             task_repository,
             task_group_repository,
             sync_state_repository,
+            sync_signal,
         }
     }
 
@@ -151,6 +155,8 @@ impl SyncService {
         let setup = self.vault_service.setup(master_password)?;
         let resp = self.server_client.put_keyset(&token, &setup.keyset).await.map_err(net_err)?;
         ensure_ok(&resp)?;
+        // Now unlocked — kick a sync to push anything already captured locally.
+        self.sync_signal.send();
         Ok(setup.secret_key)
     }
 
@@ -163,7 +169,10 @@ impl SyncService {
         let keyset = resp.json::<ApiResponse<KeysetData>>().await.map_err(net_err)?.data.keyset;
         let keyset =
             keyset.ok_or_else(|| AppError::Sync("no keyset on server — run setup first".into()))?;
-        self.vault_service.unlock(master_password, secret_key, &keyset)
+        self.vault_service.unlock(master_password, secret_key, &keyset)?;
+        // Now unlocked — kick a sync to pull this device's data down.
+        self.sync_signal.send();
+        Ok(())
     }
 
     fn token(&self) -> AppResult<String> {

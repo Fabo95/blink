@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use crate::core::error::AppResult;
 use crate::core::models::TaskGroup;
+use crate::core::sync_channel::SyncSignalSender;
 use crate::repository::{SettingsRepository, TaskGroupRepository, TaskRepository};
 use crate::services::hlc_service::HlcService;
 
@@ -20,6 +21,7 @@ pub struct TaskGroupService {
     // for sync, so the group service reaches the task repo too.
     task_repository: TaskRepository,
     hlc_service: Arc<HlcService>,
+    sync_signal: SyncSignalSender,
 }
 
 impl TaskGroupService {
@@ -28,12 +30,14 @@ impl TaskGroupService {
         settings_repository: SettingsRepository,
         task_repository: TaskRepository,
         hlc_service: Arc<HlcService>,
+        sync_signal: SyncSignalSender,
     ) -> Self {
         Self {
             task_group_repository,
             settings_repository,
             task_repository,
             hlc_service,
+            sync_signal,
         }
     }
 
@@ -57,7 +61,9 @@ impl TaskGroupService {
     /// so the sync loop finds and pushes the edit. Called after each mutation.
     fn mark_dirty(&self, id: &str) -> AppResult<()> {
         let hlc = self.hlc_service.next()?;
-        self.task_group_repository.record_change(id, hlc.physical, hlc.counter, &hlc.node_id)
+        self.task_group_repository.record_change(id, hlc.physical, hlc.counter, &hlc.node_id)?;
+        self.sync_signal.send();
+        Ok(())
     }
 
     /// Delete a group — tombstone it (so the deletion syncs), un-group its tasks, and
@@ -76,6 +82,7 @@ impl TaskGroupService {
         if self.settings_repository.get(ACTIVE_TASK_GROUP_KEY)?.as_deref() == Some(id) {
             self.settings_repository.remove(ACTIVE_TASK_GROUP_KEY)?;
         }
+        self.sync_signal.send();
         Ok(())
     }
 

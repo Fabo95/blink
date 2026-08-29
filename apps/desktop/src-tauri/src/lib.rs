@@ -13,6 +13,7 @@ use crate::clients::openai_client::OpenAiClient;
 use crate::clients::server_client::ServerClient;
 use crate::core::config::config;
 use crate::core::state::{PendingCapture, PendingSource};
+use crate::core::sync_channel;
 use crate::repository::{Db, Repository};
 use crate::services::ai_service::AiService;
 use crate::services::auth_service::AuthService;
@@ -58,6 +59,9 @@ pub fn run() {
             let hlc_service = Arc::new(HlcService::new(repository.sync_state.clone())?);
             // Shared encryption vault (keychain-backed VMK); the sync service holds it too.
             let vault_service = Arc::new(VaultService::new());
+            // The write path wakes the sync loop through this (debounced push on change);
+            // the receiver goes to the loop via `platform::init`.
+            let (sync_sender, sync_receiver) = sync_channel::channel();
 
             // The DB-backed services are built here (not up top with the others)
             // because their repositories only exist once the Repository is open.
@@ -66,12 +70,17 @@ pub fn run() {
                 SessionTokenService::new(),
                 repository.settings.clone(),
             ));
-            app.manage(TaskService::new(repository.tasks.clone(), hlc_service.clone()));
+            app.manage(TaskService::new(
+                repository.tasks.clone(),
+                hlc_service.clone(),
+                sync_sender.clone(),
+            ));
             app.manage(TaskGroupService::new(
                 repository.task_groups.clone(),
                 repository.settings.clone(),
                 repository.tasks.clone(),
                 hlc_service.clone(),
+                sync_sender.clone(),
             ));
             app.manage(ShortcutService::new(repository.settings.clone()));
             app.manage(vault_service.clone());
@@ -82,10 +91,11 @@ pub fn run() {
                 repository.tasks.clone(),
                 repository.task_groups.clone(),
                 repository.sync_state.clone(),
+                sync_sender,
             ));
             app.manage(sync_service.clone());
 
-            platform::init(app)?;
+            platform::init(app, sync_receiver)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

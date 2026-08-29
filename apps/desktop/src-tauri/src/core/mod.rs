@@ -6,4 +6,5 @@ pub mod crypto;
 pub mod error;
 pub mod models;
 pub mod state;
+pub mod sync_channel;
 pub mod wire;

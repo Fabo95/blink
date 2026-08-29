@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use crate::core::error::AppResult;
 use crate::core::models::{NewTask, Task};
+use crate::core::sync_channel::SyncSignalSender;
 use crate::repository::TaskRepository;
 use crate::services::hlc_service::HlcService;
 
@@ -15,11 +16,16 @@ pub use crate::repository::TaskPatch;
 pub struct TaskService {
     task_repository: TaskRepository,
     hlc_service: Arc<HlcService>,
+    sync_signal: SyncSignalSender,
 }
 
 impl TaskService {
-    pub fn new(task_repository: TaskRepository, hlc_service: Arc<HlcService>) -> Self {
-        Self { task_repository, hlc_service }
+    pub fn new(
+        task_repository: TaskRepository,
+        hlc_service: Arc<HlcService>,
+        sync_signal: SyncSignalSender,
+    ) -> Self {
+        Self { task_repository, hlc_service, sync_signal }
     }
 
     pub fn list(&self) -> AppResult<Vec<Task>> {
@@ -56,10 +62,12 @@ impl TaskService {
         Ok(task)
     }
 
-    /// Record a task as locally changed: mint a clock stamp and write it onto the row,
-    /// so the sync loop finds and pushes the edit. Called after each mutation.
+    /// Record a task as locally changed: mint a clock stamp, write it onto the row, and
+    /// wake the sync loop for a debounced push. Called after each mutation.
     fn mark_dirty(&self, id: &str) -> AppResult<()> {
         let hlc = self.hlc_service.next()?;
-        self.task_repository.record_change(id, hlc.physical, hlc.counter, &hlc.node_id)
+        self.task_repository.record_change(id, hlc.physical, hlc.counter, &hlc.node_id)?;
+        self.sync_signal.send();
+        Ok(())
     }
 }
