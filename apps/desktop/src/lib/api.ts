@@ -5,6 +5,7 @@ import type { CaptureSource } from '@/generated/CaptureSource';
 import type { NewTask } from '@/generated/NewTask';
 import type { Task } from '@/generated/Task';
 import type { TaskGroup } from '@/generated/TaskGroup';
+import type { VaultStatus } from '@/generated/VaultStatus';
 
 /**
  * Typed façade over the Tauri IPC boundary. Each method maps to a `#[tauri::command]`
@@ -89,6 +90,9 @@ export const api = {
   /** Bind a new hotkey for a capture method; rejects if invalid or already in use. */
   setCaptureShortcut: (method: CaptureMethod, shortcut: string) =>
     invoke<void>('set_capture_shortcut', { method, shortcut }),
+  /** Which vault screen the post-login gate should show (unlocked / needs-setup /
+   *  needs-unlock). Checks the server for an existing keyset when locked. */
+  vaultStatus: () => invoke<VaultStatus>('vault_status'),
   /** First-time sync setup: create the vault + upload the keyset. Returns the Secret
    *  Key to show the user **once** — they must save it (it's never sent to the server). */
   setupVault: (masterPassword: string) => invoke<string>('setup_vault', { masterPassword }),
@@ -409,6 +413,9 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       mockShortcuts[method] = String(args?.shortcut ?? '');
       return undefined as T;
     }
+    case 'vault_status':
+      // Browser mock: unlocked once set up/unlocked, else treat as a fresh account.
+      return (mockVaultUnlocked ? 'unlocked' : 'needsSetup') as T;
     case 'setup_vault':
       // No real crypto in the browser — return a plausible-looking Secret Key.
       mockVaultUnlocked = true;

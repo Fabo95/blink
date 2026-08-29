@@ -12,6 +12,7 @@ use serde::Deserialize;
 use crate::clients::server_client::ServerClient;
 use crate::core::crypto::Keyset;
 use crate::core::error::{AppError, AppResult};
+use crate::core::models::VaultStatus;
 use crate::core::wire::{RecordBody, SyncPacket, SyncRecord};
 use crate::repository::{SyncStateRepository, TaskGroupRepository, TaskRepository};
 use crate::services::session_token_service::SessionTokenService;
@@ -119,6 +120,20 @@ impl SyncService {
             self.sync_state_repository.set(LAST_PULLED_SEQ_KEY, &max_seq.to_string())?;
         }
         Ok(records.len())
+    }
+
+    /// Which vault screen the post-login gate should show: unlocked (proceed), or —
+    /// when locked — whether a keyset already exists on the server (unlock) or not
+    /// (first-time setup).
+    pub async fn vault_status(&self) -> AppResult<VaultStatus> {
+        if self.vault_service.is_unlocked() {
+            return Ok(VaultStatus::Unlocked);
+        }
+        let token = self.token()?;
+        let resp = self.server_client.get_keyset(&token).await.map_err(net_err)?;
+        ensure_ok(&resp)?;
+        let keyset = resp.json::<ApiResponse<KeysetData>>().await.map_err(net_err)?.data.keyset;
+        Ok(if keyset.is_some() { VaultStatus::NeedsUnlock } else { VaultStatus::NeedsSetup })
     }
 
     /// First-time vault setup: create the keyset locally and upload it. Returns the

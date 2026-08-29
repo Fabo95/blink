@@ -36,6 +36,21 @@ pub struct AuthResult {
     pub user: Option<AuthUser>,
 }
 
+/// Whether the encryption vault is ready on this device, or which screen the sync
+/// setup flow should show. Checked after sign-in to gate the inbox.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub enum VaultStatus {
+    /// The VMK is available — sync works, show the app.
+    Unlocked,
+    /// No keyset on the server yet — first-time setup (choose a master password, get a
+    /// Secret Key).
+    NeedsSetup,
+    /// A keyset exists — unlock on this device (master password + Secret Key).
+    NeedsUnlock,
+}
+
 /// Where a captured snippet came from — the "system metadata".
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../src/generated/")]

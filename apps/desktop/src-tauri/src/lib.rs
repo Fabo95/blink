@@ -116,6 +116,7 @@ pub fn run() {
             commands::link::open_link,
             commands::shortcut::get_capture_shortcut,
             commands::shortcut::set_capture_shortcut,
+            commands::sync::vault_status,
             commands::sync::setup_vault,
             commands::sync::unlock_vault,
             commands::sync::sync_now,

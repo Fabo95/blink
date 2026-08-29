@@ -8,8 +8,16 @@ use std::sync::Arc;
 use tauri::State;
 
 use crate::core::error::AppResult;
+use crate::core::models::VaultStatus;
 use crate::services::sync_service::SyncService;
 use crate::services::vault_service::VaultService;
+
+/// Which vault screen the post-login gate should show (unlocked / needs-setup /
+/// needs-unlock). Checks the server for an existing keyset when locked.
+#[tauri::command]
+pub async fn vault_status(sync_service: State<'_, Arc<SyncService>>) -> AppResult<VaultStatus> {
+    sync_service.vault_status().await
+}
 
 /// First-time setup: create the vault and upload the keyset. Returns the Secret Key to
 /// show the user **once** — they must save it (it's never sent to the server).
