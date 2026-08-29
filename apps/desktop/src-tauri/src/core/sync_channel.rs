@@ -19,7 +19,7 @@ impl SyncSignalSender {
 }
 
 /// The sender/receiver pair (like `mpsc::channel`): sender → services, receiver → loop.
-pub fn channel() -> (SyncSignalSender, SyncSignalReceiver) {
+pub fn init() -> (SyncSignalSender, SyncSignalReceiver) {
     let (tx, rx) = mpsc::channel();
     (SyncSignalSender(tx), rx)
 }

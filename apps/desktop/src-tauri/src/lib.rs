@@ -59,9 +59,8 @@ pub fn run() {
             let hlc_service = Arc::new(HlcService::new(repository.sync_state.clone())?);
             // Shared encryption vault (keychain-backed VMK); the sync service holds it too.
             let vault_service = Arc::new(VaultService::new());
-            // The write path wakes the sync loop through this (debounced push on change);
-            // the receiver goes to the loop via `platform::init`.
-            let (sync_sender, sync_receiver) = sync_channel::channel();
+
+            let (sync_sender, sync_receiver) = sync_channel::init();
 
             // The DB-backed services are built here (not up top with the others)
             // because their repositories only exist once the Repository is open.

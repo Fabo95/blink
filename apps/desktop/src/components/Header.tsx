@@ -1,5 +1,4 @@
 import { brand } from '@blink/core/theme';
-import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,9 +9,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { SyncIndicator } from '@/components/SyncIndicator';
 import type { AuthUser } from '@/generated/AuthUser';
-import { isTauri } from '@/lib/api';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
-import { cn } from '@/lib/utils';
 
 interface HeaderProps {
   account: AuthUser;
@@ -32,17 +29,6 @@ export function Header({ account, onSignOut }: HeaderProps) {
       </h1>
       <div className="flex items-center gap-3">
         <SyncIndicator />
-
-        <Badge variant={isTauri ? 'secondary' : 'destructive'} className="gap-1.5">
-          <span
-            className={cn(
-              'h-1.5 w-1.5 rounded-full',
-              isTauri ? 'bg-blink-success' : 'bg-destructive',
-            )}
-            aria-hidden
-          />
-          {isTauri ? 'Local core connected' : 'Browser mock'}
-        </Badge>
         <DropdownMenu>
           <DropdownMenuTrigger className="pointer-events-auto text-xs text-muted-foreground outline-none hover:text-foreground">
             {account.name ?? account.email}
