@@ -4,6 +4,7 @@ import { AuthForm } from '@/components/auth/AuthForm';
 import { Field } from '@/components/auth/Field';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
+import { errorText } from '@/lib/errorText';
 
 /**
  * First-time sync setup, two keyboard-only steps (⌘↵ advances each):
@@ -29,7 +30,7 @@ export function SetupVaultForm({ onUnlocked }: { onUnlocked: () => void }) {
     api
       .setupVault(password)
       .then(setSecretKey)
-      .catch((e) => setError(errText(e)))
+      .catch((e) => setError(errorText(e)))
       .finally(() => setBusy(false));
   };
 
@@ -98,9 +99,4 @@ export function SetupVaultForm({ onUnlocked }: { onUnlocked: () => void }) {
       </AuthForm>
     </AuthCard>
   );
-}
-
-function errText(e: unknown): string {
-  if (e && typeof e === 'object' && 'message' in e) return String((e as { message: unknown }).message);
-  return String(e);
 }

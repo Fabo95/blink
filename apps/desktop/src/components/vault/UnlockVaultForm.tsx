@@ -4,6 +4,7 @@ import { AuthForm } from '@/components/auth/AuthForm';
 import { Field } from '@/components/auth/Field';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
+import { errorText } from '@/lib/errorText';
 
 /**
  * New-device unlock: master password + the saved Secret Key (⌘↵ to unlock). On success
@@ -22,7 +23,7 @@ export function UnlockVaultForm({ onUnlocked }: { onUnlocked: () => void }) {
     api
       .unlockVault(password, secretKey.trim())
       .then(onUnlocked)
-      .catch((e) => setError(errText(e)))
+      .catch((e) => setError(errorText(e)))
       .finally(() => setBusy(false));
   };
 
@@ -60,9 +61,4 @@ export function UnlockVaultForm({ onUnlocked }: { onUnlocked: () => void }) {
       </AuthForm>
     </AuthCard>
   );
-}
-
-function errText(e: unknown): string {
-  if (e && typeof e === 'object' && 'message' in e) return String((e as { message: unknown }).message);
-  return String(e);
 }

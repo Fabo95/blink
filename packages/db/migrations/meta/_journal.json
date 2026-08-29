@@ -50,6 +50,13 @@
       "when": 1786217130000,
       "tag": "0006_records_rls_policies",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788016481652,
+      "tag": "0007_owner_id_to_text",
+      "breakpoints": true
     }
   ]
 }

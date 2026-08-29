@@ -105,8 +105,8 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   `LoginScreen` (like the inbox footer): `⌘↵` is the only submit (shared `AuthForm` —
   `requestSubmit()` keeps native validation, plain Enter is swallowed), `Esc` steps back, `⌘R`
   resends the code, `⌘N` toggles sign-in ↔ sign-up, `⌘F` opens forgot-password — each a plain
-  `useShortcut` whose chip shows in the statusline (no clickable chips). `⌘⇧Q` signs out (hinted
-  on the header menu item). `useLoginState` holds only what spans steps (`step` + the
+  `useShortcut` whose chip shows in the statusline (no clickable chips). `⌘⇧O` signs out (hinted
+  on the header menu item, and on the vault gate; not `⌘⇧Q` — that's macOS's own Log Out chord). `useLoginState` holds only what spans steps (`step` + the
   email/password carried forward + busy/error + navigation); each form owns its own
   submit/resend via `useSession`.
 - **Capture methods**: each is a variant of `platform::shortcut::CaptureMethod`, and owns a
@@ -193,7 +193,7 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
     its right; the **login screen** and **capture panels** render the same `<Hints />` (their
     keys are all `overlay`-level, so all show). **New UI surfaces its keys through the statusline
     — never a local hint row, and never a chip on a section header or the filter bar.** Keys with
-    no chip (`hint: null`): `c`/`v`/`⌘⇧q` (their own affordances) and the silent halves of pairs.
+    no chip (`hint: null`): `c`/`v`/`⌘⇧o` (their own affordances) and the silent halves of pairs.
     (Bindings are matched by physical key code, so single letters are used over layout-shifted
     symbols like `/` or `?` that break on non-US keyboards.)
   - **`c` opens the cheat-sheet** (`ShortcutHelp`, an `AlertDialog`; `c` toggles, `Esc` closes):
@@ -284,7 +284,7 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   carry a `vim` synonym (`{ keys: '↑↓', vim: 'jk' }`); `v` in the main window flips every
   chip between the two dialects (`lib/hintStyle.ts`, webview-local — both keys always work
   regardless of what's displayed). Glyph rules: a chip shows exactly what's pressed —
-  letters always lowercase (`e`, `jk`, `⌘i`, `⌥kj`, `⌘⇧q`; the `⇧` glyph carries Shift,
+  letters always lowercase (`e`, `jk`, `⌘i`, `⌥kj`, `⌘⇧o`; the `⇧` glyph carries Shift,
   never a capital), plain Return is `↵` (never `⏎`), named keys keep their labels (`Esc`),
   and each hint row ends with its Esc action. (Prose in docs may still name chords
   conventionally, e.g. ⌘I — the rule is about rendered chips.)

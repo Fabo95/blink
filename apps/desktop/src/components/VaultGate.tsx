@@ -1,29 +1,44 @@
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
+import { VaultError } from '@/components/vault/VaultError';
 import { VaultScreen } from '@/components/vault/VaultScreen';
 import type { VaultStatus } from '@/generated/VaultStatus';
 import { api } from '@/lib/api';
+import { errorText } from '@/lib/errorText';
+
+type GateState =
+  | { kind: 'loading' }
+  | { kind: 'error'; message: string }
+  | { kind: 'ready'; status: VaultStatus };
 
 /**
  * The vault gate — sits between the auth gate and the app. After sign-in it checks the
  * vault: an unlocked device drops straight through, otherwise it shows setup (fresh
  * account) or unlock (existing keyset). An unlocked vault resolves offline (the VMK is
- * cached), so only a locked one hits the network — where a failure means "unlock".
+ * cached); only a locked one hits the network, and a failure there surfaces an error +
+ * retry rather than being mistaken for "unlock".
  */
 export function VaultGate({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<VaultStatus | 'loading'>('loading');
+  const [state, setState] = useState<GateState>({ kind: 'loading' });
 
-  useEffect(() => {
-    let active = true;
+  const check = useCallback(() => {
+    setState({ kind: 'loading' });
     api
       .vaultStatus()
-      .then((s) => active && setStatus(s))
-      .catch(() => active && setStatus('needsUnlock'));
-    return () => {
-      active = false;
-    };
+      .then((status) => setState({ kind: 'ready', status }))
+      .catch((e) => setState({ kind: 'error', message: errorText(e) }));
   }, []);
 
-  if (status === 'loading') return null;
-  if (status === 'unlocked') return <>{children}</>;
-  return <VaultScreen status={status} onUnlocked={() => setStatus('unlocked')} />;
+  useEffect(() => {
+    check();
+  }, [check]);
+
+  if (state.kind === 'loading') return null;
+  if (state.kind === 'error') return <VaultError message={state.message} onRetry={check} />;
+  if (state.status === 'unlocked') return <>{children}</>;
+  return (
+    <VaultScreen
+      status={state.status}
+      onUnlocked={() => setState({ kind: 'ready', status: 'unlocked' })}
+    />
+  );
 }

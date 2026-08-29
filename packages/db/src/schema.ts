@@ -40,7 +40,9 @@ export const records = pgTable(
     // Client-generated UUID — the same id on every device, so it's the stable LWW
     // conflict key. No defaultRandom: the client owns it, not the server.
     id: uuid('id').primaryKey(),
-    ownerId: uuid('owner_id').notNull(),
+    // The Better Auth user id — a text nanoid (not a UUID), so this column is text and
+    // the RLS policy compares it as text (no `::uuid` cast).
+    ownerId: text('owner_id').notNull(),
 
     // The entire client row, serialized and encrypted under the VMK. Opaque.
     cipher: jsonb('cipher').notNull().$type<RecordCipher>(),
@@ -63,7 +65,8 @@ export const records = pgTable(
 // encrypted under the KEK (opaque); the KDF params let a new device re-derive the
 // KEK from the master password + Secret Key. The server can never derive the KEK.
 export const syncKeysets = pgTable('sync_keysets', {
-  ownerId: uuid('owner_id').primaryKey(),
+  // The Better Auth user id (text nanoid), one keyset per user.
+  ownerId: text('owner_id').primaryKey(),
   wrappedVmk: jsonb('wrapped_vmk').notNull().$type<RecordCipher>(),
   kdfSalt: text('kdf_salt').notNull(),
   kdfIterations: integer('kdf_iterations').notNull(),

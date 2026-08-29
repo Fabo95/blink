@@ -20,8 +20,8 @@ interface HeaderProps {
 }
 
 export function Header({ account, onSignOut }: HeaderProps) {
-  // ⌘⇧q signs out (mirrors macOS's own log-out chord) — always on, surfaced by the menu
-  // item's chip rather than the statusline.
+  // ⌘⇧o signs out — always on, surfaced by the menu item's chip rather than the
+  // statusline. (Not ⌘⇧q: that's macOS's own Log Out chord and would end the session.)
   useShortcut('app.signOut', { callback: onSignOut });
 
   return (
@@ -54,7 +54,7 @@ export function Header({ account, onSignOut }: HeaderProps) {
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={onSignOut}>
               Sign out
-              <Kbd className="ml-auto">⌘⇧q</Kbd>
+              <Kbd className="ml-auto">⌘⇧o</Kbd>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

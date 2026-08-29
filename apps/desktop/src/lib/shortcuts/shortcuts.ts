@@ -343,7 +343,7 @@ export const SHORTCUTS = {
   // ── always on (no statusline chip; surfaced by their own affordance) ────────────────
   'app.help': { keys: 'c', hint: null, order: 50 },
   'app.hintDialect': { keys: 'v', hint: null, order: 50 },
-  'app.signOut': { keys: 'mod+shift+q', hint: null, order: 50 },
+  'app.signOut': { keys: 'mod+shift+o', hint: null, order: 50 },
 } satisfies Record<string, Shortcut>;
 
 // Same keys ⇒ same hint: the statusline may never show two different chips for one
