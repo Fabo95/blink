@@ -13,7 +13,7 @@ use std::sync::Arc;
 pub use db::Db;
 pub use settings_repository::SettingsRepository;
 pub use sync_state_repository::SyncStateRepository;
-pub use task_group_repository::TaskGroupRepository;
+pub use task_group_repository::{TaskGroupPatch, TaskGroupRepository};
 pub use task_repository::{TaskPatch, TaskRepository};
 
 /// The data-access facade: hands the shared [`Db`] to an entity repository per

@@ -69,6 +69,7 @@ pub struct TaskBody {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GroupBody {
     pub name: String,
+    pub context: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     pub deleted: bool,

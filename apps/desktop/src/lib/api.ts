@@ -3,6 +3,7 @@ import type { AuthUser } from '@/generated/AuthUser';
 import type { CaptureDraft } from '@/generated/CaptureDraft';
 import type { CaptureSource } from '@/generated/CaptureSource';
 import type { NewTask } from '@/generated/NewTask';
+import type { NewTaskGroup } from '@/generated/NewTaskGroup';
 import type { Task } from '@/generated/Task';
 import type { TaskGroup } from '@/generated/TaskGroup';
 import type { VaultStatus } from '@/generated/VaultStatus';
@@ -65,9 +66,11 @@ export const api = {
       taskGroupId: patch.taskGroupId,
     }),
   listTaskGroups: () => invoke<TaskGroup[]>('list_task_groups'),
-  createTaskGroup: (name: string) => invoke<TaskGroup>('create_task_group', { name }),
-  renameTaskGroup: (id: string, name: string) =>
-    invoke<TaskGroup>('rename_task_group', { id, name }),
+  createTaskGroup: (group: NewTaskGroup) => invoke<TaskGroup>('create_task_group', { group }),
+  /** Patch a group's mutable fields. Send only what changed; an empty-string `context`
+   *  clears the group's context (the guidance folded into AI prompts for its tasks). */
+  updateTaskGroup: (id: string, patch: { name?: string; context?: string }) =>
+    invoke<TaskGroup>('update_task_group', { id, name: patch.name, context: patch.context }),
   /** Delete a group — its tasks fall back to ungrouped. */
   deleteTaskGroup: (id: string) => invoke<void>('delete_task_group', { id }),
   /** The inbox's active group filter, shared with the capture windows. */
@@ -116,6 +119,7 @@ function seedMockTaskGroups(): TaskGroup[] {
   const group = (name: string): TaskGroup => ({
     id: crypto.randomUUID(),
     name,
+    context: null,
     createdAt: now,
     updatedAt: now,
   });
@@ -340,25 +344,39 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
     case 'list_task_groups':
       return [...mockTaskGroups] as T;
     case 'create_task_group': {
-      const name = String(args?.name ?? '').trim();
+      const input = args?.group as NewTaskGroup;
+      const name = input.name.trim();
       if (!name) throw new Error('group name cannot be empty');
       if (mockTaskGroups.some((g) => g.name === name)) {
         throw new Error('a group with this name already exists');
       }
+      const context = input.context?.trim();
       const now = new Date().toISOString();
-      const group: TaskGroup = { id: crypto.randomUUID(), name, createdAt: now, updatedAt: now };
+      const group: TaskGroup = {
+        id: crypto.randomUUID(),
+        name,
+        context: context ? context : null,
+        createdAt: now,
+        updatedAt: now,
+      };
       mockTaskGroups.push(group);
       return group as T;
     }
-    case 'rename_task_group': {
+    case 'update_task_group': {
       const group = mockTaskGroups.find((g) => g.id === args?.id);
       if (!group) throw new Error('task group not found');
-      const name = String(args?.name ?? '').trim();
-      if (!name) throw new Error('group name cannot be empty');
-      if (mockTaskGroups.some((g) => g.name === name && g.id !== group.id)) {
-        throw new Error('a group with this name already exists');
+      if (typeof args?.name === 'string') {
+        const name = args.name.trim();
+        if (!name) throw new Error('group name cannot be empty');
+        if (mockTaskGroups.some((g) => g.name === name && g.id !== group.id)) {
+          throw new Error('a group with this name already exists');
+        }
+        group.name = name;
       }
-      group.name = name;
+      if (typeof args?.context === 'string') {
+        const context = args.context.trim();
+        group.context = context ? context : null;
+      }
       group.updatedAt = new Date().toISOString();
       return group as T;
     }
@@ -395,6 +413,10 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       const source = task.source.appName || task.source.appId;
       if (source) parts.push(`\nCaptured from: ${source}`);
       if (task.link) parts.push(`Link: ${task.link}`);
+      const groupContext = task.taskGroupId
+        ? mockTaskGroups.find((g) => g.id === task.taskGroupId)?.context
+        : null;
+      if (groupContext) parts.push(`\nGroup context:\n${groupContext}`);
       const prompt = parts.join('\n');
       try {
         await navigator.clipboard.writeText(prompt);

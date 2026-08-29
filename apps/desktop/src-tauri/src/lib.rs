@@ -118,7 +118,7 @@ pub fn run() {
             commands::tasks::update_task,
             commands::task_groups::list_task_groups,
             commands::task_groups::create_task_group,
-            commands::task_groups::rename_task_group,
+            commands::task_groups::update_task_group,
             commands::task_groups::delete_task_group,
             commands::task_groups::get_active_task_group,
             commands::task_groups::set_active_task_group,

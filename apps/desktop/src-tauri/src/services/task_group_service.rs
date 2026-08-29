@@ -5,10 +5,12 @@
 use std::sync::Arc;
 
 use crate::core::error::AppResult;
-use crate::core::models::TaskGroup;
+use crate::core::models::{NewTaskGroup, TaskGroup};
 use crate::core::sync_channel::SyncSignalSender;
 use crate::repository::{SettingsRepository, TaskGroupRepository, TaskRepository};
 use crate::services::hlc_service::HlcService;
+
+pub use crate::repository::TaskGroupPatch;
 
 /// The settings key holding the inbox's active group filter. The capture windows
 /// read it (via `get_active_task_group`) so new captures default to that group.
@@ -45,14 +47,18 @@ impl TaskGroupService {
         self.task_group_repository.list()
     }
 
-    pub fn create(&self, name: &str) -> AppResult<TaskGroup> {
-        let group = self.task_group_repository.create(name)?;
+    pub fn get(&self, id: &str) -> AppResult<Option<TaskGroup>> {
+        self.task_group_repository.get(id)
+    }
+
+    pub fn create(&self, new: NewTaskGroup) -> AppResult<TaskGroup> {
+        let group = self.task_group_repository.create(new)?;
         self.mark_dirty(&group.id)?;
         Ok(group)
     }
 
-    pub fn rename(&self, id: &str, name: &str) -> AppResult<TaskGroup> {
-        let group = self.task_group_repository.rename(id, name)?;
+    pub fn update(&self, id: &str, patch: TaskGroupPatch) -> AppResult<TaskGroup> {
+        let group = self.task_group_repository.update(id, patch)?;
         self.mark_dirty(id)?;
         Ok(group)
     }

@@ -44,7 +44,7 @@ const HINTS = {
   'mod+shift+o': { keys: '⌘⇧o', label: 'sign out' },
   a: { keys: 'a', label: 'archive' },
   n: { keys: 'n', label: 'new' },
-  r: { keys: 'r', label: 'rename' },
+  r: { keys: 'r', label: 'edit' },
 } satisfies Record<string, Hint>;
 
 /**
@@ -150,7 +150,7 @@ export const SHORTCUTS = {
     keys: 'r',
     hint: HINTS.r,
     level: 1,
-    describe: 'Rename the current group',
+    describe: 'Edit the current group (name + context)',
     order: 54,
   },
   // Same key as task delete — disambiguated by focus: a focused task deletes the task, no
@@ -258,6 +258,15 @@ export const SHORTCUTS = {
     hint: HINTS.escape,
     level: 3,
     order: 90,
+  },
+  // Only the edit prompt has two fields (name + context) to move between; ⇥ wraps within
+  // the popover, mirroring the task editor's `editor.field`.
+  'groupPrompt.field': {
+    keys: 'tab, shift+tab',
+    hint: HINTS['tab, shift+tab'],
+    level: 3,
+    order: 10,
+    opts: { enableOnFormTags: true, preventDefault: false },
   },
   'groupPrompt.submit': {
     keys: 'mod+enter',

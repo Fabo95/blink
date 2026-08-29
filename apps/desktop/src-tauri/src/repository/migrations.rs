@@ -77,5 +77,7 @@ pub(super) fn migrations() -> Migrations<'static> {
             ALTER TABLE task_groups ADD COLUMN dirty        INTEGER NOT NULL DEFAULT 1;
             ALTER TABLE task_groups ADD COLUMN deleted      INTEGER NOT NULL DEFAULT 0;",
         ),
+        // Optional per-group context, folded into the prompt-generation system prompt.
+        M::up("ALTER TABLE task_groups ADD COLUMN context TEXT;"),
     ])
 }

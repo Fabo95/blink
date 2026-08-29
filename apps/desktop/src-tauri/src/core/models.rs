@@ -128,6 +128,18 @@ pub struct NewTask {
 pub struct TaskGroup {
     pub id: String,
     pub name: String,
+    pub context: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+/// A group to create — the mutable fields the caller supplies (the id/timestamps are
+/// minted on insert). Mirrors [`NewTask`].
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct NewTaskGroup {
+    pub name: String,
+    /// Optional free-text context, folded into AI prompts for the group's tasks.
+    pub context: Option<String>,
 }

@@ -32,12 +32,26 @@ impl AiService {
 
     /// Send the captured text to OpenAI and return a cleaned-up single action item.
     pub async fn improve(&self, text: String) -> AppResult<String> {
-        self.complete(SYSTEM_PROMPT, text).await
+        self.complete(SYSTEM_PROMPT.to_string(), text).await
     }
 
     /// Generate a ready-to-paste assistant prompt from a task's raw captured text and
-    /// its context (current phrasing, capture source, optional link).
-    pub async fn generate_prompt(&self, task: &Task) -> AppResult<String> {
+    /// its context (current phrasing, capture source, optional link). `group_context` —
+    /// the task's group's free-text context, when set — is folded into the system prompt
+    /// so generation is tailored to that group.
+    pub async fn generate_prompt(
+        &self,
+        task: &Task,
+        group_context: Option<&str>,
+    ) -> AppResult<String> {
+        let mut system = PROMPT_SYSTEM_PROMPT.to_string();
+        if let Some(context) = group_context.map(str::trim).filter(|c| !c.is_empty()) {
+            system.push_str(&format!(
+                "\n\nThis task belongs to a group with the following context — use it to \
+                 tailor the prompt:\n{context}"
+            ));
+        }
+
         let mut user = format!("Task: {}\n\nOriginal captured text:\n{}", task.text, task.raw_text);
 
         let source = &task.source;
@@ -51,13 +65,13 @@ impl AiService {
             user.push_str(&format!("\nLink: {link}"));
         }
 
-        self.complete(PROMPT_SYSTEM_PROMPT, user).await
+        self.complete(system, user).await
     }
 
     /// Shared OpenAI chat round-trip: send a system + user message pair, return the
     /// trimmed first completion. Errors carry the missing-key / network / bad-response
     /// detail so the frontend can surface it.
-    async fn complete(&self, system: &'static str, user: String) -> AppResult<String> {
+    async fn complete(&self, system: String, user: String) -> AppResult<String> {
         let openai_client = self
             .openai_client
             .as_ref()
@@ -69,7 +83,7 @@ impl AiService {
             messages: vec![
                 Message {
                     role: "system",
-                    content: system.to_string(),
+                    content: system,
                 },
                 Message {
                     role: "user",

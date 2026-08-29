@@ -11,10 +11,20 @@ use serde_rusqlite::from_rows;
 use uuid::Uuid;
 
 use crate::core::error::{AppError, AppResult};
-use crate::core::models::TaskGroup;
+use crate::core::models::{NewTaskGroup, TaskGroup};
 use crate::core::wire::{Clock, GroupBody, LocalChange, RecordBody};
 
 use super::db::{serde_err, store_err, Db};
+
+/// A patch over a group's mutable fields. `None` leaves a field untouched; for `context`
+/// an empty string clears it (stored NULL) — the same convention as [`TaskPatch`].
+///
+/// [`TaskPatch`]: crate::repository::TaskPatch
+#[derive(Default)]
+pub struct TaskGroupPatch {
+    pub name: Option<String>,
+    pub context: Option<String>,
+}
 
 #[derive(Clone)]
 pub struct TaskGroupRepository {
@@ -37,38 +47,70 @@ impl TaskGroupRepository {
             .collect()
     }
 
-    pub fn create(&self, name: &str) -> AppResult<TaskGroup> {
-        let name = validated_name(name)?;
+    pub fn create(&self, new: NewTaskGroup) -> AppResult<TaskGroup> {
+        let name = validated_name(&new.name)?;
+        let context =
+            new.context.as_deref().map(str::trim).filter(|c| !c.is_empty()).map(str::to_string);
         let now = Utc::now().to_rfc3339();
         let group = TaskGroup {
             id: Uuid::new_v4().to_string(),
             name,
+            context,
             created_at: now.clone(),
             updated_at: now,
         };
         let conn = self.db.lock()?;
         conn.execute(
-            "INSERT INTO task_groups (id, name, created_at, updated_at) \
-             VALUES (?1, ?2, ?3, ?4)",
-            params![group.id, group.name, group.created_at, group.updated_at],
+            "INSERT INTO task_groups (id, name, context, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![group.id, group.name, group.context, group.created_at, group.updated_at],
         )
         .map_err(name_taken_err)?;
         Ok(group)
     }
 
-    pub fn rename(&self, id: &str, name: &str) -> AppResult<TaskGroup> {
-        let name = validated_name(name)?;
+    /// Fetch a single (non-deleted) group by id, or `None` if it's gone. Used by the
+    /// prompt-generation command to read the group's context.
+    pub fn get(&self, id: &str) -> AppResult<Option<TaskGroup>> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare("SELECT * FROM task_groups WHERE id = ?1 AND deleted = 0")
+            .map_err(store_err)?;
+        let rows = stmt.query([id]).map_err(store_err)?;
+        let row = from_rows::<TaskGroupRow>(rows).next().transpose().map_err(serde_err)?;
+        Ok(row.map(TaskGroup::from))
+    }
+
+    /// Patch a group's name and/or context. Each field is applied only when present; an
+    /// empty `context` clears it (stored NULL).
+    pub fn update(&self, id: &str, patch: TaskGroupPatch) -> AppResult<TaskGroup> {
         let now = Utc::now().to_rfc3339();
         let conn = self.db.lock()?;
-        let changed = conn
-            .execute(
-                "UPDATE task_groups SET name = ?1, updated_at = ?2 WHERE id = ?3",
-                params![name, now, id],
-            )
-            .map_err(name_taken_err)?;
-        if changed == 0 {
-            return Err(AppError::Store(format!("task group {id} not found")));
+
+        if let Some(name) = patch.name {
+            let name = validated_name(&name)?;
+            let changed = conn
+                .execute(
+                    "UPDATE task_groups SET name = ?1, updated_at = ?2 WHERE id = ?3",
+                    params![name, now, id],
+                )
+                .map_err(name_taken_err)?;
+            if changed == 0 {
+                return Err(AppError::Store(format!("task group {id} not found")));
+            }
         }
+
+        if let Some(context) = patch.context {
+            // Empty input clears the context (stored NULL).
+            let trimmed = context.trim();
+            let value = if trimmed.is_empty() { None } else { Some(trimmed) };
+            conn.execute(
+                "UPDATE task_groups SET context = ?1, updated_at = ?2 WHERE id = ?3",
+                params![value, now, id],
+            )
+            .map_err(store_err)?;
+        }
+
         fetch_one(&conn, id)
     }
 
@@ -134,6 +176,7 @@ impl TaskGroupRepository {
                     },
                     body: RecordBody::Group(GroupBody {
                         name: row.get("name")?,
+                        context: row.get("context")?,
                         created_at: row.get("created_at")?,
                         updated_at: row.get("updated_at")?,
                         deleted: row.get("deleted")?,
@@ -149,19 +192,19 @@ impl TaskGroupRepository {
     pub fn merge(&self, id: &str, clock: &Clock, body: &GroupBody) -> AppResult<()> {
         let conn = self.db.lock()?;
         let result = conn.execute(
-            "INSERT INTO task_groups (id, name, created_at, updated_at, deleted, hlc_physical, \
-             hlc_counter, hlc_node_id, dirty) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0) \
+            "INSERT INTO task_groups (id, name, context, created_at, updated_at, deleted, \
+             hlc_physical, hlc_counter, hlc_node_id, dirty) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0) \
              ON CONFLICT(id) DO UPDATE SET \
-             name = excluded.name, created_at = excluded.created_at, \
+             name = excluded.name, context = excluded.context, created_at = excluded.created_at, \
              updated_at = excluded.updated_at, deleted = excluded.deleted, \
              hlc_physical = excluded.hlc_physical, hlc_counter = excluded.hlc_counter, \
              hlc_node_id = excluded.hlc_node_id, dirty = 0 \
              WHERE (task_groups.hlc_physical, task_groups.hlc_counter, task_groups.hlc_node_id) \
              < (excluded.hlc_physical, excluded.hlc_counter, excluded.hlc_node_id)",
             params![
-                id, body.name, body.created_at, body.updated_at, body.deleted, clock.physical,
-                clock.counter, clock.node_id
+                id, body.name, body.context, body.created_at, body.updated_at, body.deleted,
+                clock.physical, clock.counter, clock.node_id
             ],
         );
         match result {
@@ -234,6 +277,7 @@ fn fetch_one(conn: &Connection, id: &str) -> AppResult<TaskGroup> {
 struct TaskGroupRow {
     id: String,
     name: String,
+    context: Option<String>,
     created_at: String,
     updated_at: String,
 }
@@ -243,6 +287,7 @@ impl From<TaskGroupRow> for TaskGroup {
         Self {
             id: row.id,
             name: row.name,
+            context: row.context,
             created_at: row.created_at,
             updated_at: row.updated_at,
         }

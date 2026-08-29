@@ -199,7 +199,12 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
   });
   // The list is driven by the cursor, not DOM focus — while browsing, Tab would just
   // throw a stray focus ring around, so swallow it (preventDefault is the whole action).
-  useShortcut('browse.swallowTab', { enabled: !isEditing, callback: () => {} });
+  // Stand down while a two-field group prompt (new / edit) is open, so its own ⇥ can move
+  // between the name and context fields.
+  useShortcut('browse.swallowTab', {
+    enabled: !isEditing && taskGroups.prompt === null,
+    callback: () => {},
+  });
 
   // Keep the focused row in view as the cursor moves (`nearest` scrolls the minimum).
   useEffect(() => {

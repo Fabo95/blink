@@ -4,7 +4,7 @@ import { api } from '@/lib/api';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { errorMessage } from '@/lib/utils';
 
-export type GroupPrompt = 'create' | 'rename';
+export type GroupPrompt = 'create' | 'edit';
 
 export interface TaskGroupsView {
   groups: TaskGroup[];
@@ -14,10 +14,11 @@ export interface TaskGroupsView {
   select: (id: string | null) => void;
   /** Step the filter through All + the groups (wraps). Bound to `←→`/`hl` in TaskList. */
   cycle: (delta: number) => void;
-  /** The open name prompt (create or rename), or `null` when closed. */
+  /** The open prompt (create a group, or edit the selected group's name + context), or
+   *  `null` when closed. */
   prompt: GroupPrompt | null;
   closePrompt: () => void;
-  submitPrompt: (name: string) => Promise<void>;
+  submitPrompt: (name: string, context?: string) => Promise<void>;
   /** True while the delete-confirm popover is open. */
   deleting: boolean;
   /** Open the delete-confirm for the selected group (bound to `⌫` in TaskList, so it can
@@ -40,7 +41,7 @@ interface Options {
 /**
  * The inbox's group filter: the list of groups, the selected one (persisted as the
  * `active_task_group` setting so capture windows default to it), and the keyboard-only
- * management flows — `n` creates, `r` renames, `⌫` deletes (`⌘↵` confirms). Deleting is
+ * management flows — `n` creates, `r` edits (name + context), `⌫` deletes (`⌘↵` confirms). Deleting is
  * bound in TaskList (via `requestDelete`) because it shares the `⌫` key with task delete
  * and must stand down when a task is focused. Filter cycling (`←→`/`hl`) is likewise bound
  * in TaskList. Deleting a group un-groups its tasks.
@@ -83,16 +84,21 @@ export function useTaskGroups({ enabled, canManage }: Options): TaskGroupsView {
     setError('');
   };
 
-  const submitPrompt = async (name: string) => {
-    if (!name.trim()) {
+  const submitPrompt = async (name: string, context?: string) => {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
       closePrompt();
       return;
     }
     try {
-      if (prompt === 'rename' && selected) {
-        await api.renameTaskGroup(selected.id, name);
+      if (prompt === 'edit' && selected) {
+        const patch: { name?: string; context?: string } = {};
+        if (trimmedName !== selected.name) patch.name = trimmedName;
+        const nextContext = (context ?? '').trim();
+        if (nextContext !== (selected.context ?? '')) patch.context = nextContext;
+        if (Object.keys(patch).length > 0) await api.updateTaskGroup(selected.id, patch);
       } else {
-        await api.createTaskGroup(name);
+        await api.createTaskGroup({ name: trimmedName, context: (context ?? '').trim() || null });
       }
       closePrompt();
       await refresh();
@@ -122,7 +128,7 @@ export function useTaskGroups({ enabled, canManage }: Options): TaskGroupsView {
   useShortcut('group.new', { enabled: manage, callback: () => setPrompt('create') });
   useShortcut('group.rename', {
     enabled: manage && selected !== null,
-    callback: () => setPrompt('rename'),
+    callback: () => setPrompt('edit'),
   });
   // group.delete is bound in TaskList (needs focus to disambiguate from task delete).
   // The confirm popover has no buttons — ⌘↵ confirms; Esc (also Radix's backdrop) cancels.
