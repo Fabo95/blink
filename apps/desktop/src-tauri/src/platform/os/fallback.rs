@@ -17,4 +17,7 @@ pub fn open_url(url: &str) -> std::io::Result<()> {
         .map(|_| ())
 }
 
+/// No app-activation on this OS yet — the worktree manager is macOS-first.
+pub fn activate_app(_name: &str) {}
+
 pub fn on_run_event(_app: &AppHandle, _event: &RunEvent) {}

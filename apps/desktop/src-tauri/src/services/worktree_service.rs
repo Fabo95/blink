@@ -18,6 +18,7 @@ use crate::clients::tmux_cli::TmuxCli;
 use crate::core::error::{AppError, AppResult};
 use crate::core::models::{ManagedRepo, PruneCandidate, Worktree};
 use crate::core::paths::expand_tilde;
+use crate::platform::os;
 use crate::repository::SettingsRepository;
 
 /// `settings` key holding the optional base directory all worktrees go under. Unset =
@@ -277,8 +278,19 @@ impl WorktreeService {
             )));
         }
         let tmux_session = tmux_session_name(&repo.name, &branch);
+
         self.ensure_tmux_session(&tmux_session, Path::new(&path))?;
-        self.launch_terminal(&tmux_session)?;
+
+        match self.tmux_cli.attached_terminal() {
+            // A terminal is already open — point it at this worktree's session instead of
+            // opening another window, then bring it to the front.
+            Some(terminal) => {
+                self.tmux_cli.switch_terminal_session(&terminal, &tmux_session)?;
+                self.raise_terminal()?;
+            }
+            // No terminal open yet — launch one on this session.
+            None => self.launch_terminal(&tmux_session)?,
+        }
         Ok(())
     }
 
@@ -309,6 +321,16 @@ impl WorktreeService {
             .arg(&command)
             .spawn()
             .map_err(|e| AppError::Worktree(format!("could not launch terminal: {e}")))?;
+        Ok(())
+    }
+
+    /// Bring the configured terminal to the front (best effort). The app to raise is the
+    /// terminal command's program — its first whitespace-separated token (e.g. `alacritty`).
+    fn raise_terminal(&self) -> AppResult<()> {
+        let terminal_command = self.terminal_command()?;
+        if let Some(app_name) = terminal_command.split_whitespace().next() {
+            os::activate_app(app_name);
+        }
         Ok(())
     }
 

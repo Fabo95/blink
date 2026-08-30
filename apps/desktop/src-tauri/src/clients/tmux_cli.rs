@@ -15,10 +15,10 @@ impl TmuxCli {
         Self
     }
 
-    /// True if a session named exactly `name` exists (the `=` prefix forces an exact
+    /// True if a session named exactly `session` exists (the `=` prefix forces an exact
     /// match, so `blink-x` doesn't match `blink-xy`).
-    pub fn session_exists(&self, name: &str) -> bool {
-        let target = format!("={name}");
+    pub fn session_exists(&self, session: &str) -> bool {
+        let target = format!("={session}");
         Command::new("tmux")
             .args(["has-session", "-t", target.as_str()])
             .output()
@@ -26,12 +26,36 @@ impl TmuxCli {
             .unwrap_or(false)
     }
 
-    /// Create a detached session named `name` with a single `window` rooted at `cwd`.
-    pub fn new_session(&self, name: &str, window: &str, cwd: &Path) -> AppResult<()> {
+    /// The name of the first terminal already attached to this tmux server (across any
+    /// session), or `None` if nothing is attached. Used to reuse one terminal rather than
+    /// spawning a new window per worktree. (A tmux "client" is a terminal.)
+    pub fn attached_terminal(&self) -> Option<String> {
+        let output = Command::new("tmux")
+            .args(["list-clients", "-F", "#{client_name}"])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(|line| line.trim().to_string())
+            .find(|line| !line.is_empty())
+    }
+
+    /// Switch which session an already-attached `terminal` is showing (instead of opening
+    /// another window).
+    pub fn switch_terminal_session(&self, terminal: &str, session: &str) -> AppResult<()> {
+        let target = format!("={session}");
+        self.run(&["switch-client", "-c", terminal, "-t", target.as_str()])
+    }
+
+    /// Create a detached session named `session` with a single `window` rooted at `cwd`.
+    pub fn new_session(&self, session: &str, window: &str, cwd: &Path) -> AppResult<()> {
         let cwd = cwd
             .to_str()
             .ok_or_else(|| AppError::Worktree("worktree path is not valid UTF-8".into()))?;
-        self.run(&["new-session", "-d", "-s", name, "-n", window, "-c", cwd])
+        self.run(&["new-session", "-d", "-s", session, "-n", window, "-c", cwd])
     }
 
     /// Type `keys` into `target` (a `session:window`) and press Enter.
@@ -40,8 +64,8 @@ impl TmuxCli {
     }
 
     /// Kill the session if present (best effort — a missing session is not an error).
-    pub fn kill_session(&self, name: &str) {
-        let target = format!("={name}");
+    pub fn kill_session(&self, session: &str) {
+        let target = format!("={session}");
         let _ = Command::new("tmux")
             .args(["kill-session", "-t", target.as_str()])
             .output();

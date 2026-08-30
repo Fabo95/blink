@@ -24,6 +24,12 @@ pub fn open_url(url: &str) -> std::io::Result<()> {
     std::process::Command::new("open").arg(url).spawn().map(|_| ())
 }
 
+/// Bring a running app to the front by name (macOS `open -a`). Best-effort — used to raise
+/// the terminal after switching its tmux session so the worktree is actually visible.
+pub fn activate_app(name: &str) {
+    let _ = std::process::Command::new("open").args(["-a", name]).spawn();
+}
+
 /// Dock-icon reopen → bring the inbox back (the capture flow keeps it hidden).
 pub fn on_run_event(app: &AppHandle, event: &RunEvent) {
     if let RunEvent::Reopen { .. } = event {
