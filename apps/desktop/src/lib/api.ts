@@ -119,12 +119,15 @@ export const api = {
   isVaultUnlocked: () => invoke<boolean>('is_vault_unlocked'),
   /** Lock the vault (sign out of sync) — forgets the cached VMK. */
   lockVault: () => invoke<void>('lock_vault'),
+  // --- Managed repos (repo stuff) ---------------------------------------------
   /** The git repos the worktree manager tracks (curated in Settings). */
   listManagedRepos: () => invoke<ManagedRepo[]>('list_managed_repos'),
-  /** Validate a path is a git repo and add it to the managed list; returns the new list. */
-  addManagedRepo: (path: string) => invoke<ManagedRepo[]>('add_managed_repo', { path }),
   /** Drop a repo from the managed list; returns the new list. */
   removeManagedRepo: (path: string) => invoke<ManagedRepo[]>('remove_managed_repo', { path }),
+  /** Open a native folder picker; on selection, add the chosen git repo and return the
+   *  updated list (unchanged if the user cancels). */
+  pickManagedRepo: () => invoke<ManagedRepo[]>('pick_managed_repo'),
+  // --- Worktrees (worktree stuff) ---------------------------------------------
   /** The linked worktrees of a managed repo (with dirty + tmux-session state). */
   listWorktrees: (repoPath: string) => invoke<Worktree[]>('list_worktrees', { repoPath }),
   /** Create (or attach) a worktree for `branch` and ensure its tmux/Claude session. */
@@ -139,6 +142,19 @@ export const api = {
   /** Open a terminal attached to the worktree's tmux/Claude session (creating it if needed). */
   openWorktree: (repoPath: string, branch: string) =>
     invoke<void>('open_worktree', { repoPath, branch }),
+  // Worktree settings — where worktrees are created + how they open.
+  /** The configured global worktree base directory, or null for the derived default. */
+  getWorktreeBaseDir: () => invoke<string | null>('get_worktree_base_dir'),
+  /** Set (or clear with null/empty) the global worktree base directory. */
+  setWorktreeBaseDir: (path: string | null) => invoke<void>('set_worktree_base_dir', { path }),
+  /** Open a native folder picker; on selection, save it as the base dir and return the
+   *  chosen path. Returns null if the user cancels. */
+  pickWorktreeBaseDir: () => invoke<string | null>('pick_worktree_base_dir'),
+  /** The terminal launch command ({session} = the tmux session name). */
+  getWorktreeTerminal: () => invoke<string>('get_worktree_terminal'),
+  /** Set (or clear to the default with null/empty) the terminal launch command. */
+  setWorktreeTerminal: (command: string | null) =>
+    invoke<void>('set_worktree_terminal', { command }),
 };
 
 // --- Browser fallback -------------------------------------------------------
@@ -262,6 +278,9 @@ let mockVaultUnlocked = false;
 // Browser-only AI key — no real provider call; any non-empty key "connects".
 let mockAiKey: string | null = null;
 // Browser-only worktree state — no real git/tmux; enough to develop the Worktrees page.
+let mockWorktreeBaseDir: string | null = null;
+let mockWorktreeTerminal: string | null = null;
+const DEFAULT_TERMINAL_COMMAND = 'alacritty -e tmux attach -t {session}';
 let mockManagedRepos: ManagedRepo[] = [
   { name: 'blink', path: '/Users/you/repositories/blink', baseBranch: null },
 ];
@@ -521,21 +540,44 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
     case 'lock_vault':
       mockVaultUnlocked = false;
       return undefined as T;
+    case 'get_worktree_base_dir':
+      return mockWorktreeBaseDir as T;
+    case 'set_worktree_base_dir': {
+      const path = typeof args?.path === 'string' ? args.path.trim() : '';
+      mockWorktreeBaseDir = path ? path : null;
+      return undefined as T;
+    }
+    case 'pick_worktree_base_dir': {
+      // No native dialog in the browser — prompt for a path so the flow is developable.
+      const picked = window.prompt('Mock folder picker — enter a base directory (empty cancels)');
+      const value = picked?.trim() ?? '';
+      if (!value) return null as T;
+      mockWorktreeBaseDir = value;
+      return value as T;
+    }
+    case 'get_worktree_terminal':
+      return (mockWorktreeTerminal ?? DEFAULT_TERMINAL_COMMAND) as T;
+    case 'set_worktree_terminal': {
+      const command = typeof args?.command === 'string' ? args.command.trim() : '';
+      mockWorktreeTerminal = command ? command : null;
+      return undefined as T;
+    }
     case 'list_managed_repos':
       return [...mockManagedRepos] as T;
-    case 'add_managed_repo': {
-      const path = String(args?.path ?? '').trim();
-      if (!path) throw new Error('path is empty');
-      if (!mockManagedRepos.some((r) => r.path === path)) {
+    case 'remove_managed_repo': {
+      const path = String(args?.path ?? '');
+      mockManagedRepos = mockManagedRepos.filter((r) => r.path !== path);
+      return [...mockManagedRepos] as T;
+    }
+    case 'pick_managed_repo': {
+      // No native dialog in the browser — prompt for a path so the flow is developable.
+      const picked = window.prompt('Mock folder picker — enter a repo path (empty cancels)');
+      const path = picked?.trim() ?? '';
+      if (path && !mockManagedRepos.some((r) => r.path === path)) {
         const name = path.split('/').filter(Boolean).pop() ?? path;
         mockManagedRepos.push({ name, path, baseBranch: null });
         mockWorktrees[path] ??= [];
       }
-      return [...mockManagedRepos] as T;
-    }
-    case 'remove_managed_repo': {
-      const path = String(args?.path ?? '');
-      mockManagedRepos = mockManagedRepos.filter((r) => r.path !== path);
       return [...mockManagedRepos] as T;
     }
     case 'list_worktrees':

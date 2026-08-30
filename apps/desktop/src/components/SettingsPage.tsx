@@ -1,9 +1,10 @@
 import { AiCard } from '@/components/AiCard';
-import { WorktreeReposCard } from '@/components/worktrees/WorktreeReposCard';
+import { ManagedReposCard } from '@/components/worktrees/ManagedReposCard';
+import { WorktreeSettingsCard } from '@/components/worktrees/WorktreeSettingsCard';
 
 /**
- * Settings — a nav tab (below the header) that replaces the inbox. One section per
- * concern; each card owns its own keyboard actions. Leaving is a nav tab, not a shortcut.
+ * Settings — a nav tab (below the header) that replaces the inbox. One card per concern;
+ * each owns its own keyboard actions. Leaving is a nav tab, not a shortcut.
  */
 export function SettingsPage() {
   return (
@@ -12,7 +13,8 @@ export function SettingsPage() {
         Settings
       </h2>
       <AiCard />
-      <WorktreeReposCard />
+      <WorktreeSettingsCard />
+      <ManagedReposCard />
     </div>
   );
 }

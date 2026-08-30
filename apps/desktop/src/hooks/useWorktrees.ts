@@ -1,15 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { ManagedRepo } from '@/generated/ManagedRepo';
 import type { PruneCandidate } from '@/generated/PruneCandidate';
 import type { Worktree } from '@/generated/Worktree';
 import { api } from '@/lib/api';
 import { errorMessage } from '@/lib/utils';
 
 export interface WorktreesView {
-  repos: ManagedRepo[];
-  activeRepo: ManagedRepo | null;
-  selectRepo: (path: string) => void;
-  cycleRepo: (delta: number) => void;
   worktrees: Worktree[];
   loading: boolean;
   error: string;
@@ -24,30 +19,16 @@ export interface WorktreesView {
 }
 
 /**
- * Data + actions for the Worktrees page: the managed repos, the active repo's worktrees,
- * and the create/remove/open/prune operations. The keyboard cursor over the worktree list
- * is the page's own (`useListCursor`); this hook owns everything else.
+ * Worktree operations for a single repo — the "worktree stuff". Given the active repo's
+ * path, it loads that repo's worktrees and exposes create/remove/open/prune. It knows
+ * nothing about the managed-repo list (see [`useManagedRepos`]).
  */
-export function useWorktrees(): WorktreesView {
-  const [repos, setRepos] = useState<ManagedRepo[]>([]);
-  const [activePath, setActivePath] = useState<string | null>(null);
+export function useWorktrees(repoPath: string | null): WorktreesView {
   const [worktrees, setWorktrees] = useState<Worktree[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        const list = await api.listManagedRepos();
-        setRepos(list);
-        setActivePath((current) => current ?? list[0]?.path ?? null);
-      } catch (e) {
-        setError(errorMessage(e, 'Could not load repositories'));
-      }
-    })();
-  }, []);
-
-  const loadWorktrees = useCallback(async (path: string | null) => {
+  const load = useCallback(async (path: string | null) => {
     if (!path) {
       setWorktrees([]);
       return;
@@ -65,103 +46,78 @@ export function useWorktrees(): WorktreesView {
   }, []);
 
   useEffect(() => {
-    void loadWorktrees(activePath);
-  }, [activePath, loadWorktrees]);
+    void load(repoPath);
+  }, [repoPath, load]);
 
-  const refresh = useCallback(() => loadWorktrees(activePath), [loadWorktrees, activePath]);
-
-  const activeRepo = repos.find((repo) => repo.path === activePath) ?? null;
-
-  const selectRepo = useCallback((path: string) => setActivePath(path), []);
-
-  const cycleRepo = useCallback(
-    (delta: number) =>
-      setActivePath((current) => {
-        if (repos.length === 0) return current;
-        const idx = Math.max(
-          0,
-          repos.findIndex((repo) => repo.path === current),
-        );
-        return repos[(idx + delta + repos.length) % repos.length]?.path ?? current;
-      }),
-    [repos],
-  );
+  const refresh = useCallback(() => load(repoPath), [load, repoPath]);
 
   const create = useCallback(
     async (branch: string) => {
-      if (!activePath) return;
+      if (!repoPath) return;
       setError('');
       try {
-        await api.addWorktree(activePath, branch);
-        await api.openWorktree(activePath, branch);
-        await loadWorktrees(activePath);
+        await api.addWorktree(repoPath, branch);
+        await api.openWorktree(repoPath, branch);
+        await load(repoPath);
       } catch (e) {
         setError(errorMessage(e, 'Could not create the worktree'));
         throw e;
       }
     },
-    [activePath, loadWorktrees],
+    [repoPath, load],
   );
 
   const remove = useCallback(
     async (branch: string, force: boolean) => {
-      if (!activePath) return;
+      if (!repoPath) return;
       setError('');
       try {
-        await api.removeWorktree(activePath, branch, force);
-        await loadWorktrees(activePath);
+        await api.removeWorktree(repoPath, branch, force);
+        await load(repoPath);
       } catch (e) {
         setError(errorMessage(e, 'Could not remove the worktree'));
         throw e;
       }
     },
-    [activePath, loadWorktrees],
+    [repoPath, load],
   );
 
   const open = useCallback(
     async (branch: string) => {
-      if (!activePath) return;
+      if (!repoPath) return;
       setError('');
       try {
-        await api.openWorktree(activePath, branch);
-        await loadWorktrees(activePath);
+        await api.openWorktree(repoPath, branch);
+        await load(repoPath);
       } catch (e) {
         setError(errorMessage(e, 'Could not open the worktree'));
       }
     },
-    [activePath, loadWorktrees],
+    [repoPath, load],
   );
 
   const prunePreview = useCallback(async () => {
-    if (!activePath) return [];
-    return api.pruneWorktrees(activePath, false);
-  }, [activePath]);
-
-  const pruneApply = useCallback(async () => {
-    if (!activePath) return;
+    if (!repoPath) return [];
     setError('');
     try {
-      await api.pruneWorktrees(activePath, true);
-      await loadWorktrees(activePath);
+      return await api.pruneWorktrees(repoPath, false);
+    } catch (e) {
+      setError(errorMessage(e, 'Could not scan for prunable worktrees'));
+      throw e;
+    }
+  }, [repoPath]);
+
+  const pruneApply = useCallback(async () => {
+    if (!repoPath) return;
+    setError('');
+    try {
+      await api.pruneWorktrees(repoPath, true);
+      await load(repoPath);
     } catch (e) {
       setError(errorMessage(e, 'Could not prune worktrees'));
       throw e;
     }
-  }, [activePath, loadWorktrees]);
+  }, [repoPath, load]);
 
-  return {
-    repos,
-    activeRepo,
-    selectRepo,
-    cycleRepo,
-    worktrees,
-    loading,
-    error,
-    refresh,
-    create,
-    remove,
-    open,
-    prunePreview,
-    pruneApply,
-  };
+  return { worktrees, loading, error, refresh, create, remove, open, prunePreview, pruneApply };
 }

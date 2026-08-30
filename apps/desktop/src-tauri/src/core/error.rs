@@ -26,6 +26,8 @@ pub enum AppError {
     Crypto(String),
     /// A sync failure — talking to the server, or (de)serializing a record payload.
     Sync(String),
+    /// A managed-repo operation failed (not a git repo, unreadable path, or bad list).
+    Repo(String),
     /// A git-worktree operation failed (git/tmux subprocess, filesystem, or a bad repo).
     Worktree(String),
 }
@@ -41,6 +43,7 @@ impl fmt::Display for AppError {
             AppError::Clipboard(msg) => write!(f, "clipboard error: {msg}"),
             AppError::Crypto(msg) => write!(f, "crypto error: {msg}"),
             AppError::Sync(msg) => write!(f, "sync error: {msg}"),
+            AppError::Repo(msg) => write!(f, "repo error: {msg}"),
             AppError::Worktree(msg) => write!(f, "worktree error: {msg}"),
         }
     }

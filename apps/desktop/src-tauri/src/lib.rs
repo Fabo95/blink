@@ -26,6 +26,7 @@ use crate::services::shortcut_service::ShortcutService;
 use crate::services::sync_service::SyncService;
 use crate::services::task_group_service::TaskGroupService;
 use crate::services::task_service::TaskService;
+use crate::services::repo_service::RepoService;
 use crate::services::vault_service::VaultService;
 use crate::services::worktree_service::WorktreeService;
 
@@ -42,6 +43,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(CaptureService::new(SecurityService::with_defaults()))
         .manage(AiService::new(AiKeyService::new()))
         .manage(PendingSource::default())
@@ -83,6 +85,7 @@ pub fn run() {
                 sync_sender.clone(),
             ));
             app.manage(ShortcutService::new(repository.settings.clone()));
+            app.manage(RepoService::new(GitCli::new(), repository.settings.clone()));
             app.manage(WorktreeService::new(
                 GitCli::new(),
                 TmuxCli::new(),
@@ -140,14 +143,19 @@ pub fn run() {
             commands::sync::sync_now,
             commands::sync::is_vault_unlocked,
             commands::sync::lock_vault,
-            commands::worktree::list_managed_repos,
-            commands::worktree::add_managed_repo,
-            commands::worktree::remove_managed_repo,
+            commands::repo::list_managed_repos,
+            commands::repo::remove_managed_repo,
+            commands::repo::pick_managed_repo,
             commands::worktree::list_worktrees,
             commands::worktree::add_worktree,
             commands::worktree::remove_worktree,
             commands::worktree::prune_worktrees,
             commands::worktree::open_worktree,
+            commands::worktree::get_worktree_base_dir,
+            commands::worktree::set_worktree_base_dir,
+            commands::worktree::pick_worktree_base_dir,
+            commands::worktree::get_worktree_terminal,
+            commands::worktree::set_worktree_terminal,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Blink")

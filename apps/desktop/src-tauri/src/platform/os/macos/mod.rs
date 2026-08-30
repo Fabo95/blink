@@ -24,22 +24,6 @@ pub fn open_url(url: &str) -> std::io::Result<()> {
     std::process::Command::new("open").arg(url).spawn().map(|_| ())
 }
 
-/// Open a Terminal.app window attached to the tmux `session` (running Claude). The
-/// session must already exist — the worktree manager ensures it before calling this.
-pub fn open_terminal(session: &str) -> std::io::Result<()> {
-    let script = format!(
-        "tell application \"Terminal\"\n\
-           do script \"tmux attach -t {session}\"\n\
-           activate\n\
-         end tell"
-    );
-    std::process::Command::new("osascript")
-        .arg("-e")
-        .arg(script)
-        .spawn()
-        .map(|_| ())
-}
-
 /// Dock-icon reopen → bring the inbox back (the capture flow keeps it hidden).
 pub fn on_run_event(app: &AppHandle, event: &RunEvent) {
     if let RunEvent::Reopen { .. } = event {

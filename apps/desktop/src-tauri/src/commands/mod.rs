@@ -6,6 +6,7 @@ pub mod auth;
 pub mod copy_capture;
 pub mod link;
 pub mod manual_capture;
+pub mod repo;
 pub mod shortcut;
 pub mod sync;
 pub mod task_groups;

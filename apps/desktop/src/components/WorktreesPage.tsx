@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { WorktreeRow } from '@/components/worktrees/WorktreeRow';
 import type { PruneCandidate } from '@/generated/PruneCandidate';
 import type { Worktree } from '@/generated/Worktree';
 import { useListCursor } from '@/hooks/useListCursor';
+import { useManagedRepos } from '@/hooks/useManagedRepos';
 import { useWorktrees } from '@/hooks/useWorktrees';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { cn } from '@/lib/utils';
@@ -18,15 +19,40 @@ interface PruneState {
 const PRUNE_CLOSED: PruneState = { open: false, loading: false, candidates: [] };
 
 /**
- * The Worktrees page (a nav tab replacing the inbox). Repo pills switch the active repo
- * (`←→`/`hl`); a keyboard cursor walks its linked worktrees (`↑↓`/`jk`). Actions are
- * shortcuts: `o` opens a terminal on the worktree, `n` creates one, `⌫` removes the
- * focused one, `x` prunes merged/gone worktrees. Each opener is a popover anchored to the
- * list, confirmed with `⌘↵` / dismissed with `Esc` — no buttons.
+ * The Worktrees page (a nav tab replacing the inbox). It composes the repo list
+ * ([`useManagedRepos`], read-only here — repos are managed in Settings) with the worktree
+ * ops for the active repo ([`useWorktrees`]). Repo pills switch the active repo (`←→`/`hl`);
+ * a keyboard cursor walks its worktrees (`↑↓`/`jk`). Actions: `o` opens a terminal, `n`
+ * creates, `⌫` removes the focused one, `x` prunes merged/gone worktrees — each a popover
+ * confirmed with `⌘↵` / dismissed with `Esc`, no buttons.
  */
 export function WorktreesPage() {
-  const view = useWorktrees();
-  const linked = view.worktrees.filter((worktree) => !worktree.isMain);
+  const repos = useManagedRepos();
+  const [activePath, setActivePath] = useState<string | null>(null);
+
+  // Default/repair the active repo whenever the list changes.
+  useEffect(() => {
+    setActivePath((current) => {
+      if (repos.repos.length === 0) return null;
+      return current && repos.repos.some((repo) => repo.path === current)
+        ? current
+        : repos.repos[0].path;
+    });
+  }, [repos.repos]);
+
+  const wt = useWorktrees(activePath);
+  const activeRepo = repos.repos.find((repo) => repo.path === activePath) ?? null;
+  const linked = wt.worktrees.filter((worktree) => !worktree.isMain);
+
+  const cycleRepo = (delta: number) => {
+    if (repos.repos.length === 0) return;
+    const idx = Math.max(
+      0,
+      repos.repos.findIndex((repo) => repo.path === activePath),
+    );
+    const next = repos.repos[(idx + delta + repos.repos.length) % repos.repos.length];
+    if (next) setActivePath(next.path);
+  };
 
   const [promptOpen, setPromptOpen] = useState(false);
   const [branch, setBranch] = useState('');
@@ -51,7 +77,7 @@ export function WorktreesPage() {
     const name = branch.trim();
     if (!name) return;
     try {
-      await view.create(name);
+      await wt.create(name);
       setPromptOpen(false);
       setBranch('');
     } catch {
@@ -71,7 +97,7 @@ export function WorktreesPage() {
     if (cursor.focusedId === target.branch) cursor.advance();
     try {
       // Dirty worktrees need force; a clean one removes without it.
-      await view.remove(target.branch, target.isDirty);
+      await wt.remove(target.branch, target.isDirty);
       setRemoving(null);
     } catch {
       // Keep the confirm open; the hook shows the error.
@@ -81,12 +107,17 @@ export function WorktreesPage() {
   const startPrune = async () => {
     closeOverlays();
     setPrune({ open: true, loading: true, candidates: [] });
-    const candidates = await view.prunePreview();
-    setPrune({ open: true, loading: false, candidates });
+    try {
+      const candidates = await wt.prunePreview();
+      setPrune({ open: true, loading: false, candidates });
+    } catch {
+      // Error surfaced by the hook; close the popover instead of hanging on "Scanning…".
+      setPrune(PRUNE_CLOSED);
+    }
   };
   const confirmPrune = async () => {
     try {
-      await view.pruneApply();
+      await wt.pruneApply();
       closeOverlays();
     } catch {
       // Keep the list open; the hook shows the error.
@@ -94,25 +125,25 @@ export function WorktreesPage() {
   };
 
   useShortcut('worktree.switchPrev', {
-    enabled: !overlayOpen && view.repos.length > 1,
-    callback: () => view.cycleRepo(-1),
+    enabled: !overlayOpen && repos.repos.length > 1,
+    callback: () => cycleRepo(-1),
   });
   useShortcut('worktree.switchNext', {
-    enabled: !overlayOpen && view.repos.length > 1,
-    callback: () => view.cycleRepo(1),
+    enabled: !overlayOpen && repos.repos.length > 1,
+    callback: () => cycleRepo(1),
   });
   useShortcut('worktree.new', {
-    enabled: !overlayOpen && view.activeRepo !== null,
+    enabled: !overlayOpen && activeRepo !== null,
     callback: startNew,
   });
   useShortcut('worktree.prune', {
-    enabled: !overlayOpen && view.activeRepo !== null,
+    enabled: !overlayOpen && activeRepo !== null,
     callback: () => void startPrune(),
   });
   useShortcut('worktree.open', {
     enabled: !overlayOpen && cursor.focused !== null,
     callback: () => {
-      if (cursor.focused) void view.open(cursor.focused.branch);
+      if (cursor.focused) void wt.open(cursor.focused.branch);
     },
   });
   useShortcut('worktree.remove', {
@@ -141,19 +172,19 @@ export function WorktreesPage() {
       <h2 className="section-bar text-sm font-semibold uppercase tracking-wide text-primary">
         Worktrees
       </h2>
-      {view.repos.length === 0 ? (
+      {repos.repos.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           No repositories yet — add one in Settings to manage its worktrees here.
         </p>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-1.5">
-            {view.repos.map((repo) => (
+            {repos.repos.map((repo) => (
               <Pill
                 key={repo.path}
                 label={repo.name}
-                selected={view.activeRepo?.path === repo.path}
-                onSelect={() => view.selectRepo(repo.path)}
+                selected={activeRepo?.path === repo.path}
+                onSelect={() => setActivePath(repo.path)}
               />
             ))}
           </div>
@@ -167,7 +198,7 @@ export function WorktreesPage() {
               <div className="space-y-1">
                 {linked.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    {view.loading ? 'Loading…' : 'No worktrees yet — press n to create one.'}
+                    {wt.loading ? 'Loading…' : 'No worktrees yet — press n to create one.'}
                   </p>
                 ) : (
                   linked.map((worktree) => (
@@ -233,7 +264,9 @@ export function WorktreesPage() {
           </Popover>
         </>
       )}
-      {view.error && <p className="line-clamp-2 text-[11px] text-destructive">{view.error}</p>}
+      {(wt.error || repos.error) && (
+        <p className="line-clamp-2 text-[11px] text-destructive">{wt.error || repos.error}</p>
+      )}
     </div>
   );
 }

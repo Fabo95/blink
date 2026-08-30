@@ -410,21 +410,14 @@ export const SHORTCUTS = {
     level: 3,
     order: 90,
   },
-  // Managed-repo list in Settings: add via the path field, remove the selected repo.
-  'worktreeRepos.add': {
+  // Worktree settings card (Settings): save the terminal command. The base directory and
+  // the managed repos are pick/click-only affordances — no keyboard shortcut.
+  'worktreeTerminal.save': {
     keys: 'mod+enter',
     hint: HINTS['mod+enter'],
     level: 3,
-    describe: 'Add the repository',
+    describe: 'Save the terminal command',
     order: 20,
-    opts: { enableOnFormTags: true },
-  },
-  'worktreeRepos.remove': {
-    keys: 'mod+backspace, mod+delete',
-    hint: HINTS['mod+backspace, mod+delete'],
-    level: 3,
-    describe: 'Stop tracking the selected repository',
-    order: 30,
     opts: { enableOnFormTags: true },
   },
 

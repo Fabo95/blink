@@ -11,6 +11,7 @@ use crate::core::sync_channel::SyncSignalReceiver;
 use crate::services::sync_service::SyncService;
 
 pub mod clipboard;
+pub mod dialog;
 pub mod jobs;
 pub mod os;
 pub mod shortcut;
