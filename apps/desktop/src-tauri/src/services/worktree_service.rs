@@ -184,6 +184,7 @@ impl WorktreeService {
         }
         // Clears stale entries whose working tree is gone (this one, and any other orphans).
         let _ = self.git_cli.prune_worktrees(root);
+        self.move_terminals_off(&tmux_session);
         self.tmux_cli.kill_session(&tmux_session);
         // The worktree is gone, so the branch is no longer checked out — delete it. Guard on
         // existence so a detached worktree (no branch) isn't an error.
@@ -254,7 +255,9 @@ impl WorktreeService {
                 if Path::new(path).exists() {
                     let _ = std::fs::remove_dir_all(path);
                 }
-                self.tmux_cli.kill_session(&tmux_session_name(&repo.name, branch));
+                let session = tmux_session_name(&repo.name, branch);
+                self.move_terminals_off(&session);
+                self.tmux_cli.kill_session(&session);
             }
             let _ = self.git_cli.prune_worktrees(root);
         }
@@ -306,6 +309,18 @@ impl WorktreeService {
         }
         self.tmux_cli.new_session(tmux_session, CLAUDE_WINDOW, cwd)?;
         self.tmux_cli.send_line(&format!("{tmux_session}:{CLAUDE_WINDOW}"), "claude")
+    }
+
+    /// Move any terminal currently showing `session` to another live session, so killing it
+    /// (deleting the worktree) doesn't drop the terminal out of tmux. Best effort, and a
+    /// no-op when it's the only session (nothing to switch to).
+    fn move_terminals_off(&self, session: &str) {
+        let Some(other) = self.tmux_cli.first_session_other_than(session) else {
+            return;
+        };
+        for terminal in self.tmux_cli.terminals_on(session) {
+            let _ = self.tmux_cli.switch_terminal_session(&terminal, &other);
+        }
     }
 
     /// Spawn the configured terminal on `tmux_session` (`{session}` is substituted in). Runs

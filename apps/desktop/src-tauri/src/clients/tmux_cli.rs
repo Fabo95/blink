@@ -63,6 +63,40 @@ impl TmuxCli {
         self.run(&["send-keys", "-t", target, keys, "Enter"])
     }
 
+    /// A live session other than `exclude`, if any — a place to move a terminal before its
+    /// current session is killed.
+    pub fn first_session_other_than(&self, exclude: &str) -> Option<String> {
+        let output = Command::new("tmux")
+            .args(["list-sessions", "-F", "#{session_name}"])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(|line| line.trim().to_string())
+            .find(|name| !name.is_empty() && name != exclude)
+    }
+
+    /// The terminals (tmux clients) currently showing `session`.
+    pub fn terminals_on(&self, session: &str) -> Vec<String> {
+        let target = format!("={session}");
+        Command::new("tmux")
+            .args(["list-clients", "-t", target.as_str(), "-F", "#{client_name}"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| {
+                String::from_utf8_lossy(&o.stdout)
+                    .lines()
+                    .map(|line| line.trim().to_string())
+                    .filter(|line| !line.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     /// Kill the session if present (best effort — a missing session is not an error).
     pub fn kill_session(&self, session: &str) {
         let target = format!("={session}");
