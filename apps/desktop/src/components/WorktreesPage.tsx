@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
+import { RepoDeletePopover } from '@/components/worktrees/RepoDeletePopover';
 import { WorktreeRow } from '@/components/worktrees/WorktreeRow';
+import type { ManagedRepo } from '@/generated/ManagedRepo';
 import type { PruneCandidate } from '@/generated/PruneCandidate';
 import type { Worktree } from '@/generated/Worktree';
 import { useListCursor } from '@/hooks/useListCursor';
@@ -17,14 +19,15 @@ interface PruneState {
 }
 
 const PRUNE_CLOSED: PruneState = { open: false, loading: false, candidates: [] };
+const SECTION_LABEL = 'section-bar text-sm font-semibold uppercase tracking-wide text-primary';
 
 /**
- * The Worktrees page (a nav tab replacing the inbox). It composes the repo list
- * ([`useManagedRepos`], read-only here — repos are managed in Settings) with the worktree
- * ops for the active repo ([`useWorktrees`]). Repo pills switch the active repo (`←→`/`hl`);
- * a keyboard cursor walks its worktrees (`↑↓`/`jk`). Actions: `o` opens a terminal, `n`
- * creates, `⌫` removes the focused one, `x` prunes merged/gone worktrees — each a popover
- * confirmed with `⌘↵` / dismissed with `Esc`, no buttons.
+ * The Worktrees page (a nav tab replacing the inbox). Modeled on the inbox: a secondary
+ * **Repositories** pill bar on top (like the task-group filter — `←→`/`hl` switches the
+ * active repo, `⌘O` adds one via the native picker, `⌫` removes the active one when no
+ * worktree is focused, via a confirm popover) above the **Worktrees** list for the active
+ * repo (`↑↓`/`jk` cursor, `o` open, `n` new, `⌫` remove, `x` prune). Worktree behaviour
+ * settings (base dir, terminal) live under Settings.
  */
 export function WorktreesPage() {
   const repos = useManagedRepos();
@@ -54,18 +57,32 @@ export function WorktreesPage() {
     if (next) setActivePath(next.path);
   };
 
+  const [removingRepo, setRemovingRepo] = useState<ManagedRepo | null>(null);
   const [promptOpen, setPromptOpen] = useState(false);
   const [branch, setBranch] = useState('');
   const [removing, setRemoving] = useState<Worktree | null>(null);
   const [prune, setPrune] = useState<PruneState>(PRUNE_CLOSED);
 
-  const overlayOpen = promptOpen || removing !== null || prune.open;
+  const overlayOpen =
+    removingRepo !== null || promptOpen || removing !== null || prune.open;
   const cursor = useListCursor(linked, (worktree) => worktree.branch, { enabled: !overlayOpen });
 
   const closeOverlays = () => {
+    setRemovingRepo(null);
     setPromptOpen(false);
     setRemoving(null);
     setPrune(PRUNE_CLOSED);
+  };
+
+  const startRemoveRepo = () => {
+    if (!activeRepo) return;
+    closeOverlays();
+    setRemovingRepo(activeRepo);
+  };
+  const confirmRemoveRepo = async () => {
+    if (!removingRepo) return;
+    await repos.remove(removingRepo.path);
+    setRemovingRepo(null);
   };
 
   const startNew = () => {
@@ -124,6 +141,14 @@ export function WorktreesPage() {
     }
   };
 
+  // ── Repositories (the pill bar) ──
+  useShortcut('repos.add', { enabled: !overlayOpen, callback: () => void repos.pick() });
+  useShortcut('repos.remove', {
+    // Mirrors group delete: only when no worktree is focused (a focused worktree's `⌫`
+    // removes the worktree instead).
+    enabled: !overlayOpen && cursor.focused === null && activeRepo !== null,
+    callback: startRemoveRepo,
+  });
   useShortcut('worktree.switchPrev', {
     enabled: !overlayOpen && repos.repos.length > 1,
     callback: () => cycleRepo(-1),
@@ -132,6 +157,16 @@ export function WorktreesPage() {
     enabled: !overlayOpen && repos.repos.length > 1,
     callback: () => cycleRepo(1),
   });
+  useShortcut('repoDelete.confirm', {
+    enabled: removingRepo !== null,
+    callback: () => void confirmRemoveRepo(),
+  });
+  useShortcut('repoDelete.cancel', {
+    enabled: removingRepo !== null,
+    callback: () => setRemovingRepo(null),
+  });
+
+  // ── Worktrees (the list) ──
   useShortcut('worktree.new', {
     enabled: !overlayOpen && activeRepo !== null,
     callback: startNew,
@@ -168,30 +203,47 @@ export function WorktreesPage() {
   useShortcut('worktreePrune.cancel', { enabled: prune.open, callback: () => setPrune(PRUNE_CLOSED) });
 
   return (
-    <div className="space-y-4">
-      <h2 className="section-bar text-sm font-semibold uppercase tracking-wide text-primary">
-        Worktrees
-      </h2>
-      {repos.repos.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No repositories yet — add one in Settings to manage its worktrees here.
-        </p>
-      ) : (
-        <>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {repos.repos.map((repo) => (
-              <Pill
-                key={repo.path}
-                label={repo.name}
-                selected={activeRepo?.path === repo.path}
-                onSelect={() => setActivePath(repo.path)}
-              />
-            ))}
-          </div>
+    <div className="space-y-6">
+      <section>
+        <Popover
+          open={removingRepo !== null}
+          onOpenChange={(open) => {
+            if (!open) setRemovingRepo(null);
+          }}
+        >
+          <PopoverAnchor asChild>
+            {repos.repos.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No repositories yet — press ⌘O to add one from anywhere.
+              </p>
+            ) : (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {repos.repos.map((repo) => (
+                  <Pill
+                    key={repo.path}
+                    label={repo.name}
+                    selected={activeRepo?.path === repo.path}
+                    onSelect={() => setActivePath(repo.path)}
+                  />
+                ))}
+              </div>
+            )}
+          </PopoverAnchor>
+          {removingRepo && <RepoDeletePopover repo={removingRepo} />}
+        </Popover>
+      </section>
+
+      {activeRepo && (
+        <section className="space-y-1.5">
+          <h2 className={SECTION_LABEL}>Worktrees</h2>
           <Popover
-            open={overlayOpen}
+            open={promptOpen || removing !== null || prune.open}
             onOpenChange={(open) => {
-              if (!open) closeOverlays();
+              if (!open) {
+                setPromptOpen(false);
+                setRemoving(null);
+                setPrune(PRUNE_CLOSED);
+              }
             }}
           >
             <PopoverAnchor asChild>
@@ -262,8 +314,9 @@ export function WorktreesPage() {
               </PopoverContent>
             )}
           </Popover>
-        </>
+        </section>
       )}
+
       {(wt.error || repos.error) && (
         <p className="line-clamp-2 text-[11px] text-destructive">{wt.error || repos.error}</p>
       )}

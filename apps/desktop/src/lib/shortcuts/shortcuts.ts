@@ -47,6 +47,7 @@ const HINTS = {
   n: { keys: 'n', label: 'new' },
   r: { keys: 'r', label: 'edit' },
   x: { keys: 'x', label: 'prune' },
+  'mod+o': { keys: '⌘o', label: 'add repo' },
 } satisfies Record<string, Hint>;
 
 /**
@@ -357,6 +358,35 @@ export const SHORTCUTS = {
     describe: 'Prune merged or gone worktrees',
     order: 56,
   },
+  // Repositories section (top of the Worktrees page): add via picker, remove the active.
+  'repos.add': {
+    keys: 'mod+o',
+    hint: HINTS['mod+o'],
+    level: 1,
+    describe: 'Add a repository (folder picker)',
+    order: 51,
+  },
+  // Same key as worktree delete — disambiguated by focus (like group vs task delete): with
+  // no worktree focused, `⌫` removes the active repo; with one focused, it removes it.
+  'repos.remove': {
+    keys: 'backspace, delete, d',
+    hint: HINTS['backspace, delete, d'],
+    level: 1,
+    describe: 'Stop tracking the active repository',
+    order: 52,
+  },
+  'repoDelete.confirm': {
+    keys: 'mod+enter',
+    hint: HINTS['mod+enter'],
+    level: 3,
+    order: 20,
+  },
+  'repoDelete.cancel': {
+    keys: 'escape',
+    hint: HINTS.escape,
+    level: 3,
+    order: 90,
+  },
   'worktree.open': {
     keys: 'o',
     hint: HINTS.o,
@@ -520,6 +550,8 @@ export const CHEATSHEET: { title: string; ids: ShortcutId[] }[] = [
   {
     title: 'Worktrees',
     ids: [
+      'repos.add',
+      'repos.remove',
       'worktree.switchPrev',
       'worktree.new',
       'worktree.open',
