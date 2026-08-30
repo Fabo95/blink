@@ -7,6 +7,7 @@ import { TaskList } from '@/components/TaskList';
 import { WorktreesPage } from '@/components/WorktreesPage';
 import type { Task } from '@/generated/Task';
 import { useSession } from '@/hooks/useSession';
+import { useWorktreeAttention } from '@/hooks/useWorktreeAttention';
 import { api, isTauri } from '@/lib/api';
 import { useHintStyle } from '@/lib/hintStyle';
 import { Hints } from '@/lib/shortcuts/Hints';
@@ -14,6 +15,7 @@ import { Hints } from '@/lib/shortcuts/Hints';
 /** The signed-in app: capture card + task inbox. Rendered only inside `<AuthGate>`. */
 export function Inbox() {
   const { user, signOut } = useSession();
+  const attention = useWorktreeAttention();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [page, setPage] = useState<Page>('inbox');
 
@@ -45,7 +47,11 @@ export function Inbox() {
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col">
       <Header account={user} onSignOut={signOut} />
-      <PageNav page={page} onSelect={setPage} />
+      <PageNav
+        page={page}
+        onSelect={setPage}
+        badges={{ worktrees: attention.needsInputCount }}
+      />
       <main className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-6">
         {page === 'settings' ? (
           <SettingsPage />

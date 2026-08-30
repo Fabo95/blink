@@ -10,6 +10,7 @@ import type { PruneCandidate } from '@/generated/PruneCandidate';
 import type { Worktree } from '@/generated/Worktree';
 import { useListCursor } from '@/hooks/useListCursor';
 import { useManagedRepos } from '@/hooks/useManagedRepos';
+import { useWorktreeAttention } from '@/hooks/useWorktreeAttention';
 import { useWorktrees } from '@/hooks/useWorktrees';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { cn } from '@/lib/utils';
@@ -46,6 +47,7 @@ export function WorktreesPage() {
   }, [repos.repos]);
 
   const wt = useWorktrees(activePath);
+  const attention = useWorktreeAttention();
   const activeRepo = repos.repos.find((repo) => repo.path === activePath) ?? null;
   const linked = wt.worktrees.filter((worktree) => !worktree.isMain);
 
@@ -265,6 +267,9 @@ export function WorktreesPage() {
                     <WorktreeRow
                       key={worktree.branch}
                       worktree={worktree}
+                      attention={
+                        activePath ? attention.attentionOf(activePath, worktree.branch) : null
+                      }
                       selected={cursor.focusedId === worktree.branch}
                       onSelect={() => cursor.setFocusedId(worktree.branch)}
                     />

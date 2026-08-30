@@ -16,6 +16,7 @@ pub struct WorktreeEntry {
     pub is_main: bool,
 }
 
+#[derive(Clone)]
 pub struct GitCli;
 
 impl GitCli {

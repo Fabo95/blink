@@ -8,6 +8,7 @@ use std::process::Command;
 
 use crate::core::error::{AppError, AppResult};
 
+#[derive(Clone)]
 pub struct TmuxCli;
 
 impl TmuxCli {

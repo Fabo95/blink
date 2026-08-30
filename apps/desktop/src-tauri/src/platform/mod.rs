@@ -8,6 +8,7 @@ use std::sync::Arc;
 use tauri::Manager;
 
 use crate::core::sync_channel::SyncSignalReceiver;
+use crate::services::attention_service::AttentionService;
 use crate::services::sync_service::SyncService;
 
 pub mod clipboard;
@@ -32,6 +33,7 @@ pub fn init(
         app.handle().clone(),
         app.state::<Arc<SyncService>>().inner().clone(),
         sync_receiver,
+        app.state::<Arc<AttentionService>>().inner().clone(),
     );
     Ok(())
 }

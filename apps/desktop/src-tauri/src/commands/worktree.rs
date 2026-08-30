@@ -4,9 +4,12 @@
 
 use tauri::{AppHandle, State};
 
+use std::sync::Arc;
+
 use crate::core::error::AppResult;
-use crate::core::models::{PruneCandidate, Worktree};
+use crate::core::models::{PruneCandidate, Worktree, WorktreeAttentionUpdate};
 use crate::platform::dialog;
+use crate::services::attention_service::AttentionService;
 use crate::services::repo_service::RepoService;
 use crate::services::worktree_service::WorktreeService;
 
@@ -75,6 +78,15 @@ pub fn open_worktree(
     branch: String,
 ) -> AppResult<()> {
     worktree_service.open(&repo_service.find(&repo_path)?, branch)
+}
+
+/// The current attention snapshot across every managed repo's live sessions. The webview
+/// loads this once for initial state, then keeps it live via the `worktree-attention` event.
+#[tauri::command]
+pub fn get_worktree_attention(
+    attention_service: State<'_, Arc<AttentionService>>,
+) -> AppResult<Vec<WorktreeAttentionUpdate>> {
+    Ok(attention_service.snapshot())
 }
 
 // ── worktree settings ───────────────────────────────────────────────────────────────────

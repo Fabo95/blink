@@ -10,6 +10,8 @@ import type { Task } from '@/generated/Task';
 import type { TaskGroup } from '@/generated/TaskGroup';
 import type { VaultStatus } from '@/generated/VaultStatus';
 import type { Worktree } from '@/generated/Worktree';
+import type { WorktreeAttention } from '@/generated/WorktreeAttention';
+import type { WorktreeAttentionUpdate } from '@/generated/WorktreeAttentionUpdate';
 
 /**
  * Typed façade over the Tauri IPC boundary. Each method maps to a `#[tauri::command]`
@@ -146,6 +148,9 @@ export const api = {
   /** Open a terminal attached to the worktree's tmux/Claude session (creating it if needed). */
   openWorktree: (repoPath: string, branch: string) =>
     invoke<void>('open_worktree', { repoPath, branch }),
+  /** The attention snapshot across every managed repo's live sessions. Initial state for the
+   *  dashboard; the `worktree-attention` event keeps it live thereafter. */
+  getWorktreeAttention: () => invoke<WorktreeAttentionUpdate[]>('get_worktree_attention'),
   // Worktree settings — where worktrees are created + how they open.
   /** The configured global worktree base directory, or null for the derived default. */
   getWorktreeBaseDir: () => invoke<string | null>('get_worktree_base_dir'),
@@ -640,6 +645,23 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       const worktree = list?.find((w) => w.branch === String(args?.branch ?? ''));
       if (worktree) worktree.sessionLive = true;
       return undefined as T;
+    }
+    case 'get_worktree_attention': {
+      // No real tmux in the browser — synthesize a spread of states across the live
+      // sessions so the dots + "needs you" badge are developable.
+      const states: WorktreeAttention[] = ['needsInput', 'working', 'done', 'errored'];
+      const out: WorktreeAttentionUpdate[] = [];
+      for (const [repoPath, list] of Object.entries(mockWorktrees)) {
+        list.forEach((w, i) => {
+          if (!w.sessionLive) return;
+          out.push({
+            repo: repoPath,
+            branch: w.branch,
+            attention: states[i % states.length] as WorktreeAttention,
+          });
+        });
+      }
+      return out as T;
     }
     default:
       throw new Error(`Unknown command: ${cmd}`);

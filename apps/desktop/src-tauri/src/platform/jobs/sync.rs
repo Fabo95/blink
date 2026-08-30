@@ -1,7 +1,5 @@
-//! Recurring background work that runs off the main thread — currently the sync loop.
-//! Lives in `platform` (not `services`) because it drives the Tauri async runtime via
-//! `tauri::async_runtime` and emits window events, which `services/` must not touch.
-//! Started once from `platform::init`; runs for the app's lifetime.
+//! The write-path sync loop. Started once from [`super::start`]; runs for the app's
+//! lifetime.
 //!
 //! Two triggers, combined via `recv_timeout`:
 //!   - a local change (or setup/unlock) wakes the loop → **debounced full sync**;
@@ -34,8 +32,8 @@ struct SyncStateEvent {
     message: Option<String>,
 }
 
-/// Start every background loop. Fire-and-forget for the app's lifetime.
-pub fn start(app: AppHandle, sync_service: Arc<SyncService>, signalReceiver: SyncSignalReceiver) {
+/// Start the sync loop. Fire-and-forget for the app's lifetime.
+pub(super) fn start(app: AppHandle, sync_service: Arc<SyncService>, signalReceiver: SyncSignalReceiver) {
     thread::spawn(move || {
         // An initial cycle so a fresh launch pulls (and pushes anything already dirty).
         run_sync(&app, &sync_service);

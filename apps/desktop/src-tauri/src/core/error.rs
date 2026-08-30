@@ -30,6 +30,9 @@ pub enum AppError {
     Repo(String),
     /// A git-worktree operation failed (git/tmux subprocess, filesystem, or a bad repo).
     Worktree(String),
+    /// Installing/removing the Claude Code attention hook failed (filesystem or a
+    /// malformed `~/.claude/settings.json`).
+    Hook(String),
 }
 
 impl fmt::Display for AppError {
@@ -45,6 +48,7 @@ impl fmt::Display for AppError {
             AppError::Sync(msg) => write!(f, "sync error: {msg}"),
             AppError::Repo(msg) => write!(f, "repo error: {msg}"),
             AppError::Worktree(msg) => write!(f, "worktree error: {msg}"),
+            AppError::Hook(msg) => write!(f, "hook error: {msg}"),
         }
     }
 }

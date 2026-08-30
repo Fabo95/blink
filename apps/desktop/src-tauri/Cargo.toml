@@ -25,6 +25,9 @@ tauri-plugin-clipboard-manager = "2"
 # Native file/folder pickers (NSOpenPanel) — used by the worktree manager's repo /
 # base-dir pickers. Called from Rust, so no webview capability entry is needed.
 tauri-plugin-dialog = "2"
+# Native OS notifications — fired from Rust by the worktree attention loop when a
+# worktree's Claude flips to needs-input / done / errored.
+tauri-plugin-notification = "2"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 # Local task store: SQLCipher (AES-256 at rest). The vendored feature compiles
 # SQLCipher + OpenSSL from source, so builds need no system crypto libraries.

@@ -37,18 +37,29 @@ const DEFAULT_TERMINAL_COMMAND: &str = "alacritty -e tmux attach -t {session}";
 /// The name of the tmux window Claude runs in.
 const CLAUDE_WINDOW: &str = "claude";
 
+#[derive(Clone)]
 pub struct WorktreeService {
     git_cli: GitCli,
     tmux_cli: TmuxCli,
     settings_repository: SettingsRepository,
+    /// The command each worktree's tmux window runs to start Claude. Blink points it at its
+    /// own `--settings` file so the attention hooks fire without touching the user's global
+    /// Claude config (see [`crate::services::hook_service`]).
+    claude_command: String,
 }
 
 impl WorktreeService {
-    pub fn new(git_cli: GitCli, tmux_cli: TmuxCli, settings_repository: SettingsRepository) -> Self {
+    pub fn new(
+        git_cli: GitCli,
+        tmux_cli: TmuxCli,
+        settings_repository: SettingsRepository,
+        claude_command: String,
+    ) -> Self {
         Self {
             git_cli,
             tmux_cli,
             settings_repository,
+            claude_command,
         }
     }
 
@@ -308,7 +319,8 @@ impl WorktreeService {
             return Ok(());
         }
         self.tmux_cli.new_session(tmux_session, CLAUDE_WINDOW, cwd)?;
-        self.tmux_cli.send_line(&format!("{tmux_session}:{CLAUDE_WINDOW}"), "claude")
+        self.tmux_cli
+            .send_line(&format!("{tmux_session}:{CLAUDE_WINDOW}"), &self.claude_command)
     }
 
     /// Move any terminal currently showing `session` to another live session, so killing it

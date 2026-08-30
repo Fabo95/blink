@@ -17,6 +17,8 @@ use crate::core::sync_channel;
 use crate::repository::{Db, Repository};
 use crate::services::ai_key_service::AiKeyService;
 use crate::services::ai_service::AiService;
+use crate::services::attention_service::AttentionService;
+use crate::services::hook_service::HookService;
 use crate::services::auth_service::AuthService;
 use crate::services::capture_service::CaptureService;
 use crate::services::hlc_service::HlcService;
@@ -44,6 +46,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(CaptureService::new(SecurityService::with_defaults()))
         .manage(AiService::new(AiKeyService::new()))
         .manage(PendingSource::default())
@@ -85,12 +88,36 @@ pub fn run() {
                 sync_sender.clone(),
             ));
             app.manage(ShortcutService::new(repository.settings.clone()));
-            app.manage(RepoService::new(GitCli::new(), repository.settings.clone()));
-            app.manage(WorktreeService::new(
+            let repo_service = RepoService::new(GitCli::new(), repository.settings.clone());
+
+            let attention_dir = data_dir.join("attention");
+            let hook_service = HookService::new(
+                data_dir.join("hooks/blink-attention.sh"),
+                data_dir.join("hooks/claude-settings.json"),
+                attention_dir.clone(),
+            );
+            if let Err(err) = hook_service.install() {
+                eprintln!("[hooks] could not install the attention hooks: {err}");
+            }
+            let claude_command = format!(
+                "claude --settings {}",
+                crate::core::paths::shell_quote(&hook_service.settings_path().to_string_lossy())
+            );
+
+            let worktree_service = WorktreeService::new(
                 GitCli::new(),
                 TmuxCli::new(),
                 repository.settings.clone(),
+                claude_command,
+            );
+            let attention_service = Arc::new(AttentionService::new(
+                repo_service.clone(),
+                worktree_service.clone(),
+                attention_dir,
             ));
+            app.manage(repo_service);
+            app.manage(worktree_service);
+            app.manage(attention_service);
             app.manage(vault_service.clone());
             let sync_service = Arc::new(SyncService::new(
                 ServerClient::new(),
@@ -152,6 +179,7 @@ pub fn run() {
             commands::worktree::delete_remote_branch,
             commands::worktree::prune_worktrees,
             commands::worktree::open_worktree,
+            commands::worktree::get_worktree_attention,
             commands::worktree::get_worktree_base_dir,
             commands::worktree::set_worktree_base_dir,
             commands::worktree::pick_worktree_base_dir,

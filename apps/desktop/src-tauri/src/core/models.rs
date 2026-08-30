@@ -184,3 +184,32 @@ pub struct PruneCandidate {
     pub branch: String,
     pub reason: String,
 }
+
+/// What a worktree's Claude session needs from you right now — derived by reading its
+/// tmux pane. Drives the per-row status dot, the "needs you" nav badge, and native
+/// notifications. Only computed for worktrees with a live session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub enum WorktreeAttention {
+    /// Actively processing (the pane shows the interrupt hint).
+    Working,
+    /// Waiting for your approval/answer (a permission or plan prompt is up).
+    NeedsInput,
+    /// Idle at the prompt — finished, waiting for your next message.
+    Done,
+    /// The session died or an error surfaced in the pane.
+    Errored,
+}
+
+/// One worktree's live attention state, identified by its repo + branch. Carried both by
+/// the `worktree-attention` event (a full snapshot each tick) and the on-demand command.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreeAttentionUpdate {
+    /// The managed repo's path this worktree belongs to.
+    pub repo: String,
+    pub branch: String,
+    pub attention: WorktreeAttention,
+}

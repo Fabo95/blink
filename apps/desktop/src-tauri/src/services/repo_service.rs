@@ -14,6 +14,7 @@ use crate::repository::SettingsRepository;
 /// `settings` key holding the JSON-encoded `Vec<ManagedRepo>` the user curates.
 const MANAGED_REPOS_KEY: &str = "worktree_managed_repos";
 
+#[derive(Clone)]
 pub struct RepoService {
     git_cli: GitCli,
     settings_repository: SettingsRepository,
