@@ -149,6 +149,7 @@ pub fn run() {
             commands::worktree::list_worktrees,
             commands::worktree::add_worktree,
             commands::worktree::remove_worktree,
+            commands::worktree::delete_remote_branch,
             commands::worktree::prune_worktrees,
             commands::worktree::open_worktree,
             commands::worktree::get_worktree_base_dir,

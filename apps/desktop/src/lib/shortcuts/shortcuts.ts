@@ -48,6 +48,7 @@ const HINTS = {
   r: { keys: 'r', label: 'edit' },
   x: { keys: 'x', label: 'prune' },
   'mod+o': { keys: '⌘o', label: 'add repo' },
+  b: { keys: 'b', label: 'remote' },
 } satisfies Record<string, Hint>;
 
 /**
@@ -421,6 +422,13 @@ export const SHORTCUTS = {
     hint: HINTS['mod+enter'],
     level: 3,
     order: 20,
+  },
+  'worktreeRemove.toggleRemote': {
+    keys: 'b',
+    hint: HINTS.b,
+    level: 3,
+    describe: 'Toggle deleting the remote branch too',
+    order: 30,
   },
   'worktreeRemove.cancel': {
     keys: 'escape',

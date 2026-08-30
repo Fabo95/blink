@@ -133,9 +133,13 @@ export const api = {
   /** Create (or attach) a worktree for `branch` and ensure its tmux/Claude session. */
   addWorktree: (repoPath: string, branch: string) =>
     invoke<Worktree>('add_worktree', { repoPath, branch }),
-  /** Remove a worktree + its session. `force` removes a dirty/untracked worktree. */
+  /** Remove a worktree + its session + its local branch. `force` removes a dirty/untracked
+   *  worktree. The remote branch is untouched (see `deleteRemoteBranch`). */
   removeWorktree: (repoPath: string, branch: string, force: boolean) =>
     invoke<void>('remove_worktree', { repoPath, branch, force }),
+  /** Delete the branch on the remote (GitHub). No-op if it was never pushed. */
+  deleteRemoteBranch: (repoPath: string, branch: string) =>
+    invoke<void>('delete_remote_branch', { repoPath, branch }),
   /** Preview (`apply=false`) or perform (`apply=true`) a prune of merged/gone worktrees. */
   pruneWorktrees: (repoPath: string, apply: boolean) =>
     invoke<PruneCandidate[]>('prune_worktrees', { repoPath, apply }),
@@ -613,6 +617,9 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       }
       return undefined as T;
     }
+    case 'delete_remote_branch':
+      // No real git in the browser — nothing to delete.
+      return undefined as T;
     case 'prune_worktrees': {
       // Mock: treat clean, non-live worktrees as "gone" candidates.
       const repoPath = String(args?.repoPath ?? '');

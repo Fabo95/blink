@@ -12,7 +12,9 @@ export interface WorktreesView {
   /** Create (or attach) a worktree, then open its terminal. Rethrows so the caller can
    *  keep its prompt open on failure. */
   create: (branch: string) => Promise<void>;
-  remove: (branch: string, force: boolean) => Promise<void>;
+  /** Remove the worktree, its session, and its local branch; `deleteRemote` also deletes
+   *  the branch on GitHub. */
+  remove: (branch: string, force: boolean, deleteRemote: boolean) => Promise<void>;
   open: (branch: string) => Promise<void>;
   prunePreview: () => Promise<PruneCandidate[]>;
   pruneApply: () => Promise<void>;
@@ -68,11 +70,12 @@ export function useWorktrees(repoPath: string | null): WorktreesView {
   );
 
   const remove = useCallback(
-    async (branch: string, force: boolean) => {
+    async (branch: string, force: boolean, deleteRemote: boolean) => {
       if (!repoPath) return;
       setError('');
       try {
         await api.removeWorktree(repoPath, branch, force);
+        if (deleteRemote) await api.deleteRemoteBranch(repoPath, branch);
         await load(repoPath);
       } catch (e) {
         setError(errorMessage(e, 'Could not remove the worktree'));

@@ -1,5 +1,7 @@
+import { Check } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
+import { Kbd } from '@/components/ui/kbd';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { RepoDeletePopover } from '@/components/worktrees/RepoDeletePopover';
 import { WorktreeRow } from '@/components/worktrees/WorktreeRow';
@@ -39,7 +41,7 @@ export function WorktreesPage() {
       if (repos.repos.length === 0) return null;
       return current && repos.repos.some((repo) => repo.path === current)
         ? current
-        : repos.repos[0].path;
+        : repos.repos[0]?.path ?? "";
     });
   }, [repos.repos]);
 
@@ -61,6 +63,7 @@ export function WorktreesPage() {
   const [promptOpen, setPromptOpen] = useState(false);
   const [branch, setBranch] = useState('');
   const [removing, setRemoving] = useState<Worktree | null>(null);
+  const [deleteRemote, setDeleteRemote] = useState(false);
   const [prune, setPrune] = useState<PruneState>(PRUNE_CLOSED);
 
   const overlayOpen =
@@ -106,6 +109,7 @@ export function WorktreesPage() {
     if (!cursor.focused) return;
     const target = cursor.focused;
     closeOverlays();
+    setDeleteRemote(false);
     setRemoving(target);
   };
   const confirmRemove = async () => {
@@ -114,7 +118,7 @@ export function WorktreesPage() {
     if (cursor.focusedId === target.branch) cursor.advance();
     try {
       // Dirty worktrees need force; a clean one removes without it.
-      await wt.remove(target.branch, target.isDirty);
+      await wt.remove(target.branch, target.isDirty, deleteRemote);
       setRemoving(null);
     } catch {
       // Keep the confirm open; the hook shows the error.
@@ -191,6 +195,10 @@ export function WorktreesPage() {
   useShortcut('worktreeRemove.confirm', {
     enabled: removing !== null,
     callback: () => void confirmRemove(),
+  });
+  useShortcut('worktreeRemove.toggleRemote', {
+    enabled: removing !== null,
+    callback: () => setDeleteRemote((on) => !on),
   });
   useShortcut('worktreeRemove.cancel', {
     enabled: removing !== null,
@@ -283,10 +291,32 @@ export function WorktreesPage() {
               <PopoverContent align="start" sideOffset={8} className="w-72 p-3">
                 <p className="text-sm font-medium">Remove this worktree?</p>
                 <p className="mt-1 line-clamp-3 text-[11px] text-muted-foreground">
-                  “{removing.branch}” and its tmux session will be removed
-                  {removing.isDirty ? ', including its uncommitted changes' : ''}. The branch is
-                  kept.
+                  “{removing.branch}”, its tmux session, and its local branch will be removed
+                  {removing.isDirty ? ', including its uncommitted changes' : ''}.
+                  {deleteRemote ? ' The remote branch on GitHub is deleted too.' : ''}
                 </p>
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setDeleteRemote((on) => !on)}
+                  className="mt-2 flex w-full items-center gap-2 text-[11px]"
+                >
+                  <span
+                    className={cn(
+                      'flex size-3.5 shrink-0 items-center justify-center rounded border',
+                      deleteRemote
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-input',
+                    )}
+                  >
+                    {deleteRemote && <Check className="size-2.5" />}
+                  </span>
+                  <span className={deleteRemote ? 'text-foreground' : 'text-muted-foreground'}>
+                    Also delete the remote branch
+                  </span>
+                  <Kbd className="ml-auto">b</Kbd>
+                </button>
               </PopoverContent>
             )}
             {prune.open && (

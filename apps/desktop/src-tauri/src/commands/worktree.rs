@@ -30,7 +30,8 @@ pub fn add_worktree(
     worktree_service.add(&repo_service.find(&repo_path)?, branch)
 }
 
-/// Remove a worktree + its session. `force` removes a dirty/untracked worktree.
+/// Remove a worktree + its session + its local branch. `force` removes a dirty/untracked
+/// worktree. The remote branch is untouched (see `delete_remote_branch`).
 #[tauri::command]
 pub fn remove_worktree(
     repo_service: State<'_, RepoService>,
@@ -40,6 +41,18 @@ pub fn remove_worktree(
     force: bool,
 ) -> AppResult<()> {
     worktree_service.remove(&repo_service.find(&repo_path)?, branch, force)
+}
+
+/// Delete the branch on the remote (GitHub). Async — it reaches the network — so the UI
+/// stays responsive while it runs. A no-op when the branch was never pushed.
+#[tauri::command]
+pub async fn delete_remote_branch(
+    repo_service: State<'_, RepoService>,
+    worktree_service: State<'_, WorktreeService>,
+    repo_path: String,
+    branch: String,
+) -> AppResult<()> {
+    worktree_service.delete_remote_branch(&repo_service.find(&repo_path)?, &branch)
 }
 
 /// Preview (`apply = false`) or perform (`apply = true`) a prune of merged/gone worktrees.

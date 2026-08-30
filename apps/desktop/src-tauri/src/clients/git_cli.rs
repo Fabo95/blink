@@ -136,6 +136,17 @@ impl GitCli {
         self.run(repo, &["worktree", "prune"]).map(|_| ())
     }
 
+    /// Force-delete a local branch (`-D`, so an unmerged branch still goes). Safe to call
+    /// after the branch's worktree is removed — it's no longer checked out anywhere.
+    pub fn delete_branch(&self, repo: &Path, branch: &str) -> AppResult<()> {
+        self.run(repo, &["branch", "-D", branch]).map(|_| ())
+    }
+
+    /// Delete the branch on the remote (`git push origin --delete`) — reaches GitHub.
+    pub fn delete_remote_branch(&self, repo: &Path, branch: &str) -> AppResult<()> {
+        self.run(repo, &["push", "origin", "--delete", branch]).map(|_| ())
+    }
+
     pub fn list_worktrees(&self, repo: &Path) -> AppResult<Vec<WorktreeEntry>> {
         let out = self.run(repo, &["worktree", "list", "--porcelain"])?;
         let mut entries = Vec::new();

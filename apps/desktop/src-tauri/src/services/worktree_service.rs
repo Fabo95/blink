@@ -158,10 +158,11 @@ impl WorktreeService {
         })
     }
 
-    /// Remove a worktree + its tmux session, using the path git actually recorded. Handles
-    /// a worktree whose working-tree folder is already gone (prune clears the stale entry).
-    /// Without `force`, a git refusal on a still-present dirty worktree is surfaced so the
-    /// UI can re-confirm — never silently `rm`ed.
+    /// Remove a worktree + its tmux session + its **local** branch, using the path git
+    /// actually recorded. Handles a worktree whose working-tree folder is already gone
+    /// (prune clears the stale entry). Without `force`, a git refusal on a still-present
+    /// dirty worktree is surfaced so the UI can re-confirm — never silently `rm`ed. The
+    /// remote branch is left alone (see [`delete_remote_branch`]).
     pub fn remove(&self, repo: &ManagedRepo, branch: String, force: bool) -> AppResult<()> {
         let root = Path::new(&repo.path);
         let tmux_session = tmux_session_name(&repo.name, &branch);
@@ -183,6 +184,21 @@ impl WorktreeService {
         // Clears stale entries whose working tree is gone (this one, and any other orphans).
         let _ = self.git_cli.prune_worktrees(root);
         self.tmux_cli.kill_session(&tmux_session);
+        // The worktree is gone, so the branch is no longer checked out — delete it. Guard on
+        // existence so a detached worktree (no branch) isn't an error.
+        if self.git_cli.has_local_branch(root, &branch) {
+            self.git_cli.delete_branch(root, &branch)?;
+        }
+        Ok(())
+    }
+
+    /// Delete the branch on the remote (GitHub) — an explicit, destructive opt-in, separate
+    /// from removing the worktree. A no-op when the branch was never pushed.
+    pub fn delete_remote_branch(&self, repo: &ManagedRepo, branch: &str) -> AppResult<()> {
+        let root = Path::new(&repo.path);
+        if self.git_cli.has_remote_branch(root, branch) {
+            self.git_cli.delete_remote_branch(root, branch)?;
+        }
         Ok(())
     }
 
