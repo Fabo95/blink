@@ -2,11 +2,14 @@ import type { AuthResult } from '@/generated/AuthResult';
 import type { AuthUser } from '@/generated/AuthUser';
 import type { CaptureDraft } from '@/generated/CaptureDraft';
 import type { CaptureSource } from '@/generated/CaptureSource';
+import type { ManagedRepo } from '@/generated/ManagedRepo';
 import type { NewTask } from '@/generated/NewTask';
 import type { NewTaskGroup } from '@/generated/NewTaskGroup';
+import type { PruneCandidate } from '@/generated/PruneCandidate';
 import type { Task } from '@/generated/Task';
 import type { TaskGroup } from '@/generated/TaskGroup';
 import type { VaultStatus } from '@/generated/VaultStatus';
+import type { Worktree } from '@/generated/Worktree';
 
 /**
  * Typed façade over the Tauri IPC boundary. Each method maps to a `#[tauri::command]`
@@ -83,8 +86,9 @@ export const api = {
   dismissCopyCapture: () => invoke<void>('dismiss_copy_capture'),
   /** Close the manual-capture panel and return focus to the previous app. */
   dismissManualCapture: () => invoke<void>('dismiss_manual_capture'),
-  /** Whether a stored API key enables the AI features (gates the UI). */
-  aiStatus: () => invoke<boolean>('ai_status'),
+  /** A masked preview of the stored key (`sk-…YxkA`), or `null` when none is set. The
+   *  AI features gate on this being present; the full key never enters the webview. */
+  aiStatus: () => invoke<string | null>('ai_status'),
   /** Test an API key against the provider and, only if it works, store it in the
    *  keychain. Rejects (without saving) when the connection test fails. */
   setAiApiKey: (key: string) => invoke<void>('set_ai_api_key', { key }),
@@ -115,6 +119,26 @@ export const api = {
   isVaultUnlocked: () => invoke<boolean>('is_vault_unlocked'),
   /** Lock the vault (sign out of sync) — forgets the cached VMK. */
   lockVault: () => invoke<void>('lock_vault'),
+  /** The git repos the worktree manager tracks (curated in Settings). */
+  listManagedRepos: () => invoke<ManagedRepo[]>('list_managed_repos'),
+  /** Validate a path is a git repo and add it to the managed list; returns the new list. */
+  addManagedRepo: (path: string) => invoke<ManagedRepo[]>('add_managed_repo', { path }),
+  /** Drop a repo from the managed list; returns the new list. */
+  removeManagedRepo: (path: string) => invoke<ManagedRepo[]>('remove_managed_repo', { path }),
+  /** The linked worktrees of a managed repo (with dirty + tmux-session state). */
+  listWorktrees: (repoPath: string) => invoke<Worktree[]>('list_worktrees', { repoPath }),
+  /** Create (or attach) a worktree for `branch` and ensure its tmux/Claude session. */
+  addWorktree: (repoPath: string, branch: string) =>
+    invoke<Worktree>('add_worktree', { repoPath, branch }),
+  /** Remove a worktree + its session. `force` removes a dirty/untracked worktree. */
+  removeWorktree: (repoPath: string, branch: string, force: boolean) =>
+    invoke<void>('remove_worktree', { repoPath, branch, force }),
+  /** Preview (`apply=false`) or perform (`apply=true`) a prune of merged/gone worktrees. */
+  pruneWorktrees: (repoPath: string, apply: boolean) =>
+    invoke<PruneCandidate[]>('prune_worktrees', { repoPath, apply }),
+  /** Open a terminal attached to the worktree's tmux/Claude session (creating it if needed). */
+  openWorktree: (repoPath: string, branch: string) =>
+    invoke<void>('open_worktree', { repoPath, branch }),
 };
 
 // --- Browser fallback -------------------------------------------------------
@@ -237,6 +261,30 @@ let mockSession: AuthUser | null = null;
 let mockVaultUnlocked = false;
 // Browser-only AI key — no real provider call; any non-empty key "connects".
 let mockAiKey: string | null = null;
+// Browser-only worktree state — no real git/tmux; enough to develop the Worktrees page.
+let mockManagedRepos: ManagedRepo[] = [
+  { name: 'blink', path: '/Users/you/repositories/blink', baseBranch: null },
+];
+const mockWorktrees: Record<string, Worktree[]> = {
+  '/Users/you/repositories/blink': [
+    {
+      repo: '/Users/you/repositories/blink',
+      branch: 'feat/sync-retry',
+      path: '/Users/you/repositories/worktrees/blink/feat/sync-retry',
+      isMain: false,
+      isDirty: true,
+      sessionLive: true,
+    },
+    {
+      repo: '/Users/you/repositories/blink',
+      branch: 'fix/dlp-rules',
+      path: '/Users/you/repositories/worktrees/blink/fix/dlp-rules',
+      isMain: false,
+      isDirty: false,
+      sessionLive: false,
+    },
+  ],
+};
 
 async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   switch (cmd) {
@@ -408,7 +456,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
     case 'dismiss_manual_capture':
       return undefined as T;
     case 'ai_status':
-      return (mockAiKey !== null) as T;
+      return (mockAiKey ? maskKey(mockAiKey) : null) as T;
     case 'set_ai_api_key': {
       const key = String(args?.key ?? '').trim();
       if (!key) throw new Error('API key is empty');
@@ -473,9 +521,86 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
     case 'lock_vault':
       mockVaultUnlocked = false;
       return undefined as T;
+    case 'list_managed_repos':
+      return [...mockManagedRepos] as T;
+    case 'add_managed_repo': {
+      const path = String(args?.path ?? '').trim();
+      if (!path) throw new Error('path is empty');
+      if (!mockManagedRepos.some((r) => r.path === path)) {
+        const name = path.split('/').filter(Boolean).pop() ?? path;
+        mockManagedRepos.push({ name, path, baseBranch: null });
+        mockWorktrees[path] ??= [];
+      }
+      return [...mockManagedRepos] as T;
+    }
+    case 'remove_managed_repo': {
+      const path = String(args?.path ?? '');
+      mockManagedRepos = mockManagedRepos.filter((r) => r.path !== path);
+      return [...mockManagedRepos] as T;
+    }
+    case 'list_worktrees':
+      return [...(mockWorktrees[String(args?.repoPath ?? '')] ?? [])] as T;
+    case 'add_worktree': {
+      const repoPath = String(args?.repoPath ?? '');
+      const branch = String(args?.branch ?? '').trim();
+      if (!branch) throw new Error('branch is empty');
+      const list = (mockWorktrees[repoPath] ??= []);
+      let worktree = list.find((w) => w.branch === branch);
+      if (!worktree) {
+        worktree = {
+          repo: repoPath,
+          branch,
+          path: `/Users/you/repositories/worktrees/${repoPath.split('/').pop()}/${branch}`,
+          isMain: false,
+          isDirty: false,
+          sessionLive: true,
+        };
+        list.push(worktree);
+      } else {
+        worktree.sessionLive = true;
+      }
+      return worktree as T;
+    }
+    case 'remove_worktree': {
+      const repoPath = String(args?.repoPath ?? '');
+      const branch = String(args?.branch ?? '');
+      const list = mockWorktrees[repoPath];
+      if (list) {
+        const idx = list.findIndex((w) => w.branch === branch);
+        if (idx >= 0) list.splice(idx, 1);
+      }
+      return undefined as T;
+    }
+    case 'prune_worktrees': {
+      // Mock: treat clean, non-live worktrees as "gone" candidates.
+      const repoPath = String(args?.repoPath ?? '');
+      const apply = args?.apply === true;
+      const list = mockWorktrees[repoPath] ?? [];
+      const candidates: PruneCandidate[] = list
+        .filter((w) => !w.isMain && !w.isDirty && !w.sessionLive)
+        .map((w) => ({ branch: w.branch, reason: 'upstream gone' }));
+      if (apply) {
+        mockWorktrees[repoPath] = list.filter(
+          (w) => !candidates.some((c) => c.branch === w.branch),
+        );
+      }
+      return candidates as T;
+    }
+    case 'open_worktree': {
+      const list = mockWorktrees[String(args?.repoPath ?? '')];
+      const worktree = list?.find((w) => w.branch === String(args?.branch ?? ''));
+      if (worktree) worktree.sessionLive = true;
+      return undefined as T;
+    }
     default:
       throw new Error(`Unknown command: ${cmd}`);
   }
+}
+
+// Mirror the native `mask_key`: first three + last four, else a bare prefix.
+function maskKey(key: string): string {
+  const k = key.trim();
+  return k.length <= 8 ? 'sk-…' : `${k.slice(0, 3)}…${k.slice(-4)}`;
 }
 
 function mockSanitize(text: string): { clean: string; count: number } {

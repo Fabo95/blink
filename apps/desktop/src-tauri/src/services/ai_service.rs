@@ -3,12 +3,17 @@
 //! extracts the single action item. Bring-your-own-key: the key is set at runtime
 //! after a connection test and never leaves the native layer.
 
+use reqwest::Response;
 use serde::{Deserialize, Serialize};
 
 use crate::clients::openai_client::OpenAiClient;
 use crate::core::error::{AppError, AppResult};
 use crate::core::models::Task;
 use crate::services::ai_key_service::AiKeyService;
+
+/// Map a failed OpenAI request to a clean, user-facing message — never the raw JSON
+/// body. A dropped connection reads as a network problem.
+const NETWORK_ERROR: &str = "Couldn't reach OpenAI — check your internet connection.";
 
 const SYSTEM_PROMPT: &str = "You turn rough notes into a single action item: one short, clear \
 imperative sentence starting with a verb. Keep only what's needed to act on it, drop everything \
@@ -32,9 +37,11 @@ impl AiService {
         Self { ai_key_service }
     }
 
-    /// Whether a key is stored — the frontend gates every AI action on this.
-    pub fn is_enabled(&self) -> AppResult<bool> {
-        Ok(self.ai_key_service.read()?.is_some())
+    /// A masked preview of the stored key (`sk-…YxkA`), or `None` when none is set.
+    /// The frontend gates every AI action on this being present and shows it in
+    /// settings — the full key never leaves the native layer.
+    pub fn key_hint(&self) -> AppResult<Option<String>> {
+        Ok(self.ai_key_service.read()?.as_deref().map(mask_key))
     }
 
     /// Validate a candidate key against the API without storing it. `Ok(())` means it
@@ -44,14 +51,12 @@ impl AiService {
         let response = client
             .list_models()
             .await
-            .map_err(|e| AppError::Ai(format!("request failed: {e}")))?;
+            .map_err(|_| AppError::Ai(NETWORK_ERROR.to_string()))?;
 
         if response.status().is_success() {
             return Ok(());
         }
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        Err(AppError::Ai(format!("OpenAI returned {status}: {body}")))
+        Err(response_error(response).await)
     }
 
     /// Test a key, and store it in the keychain only if the test passes — so a bad
@@ -136,12 +141,10 @@ impl AiService {
         let response = openai_client
             .chat_completion(&request)
             .await
-            .map_err(|e| AppError::Ai(format!("request failed: {e}")))?;
+            .map_err(|_| AppError::Ai(NETWORK_ERROR.to_string()))?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(AppError::Ai(format!("OpenAI returned {status}: {body}")));
+            return Err(response_error(response).await);
         }
 
         let completion: ChatResponse = response
@@ -184,4 +187,51 @@ struct Choice {
 #[derive(Deserialize)]
 struct ResponseMessage {
     content: String,
+}
+
+/// A masked preview of an API key (`sk-…YxkA`) — first three + last four characters,
+/// enough to recognise it without exposing it. Short/odd values collapse to `sk-…`.
+fn mask_key(key: &str) -> String {
+    let chars: Vec<char> = key.trim().chars().collect();
+    if chars.len() <= 8 {
+        return "sk-…".to_string();
+    }
+    let prefix: String = chars[..3].iter().collect();
+    let suffix: String = chars[chars.len() - 4..].iter().collect();
+    format!("{prefix}…{suffix}")
+}
+
+/// Turn a non-2xx OpenAI response into a clean, actionable error — never the raw JSON.
+/// Known statuses get a tailored message; anything else surfaces OpenAI's own error
+/// text when we can parse it, otherwise a bare status.
+async fn response_error(response: Response) -> AppError {
+    let message = match response.status().as_u16() {
+        401 => "That API key isn't valid — double-check it and try again.".to_string(),
+        429 => {
+            "OpenAI is rate-limiting this key or it's out of quota — check your plan and billing."
+                .to_string()
+        }
+        403 => "This key isn't allowed to use the requested model.".to_string(),
+        code if code >= 500 => {
+            "OpenAI is having trouble right now — try again in a moment.".to_string()
+        }
+        code => response
+            .json::<ApiErrorResponse>()
+            .await
+            .ok()
+            .map(|parsed| parsed.error.message)
+            .filter(|m| !m.is_empty())
+            .unwrap_or_else(|| format!("OpenAI request failed ({code}).")),
+    };
+    AppError::Ai(message)
+}
+
+#[derive(Deserialize)]
+struct ApiErrorResponse {
+    error: ApiErrorDetail,
+}
+
+#[derive(Deserialize)]
+struct ApiErrorDetail {
+    message: String,
 }

@@ -10,3 +10,4 @@ pub mod shortcut;
 pub mod sync;
 pub mod task_groups;
 pub mod tasks;
+pub mod worktree;

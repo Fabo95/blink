@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Header } from '@/components/Header';
 import { HintRow } from '@/components/HintRow';
+import { type Page, PageNav } from '@/components/PageNav';
+import { SettingsPage } from '@/components/SettingsPage';
 import { TaskList } from '@/components/TaskList';
+import { WorktreesPage } from '@/components/WorktreesPage';
 import type { Task } from '@/generated/Task';
 import { useSession } from '@/hooks/useSession';
 import { api, isTauri } from '@/lib/api';
@@ -12,6 +15,7 @@ import { Hints } from '@/lib/shortcuts/Hints';
 export function Inbox() {
   const { user, signOut } = useSession();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [page, setPage] = useState<Page>('inbox');
 
   const refresh = useCallback(async () => {
     setTasks(await api.listTasks());
@@ -41,8 +45,15 @@ export function Inbox() {
   return (
     <div className="mx-auto flex h-full max-w-3xl flex-col">
       <Header account={user} onSignOut={signOut} />
+      <PageNav page={page} onSelect={setPage} />
       <main className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-6">
-        <TaskList tasks={tasks} onChanged={refresh} />
+        {page === 'settings' ? (
+          <SettingsPage />
+        ) : page === 'worktrees' ? (
+          <WorktreesPage />
+        ) : (
+          <TaskList tasks={tasks} onChanged={refresh} />
+        )}
       </main>
       {/* One statusline: the most specific shortcuts for where you are, plus the always-on
           `c` help and vim toggle. */}

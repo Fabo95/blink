@@ -256,8 +256,11 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   (one per window, like `ShortcutProvider`) tracks only whether one is set via `ai_status`, and
   **every AI action gates on it** — `editor.improve`, `capture.improve`, `task.prompt` all add
   `&& aiEnabled`, so with no key the shortcuts don't fire and their chips drop from the statusline.
-  The key is entered in `AiCard` (inbox, beside `CaptureCard`): a masked field where `⌘↵`
-  (`ai.saveKey`) tests-then-saves and `⌘⌫` (`ai.clearKey`) removes — the same no-buttons pattern.
+  The key is entered in `AiCard`, a section of the **Settings page** (`SettingsPage`, which
+  replaces the inbox — opened from the header dropdown beside Sign out, `Esc`/`settings.close`
+  leaves): a masked field where `⌘↵` (`ai.saveKey`) tests-then-saves and `⌘⌫` (`ai.clearKey`)
+  removes. The header dropdown is the one click affordance (like Sign out); the page is otherwise
+  keyboard-first.
 - **macOS specifics**: input simulation and window ops must run on the main thread
   (`run_on_main_thread`). Transparency needs `macOSPrivateApi`. The capture window uses native
   `hudWindow` vibrancy; the main window has an overlay title bar (`titleBarStyle: Overlay`).

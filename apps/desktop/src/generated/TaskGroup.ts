@@ -3,4 +3,4 @@
 /**
  * A user-defined task group (e.g. "Work", "Sport") — a task belongs to at most one.
  */
-export type TaskGroup = { id: string, name: string, createdAt: string, updatedAt: string, };
+export type TaskGroup = { id: string, name: string, context: string | null, createdAt: string, updatedAt: string, };

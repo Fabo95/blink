@@ -9,7 +9,9 @@ use std::sync::Arc;
 
 use tauri::Manager;
 
+use crate::clients::git_cli::GitCli;
 use crate::clients::server_client::ServerClient;
+use crate::clients::tmux_cli::TmuxCli;
 use crate::core::state::{PendingCapture, PendingSource};
 use crate::core::sync_channel;
 use crate::repository::{Db, Repository};
@@ -25,6 +27,7 @@ use crate::services::sync_service::SyncService;
 use crate::services::task_group_service::TaskGroupService;
 use crate::services::task_service::TaskService;
 use crate::services::vault_service::VaultService;
+use crate::services::worktree_service::WorktreeService;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -80,6 +83,11 @@ pub fn run() {
                 sync_sender.clone(),
             ));
             app.manage(ShortcutService::new(repository.settings.clone()));
+            app.manage(WorktreeService::new(
+                GitCli::new(),
+                TmuxCli::new(),
+                repository.settings.clone(),
+            ));
             app.manage(vault_service.clone());
             let sync_service = Arc::new(SyncService::new(
                 ServerClient::new(),
@@ -132,6 +140,14 @@ pub fn run() {
             commands::sync::sync_now,
             commands::sync::is_vault_unlocked,
             commands::sync::lock_vault,
+            commands::worktree::list_managed_repos,
+            commands::worktree::add_managed_repo,
+            commands::worktree::remove_managed_repo,
+            commands::worktree::list_worktrees,
+            commands::worktree::add_worktree,
+            commands::worktree::remove_worktree,
+            commands::worktree::prune_worktrees,
+            commands::worktree::open_worktree,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Blink")

@@ -1,6 +1,5 @@
 import { Inbox } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { AiCard } from '@/components/AiCard';
 import { CaptureCard } from '@/components/CaptureCard';
 import { ArchivePage } from '@/components/tasks/ArchivePage';
 import { GroupFilterBar } from '@/components/tasks/GroupFilterBar';
@@ -280,7 +279,6 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
       ) : (
         <>
           <CaptureCard />
-          <AiCard />
           <GroupFilterBar view={taskGroups} />
           <TaskSection title="Inbox" count={active.length}>
             {active.length === 0 ? (

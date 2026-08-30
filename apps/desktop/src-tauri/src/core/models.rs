@@ -143,3 +143,44 @@ pub struct NewTaskGroup {
     /// Optional free-text context, folded into AI prompts for the group's tasks.
     pub context: Option<String>,
 }
+
+/// A git repository the worktree manager tracks. Persisted (as JSON) in `settings`,
+/// not derived from disk — the user curates the list in the Settings page.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedRepo {
+    /// Display name — the repo directory's basename.
+    pub name: String,
+    /// Absolute path to the repo's main worktree.
+    pub path: String,
+    /// Ref new branches fork from; `None` = auto-detect (origin/HEAD → main|master → HEAD).
+    pub base_branch: Option<String>,
+}
+
+/// One linked worktree of a managed repo, as shown on the Worktrees page.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct Worktree {
+    /// The managed repo's path this worktree belongs to.
+    pub repo: String,
+    pub branch: String,
+    pub path: String,
+    /// The repo's main worktree (never removable from the UI).
+    pub is_main: bool,
+    /// Has uncommitted changes.
+    pub is_dirty: bool,
+    /// A tmux session for this worktree is currently running.
+    pub session_live: bool,
+}
+
+/// A worktree `prune` would remove, with the reason it qualifies. Shown in the
+/// prune confirmation before anything is deleted.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct PruneCandidate {
+    pub branch: String,
+    pub reason: String,
+}

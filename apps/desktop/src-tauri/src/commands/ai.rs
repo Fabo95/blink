@@ -5,10 +5,11 @@ use crate::services::ai_service::AiService;
 use crate::services::task_group_service::TaskGroupService;
 use crate::services::task_service::TaskService;
 
-/// Whether a stored API key enables the AI features (gates the UI).
+/// A masked preview of the stored key (`sk-…YxkA`), or `None` when none is set. The
+/// webview gates the AI features on this being present and shows it in settings.
 #[tauri::command]
-pub fn ai_status(ai_service: State<'_, AiService>) -> AppResult<bool> {
-    ai_service.is_enabled()
+pub fn ai_status(ai_service: State<'_, AiService>) -> AppResult<Option<String>> {
+    ai_service.key_hint()
 }
 
 /// Validate an API key and, only if it works, store it in the keychain. Errors when

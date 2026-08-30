@@ -46,6 +46,7 @@ const HINTS = {
   a: { keys: 'a', label: 'archive' },
   n: { keys: 'n', label: 'new' },
   r: { keys: 'r', label: 'edit' },
+  x: { keys: 'x', label: 'prune' },
 } satisfies Record<string, Hint>;
 
 /**
@@ -332,6 +333,101 @@ export const SHORTCUTS = {
     opts: { enableOnFormTags: true },
   },
 
+  // ── worktrees: the Worktrees page (replaces the inbox; own list levels) ─────────────
+  // ←→/hl switches the active repo (level 0, like the inbox's filter cycling).
+  'worktree.switchPrev': {
+    keys: 'left, h',
+    hint: HINTS['left, h'],
+    level: 0,
+    describe: 'Switch repository',
+    order: 15,
+  },
+  'worktree.switchNext': { keys: 'right, l', hint: null, level: 0, order: 15 },
+  'worktree.new': {
+    keys: 'n',
+    hint: HINTS.n,
+    level: 1,
+    describe: 'Create a worktree',
+    order: 53,
+  },
+  'worktree.prune': {
+    keys: 'x',
+    hint: HINTS.x,
+    level: 1,
+    describe: 'Prune merged or gone worktrees',
+    order: 56,
+  },
+  'worktree.open': {
+    keys: 'o',
+    hint: HINTS.o,
+    level: 2,
+    describe: 'Open the worktree in a terminal (Claude)',
+    order: 31,
+  },
+  'worktree.remove': {
+    keys: 'backspace, delete, d',
+    hint: HINTS['backspace, delete, d'],
+    level: 2,
+    describe: 'Remove the worktree',
+    order: 32,
+  },
+  // New-worktree branch prompt (single field → no ⇥ wrap), remove confirm, prune confirm.
+  'worktreeNew.submit': {
+    keys: 'mod+enter',
+    hint: HINTS['mod+enter'],
+    level: 3,
+    order: 20,
+    opts: { enableOnFormTags: true },
+  },
+  'worktreeNew.cancel': {
+    keys: 'escape',
+    hint: HINTS.escape,
+    level: 3,
+    order: 90,
+    opts: { enableOnFormTags: true },
+  },
+  'worktreeRemove.confirm': {
+    keys: 'mod+enter',
+    hint: HINTS['mod+enter'],
+    level: 3,
+    order: 20,
+  },
+  'worktreeRemove.cancel': {
+    keys: 'escape',
+    hint: HINTS.escape,
+    level: 3,
+    order: 90,
+  },
+  'worktreePrune.confirm': {
+    keys: 'mod+enter',
+    hint: HINTS['mod+enter'],
+    level: 3,
+    order: 20,
+  },
+  'worktreePrune.cancel': {
+    keys: 'escape',
+    hint: HINTS.escape,
+    level: 3,
+    order: 90,
+  },
+  // Managed-repo list in Settings: add via the path field, remove the selected repo.
+  'worktreeRepos.add': {
+    keys: 'mod+enter',
+    hint: HINTS['mod+enter'],
+    level: 3,
+    describe: 'Add the repository',
+    order: 20,
+    opts: { enableOnFormTags: true },
+  },
+  'worktreeRepos.remove': {
+    keys: 'mod+backspace, mod+delete',
+    hint: HINTS['mod+backspace, mod+delete'],
+    level: 3,
+    describe: 'Stop tracking the selected repository',
+    order: 30,
+    opts: { enableOnFormTags: true },
+  },
+
   // ── auth: the login screens (own screen → own bar) ──────────────────────────────────
   'auth.submit': {
     keys: 'mod+enter',
@@ -427,5 +523,15 @@ export const CHEATSHEET: { title: string; ids: ShortcutId[] }[] = [
   {
     title: 'Editing a task',
     ids: ['editor.field', 'editor.improve', 'editor.save', 'editor.cancel'],
+  },
+  {
+    title: 'Worktrees',
+    ids: [
+      'worktree.switchPrev',
+      'worktree.new',
+      'worktree.open',
+      'worktree.remove',
+      'worktree.prune',
+    ],
   },
 ];
