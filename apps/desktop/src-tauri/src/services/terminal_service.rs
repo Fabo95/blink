@@ -10,10 +10,12 @@
 //! points it at its own `--settings` file so the attention hooks fire (see
 //! [`crate::services::hook_service`]).
 
+use std::collections::HashSet;
 use std::path::Path;
 
 use crate::clients::tmux_cli::TmuxCli;
 use crate::core::error::{AppError, AppResult};
+use crate::core::models::TerminalOption;
 use crate::platform::os;
 use crate::repository::SettingsRepository;
 
@@ -29,6 +31,20 @@ const DEFAULT_TERMINAL_COMMAND: &str = "alacritty -e tmux attach -t {session}";
 
 /// The name of the tmux window Claude runs in.
 const CLAUDE_WINDOW: &str = "claude";
+
+/// Known CLI-first terminals, as `(display name, launcher binary, command template)`. Blink
+/// offers the ones whose launcher is found on the login-shell PATH as ready-to-pick options
+/// in Settings. Each template attaches to the tmux session (`{session}`) using that
+/// terminal's own run-a-command syntax — they are **not** uniform like editors. GUI-only
+/// terminals (Terminal.app, iTerm, Warp) are intentionally absent: they have no PATH binary
+/// and need osascript, which mangles the launch command (the very reason the default is
+/// Alacritty). The Custom field remains the escape hatch for those.
+const TERMINAL_CATALOG: &[(&str, &str, &str)] = &[
+    ("Alacritty", "alacritty", "alacritty -e tmux attach -t {session}"),
+    ("kitty", "kitty", "kitty tmux attach -t {session}"),
+    ("WezTerm", "wezterm", "wezterm start -- tmux attach -t {session}"),
+    ("Ghostty", "ghostty", "ghostty -e tmux attach -t {session}"),
+];
 
 #[derive(Clone)]
 pub struct TerminalService {
@@ -70,6 +86,22 @@ impl TerminalService {
             Some(command) => self.settings_repository.set(TERMINAL_COMMAND_KEY, &command),
             None => self.settings_repository.remove(TERMINAL_COMMAND_KEY),
         }
+    }
+
+    /// The terminals from [`TERMINAL_CATALOG`] whose launcher resolves on the login-shell
+    /// PATH — offered as one-click choices in Settings, each with its own attach-command
+    /// template.
+    pub fn list_terminals(&self) -> Vec<TerminalOption> {
+        let bins: Vec<&str> = TERMINAL_CATALOG.iter().map(|(_, bin, _)| *bin).collect();
+        let found: HashSet<String> = crate::core::paths::resolve_on_login_path(&bins);
+        TERMINAL_CATALOG
+            .iter()
+            .filter(|(_, bin, _)| found.contains(*bin))
+            .map(|(name, _, command)| TerminalOption {
+                name: (*name).to_string(),
+                command: (*command).to_string(),
+            })
+            .collect()
     }
 
     // ── sessions ──────────────────────────────────────────────────────────────────────

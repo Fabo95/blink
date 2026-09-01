@@ -5,6 +5,7 @@
 use tauri::State;
 
 use crate::core::error::AppResult;
+use crate::core::models::TerminalOption;
 use crate::services::repo_service::RepoService;
 use crate::services::terminal_service::TerminalService;
 use crate::services::worktree_service::WorktreeService;
@@ -28,6 +29,14 @@ pub fn open_worktree_in_terminal(
 #[tauri::command]
 pub fn get_worktree_terminal(terminal_service: State<'_, TerminalService>) -> AppResult<String> {
     terminal_service.command()
+}
+
+/// The installed terminals Blink can offer as one-click choices in Settings.
+#[tauri::command]
+pub fn list_terminals(
+    terminal_service: State<'_, TerminalService>,
+) -> AppResult<Vec<TerminalOption>> {
+    Ok(terminal_service.list_terminals())
 }
 
 /// Set (or clear, back to the default) the terminal launch command.

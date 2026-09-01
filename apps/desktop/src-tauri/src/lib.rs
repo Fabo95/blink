@@ -191,10 +191,11 @@ pub fn run() {
             commands::terminal::open_worktree_in_terminal,
             commands::terminal::get_worktree_terminal,
             commands::terminal::set_worktree_terminal,
+            commands::terminal::list_terminals,
             commands::editor::open_worktree_in_editor,
             commands::editor::get_worktree_editor,
             commands::editor::set_worktree_editor,
-            commands::editor::list_worktree_editors,
+            commands::editor::list_editors,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Blink")

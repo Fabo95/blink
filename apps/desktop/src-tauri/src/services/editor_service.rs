@@ -64,30 +64,11 @@ impl EditorService {
     }
 
     /// The editors from [`EDITOR_CATALOG`] whose launcher resolves on the login-shell PATH —
-    /// offered as one-click choices in Settings. Probed in a single shell so JetBrains
-    /// Toolbox / Homebrew shims are seen even under Finder's minimal PATH.
+    /// offered as one-click choices in Settings. Detected via the shared login-shell probe so
+    /// JetBrains Toolbox / Homebrew shims are seen even under Finder's minimal PATH.
     pub fn list_editors(&self) -> Vec<EditorOption> {
-        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-        // One invocation prints each launcher that resolves; don't gate on exit status — it
-        // reflects only the last `command -v`, which is non-zero whenever that one is absent.
-        let script = EDITOR_CATALOG
-            .iter()
-            .map(|(_, bin)| format!("command -v {bin} >/dev/null 2>&1 && echo {bin}"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        let found: HashSet<String> = std::process::Command::new(&shell)
-            .arg("-lc")
-            .arg(&script)
-            .output()
-            .ok()
-            .map(|out| {
-                String::from_utf8_lossy(&out.stdout)
-                    .lines()
-                    .map(|l| l.trim().to_string())
-                    .filter(|l| !l.is_empty())
-                    .collect()
-            })
-            .unwrap_or_default();
+        let bins: Vec<&str> = EDITOR_CATALOG.iter().map(|(_, bin)| *bin).collect();
+        let found: HashSet<String> = crate::core::paths::resolve_on_login_path(&bins);
         EDITOR_CATALOG
             .iter()
             .filter(|(_, bin)| found.contains(*bin))

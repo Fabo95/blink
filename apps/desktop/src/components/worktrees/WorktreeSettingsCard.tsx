@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import type { EditorOption } from '@/generated/EditorOption';
+import type { TerminalOption } from '@/generated/TerminalOption';
 import { api } from '@/lib/api';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { cn, errorMessage } from '@/lib/utils';
@@ -10,15 +11,17 @@ import { cn, errorMessage } from '@/lib/utils';
 /**
  * Worktree behaviour settings — the "worktree stuff" config. **Location** (where worktrees
  * are created) is a native folder picker: click to choose, ✕ to reset to the default. The
- * **Terminal** command (how a worktree opens) is free text saved on ⌘↵. The **Editor** (how
- * `e` opens a worktree's folder) is picked from the editors Blink detects — click one — with
- * a "Custom…" pill that falls back to a free-text command for anything unlisted.
+ * **Terminal** (how a worktree opens) and the **Editor** (how `e` opens its folder) are each
+ * picked from the terminals/editors Blink detects — click one — with a "Custom…" pill that
+ * falls back to a free-text command for anything unlisted.
  */
 export function WorktreeSettingsCard() {
   // null = use the derived default (a worktrees/ folder beside each repo).
   const [baseDir, setBaseDir] = useState<string | null>(null);
 
   const [terminal, setTerminal] = useState('');
+  const [terminals, setTerminals] = useState<TerminalOption[]>([]);
+  const [customTerminal, setCustomTerminal] = useState(false);
   const [terminalFocused, setTerminalFocused] = useState(false);
   const [savingTerminal, setSavingTerminal] = useState(false);
 
@@ -34,15 +37,20 @@ export function WorktreeSettingsCard() {
     void (async () => {
       try {
         setBaseDir(await api.getWorktreeBaseDir());
-        setTerminal(await api.getWorktreeTerminal());
-        const [command, detected] = await Promise.all([
-          api.getWorktreeEditor(),
-          api.listWorktreeEditors(),
-        ]);
-        setEditor(command);
-        setEditors(detected);
+        const [termCommand, detectedTerminals, editorCommand, detectedEditors] =
+          await Promise.all([
+            api.getWorktreeTerminal(),
+            api.listTerminals(),
+            api.getWorktreeEditor(),
+            api.listEditors(),
+          ]);
+        setTerminal(termCommand);
+        setTerminals(detectedTerminals);
+        setEditor(editorCommand);
+        setEditors(detectedEditors);
         // Fall back to the free-text field only when the current command isn't one we detect.
-        setCustomEditor(!detected.some((o) => o.command === command));
+        setCustomTerminal(!detectedTerminals.some((o) => o.command === termCommand));
+        setCustomEditor(!detectedEditors.some((o) => o.command === editorCommand));
       } catch (e) {
         setError(errorMessage(e, 'Could not load worktree settings'));
       }
@@ -97,6 +105,18 @@ export function WorktreeSettingsCard() {
       setError(errorMessage(e, 'Could not save the editor command'));
     } finally {
       setSavingEditor(false);
+    }
+  };
+
+  // Picking a detected terminal saves its command immediately — no typing, no ⌘↵.
+  const selectTerminal = async (command: string) => {
+    setCustomTerminal(false);
+    setTerminal(command);
+    setError('');
+    try {
+      await api.setWorktreeTerminal(command);
+    } catch (e) {
+      setError(errorMessage(e, 'Could not save the terminal'));
     }
   };
 
@@ -172,21 +192,40 @@ export function WorktreeSettingsCard() {
           <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             Terminal
           </p>
-          <div className="flex h-9 items-center gap-2 rounded-md border border-input bg-transparent px-3 shadow-sm transition-colors focus-within:ring-1 focus-within:ring-ring">
-            <TerminalIcon className="size-3.5 shrink-0 text-muted-foreground" />
-            <Input
-              value={terminal}
-              onChange={(e) => setTerminal(e.target.value)}
-              onFocus={() => setTerminalFocused(true)}
-              onBlur={() => setTerminalFocused(false)}
-              placeholder="alacritty -e tmux attach -t {session}"
-              className="h-auto min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-[13px] shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+          <div className="flex flex-wrap items-center gap-1.5">
+            {terminals.map((option) => (
+              <Pill
+                key={option.command}
+                label={option.name}
+                selected={!customTerminal && terminal === option.command}
+                onSelect={() => void selectTerminal(option.command)}
+              />
+            ))}
+            <Pill
+              label="Custom…"
+              selected={customTerminal}
+              onSelect={() => setCustomTerminal(true)}
             />
           </div>
+          {customTerminal && (
+            <div className="flex h-9 items-center gap-2 rounded-md border border-input bg-transparent px-3 shadow-sm transition-colors focus-within:ring-1 focus-within:ring-ring">
+              <TerminalIcon className="size-3.5 shrink-0 text-muted-foreground" />
+              <Input
+                value={terminal}
+                onChange={(e) => setTerminal(e.target.value)}
+                onFocus={() => setTerminalFocused(true)}
+                onBlur={() => setTerminalFocused(false)}
+                placeholder="alacritty -e tmux attach -t {session}"
+                className="h-auto min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-[13px] shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+              />
+            </div>
+          )}
           <p className="text-[11px] text-muted-foreground">
             {savingTerminal
               ? 'Saving…'
-              : 'Command that opens a worktree. {session} is the tmux session; empty resets to the default.'}
+              : customTerminal
+                ? 'Command that opens a worktree. {session} is the tmux session; ⌘↵ saves.'
+                : 'Which terminal a worktree opens in (running Claude via tmux).'}
           </p>
         </div>
 

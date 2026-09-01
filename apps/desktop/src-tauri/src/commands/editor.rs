@@ -32,9 +32,7 @@ pub fn get_worktree_editor(editor_service: State<'_, EditorService>) -> AppResul
 
 /// The installed editors Blink can offer as one-click choices in Settings.
 #[tauri::command]
-pub fn list_worktree_editors(
-    editor_service: State<'_, EditorService>,
-) -> AppResult<Vec<EditorOption>> {
+pub fn list_editors(editor_service: State<'_, EditorService>) -> AppResult<Vec<EditorOption>> {
     Ok(editor_service.list_editors())
 }
 

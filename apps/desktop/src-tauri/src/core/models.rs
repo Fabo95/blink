@@ -215,6 +215,20 @@ pub struct EditorOption {
     pub command: String,
 }
 
+/// An installed terminal Blink detected on the login-shell PATH — offered in Settings so the
+/// user can pick one instead of typing the launch command. `command` is the ready-to-store
+/// template (`<terminal> … tmux attach -t {session}`); unlike editors, each terminal has its
+/// own syntax, so the command isn't uniform.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalOption {
+    /// Display name, e.g. "Alacritty".
+    pub name: String,
+    /// The terminal command to store, e.g. "alacritty -e tmux attach -t {session}".
+    pub command: String,
+}
+
 /// One worktree's live attention state, identified by its repo + branch. Carried both by
 /// the `worktree-attention` event (a full snapshot each tick) and the on-demand command.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

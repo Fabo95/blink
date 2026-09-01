@@ -9,6 +9,7 @@ import type { NewTaskGroup } from '@/generated/NewTaskGroup';
 import type { PruneCandidate } from '@/generated/PruneCandidate';
 import type { Task } from '@/generated/Task';
 import type { TaskGroup } from '@/generated/TaskGroup';
+import type { TerminalOption } from '@/generated/TerminalOption';
 import type { VaultStatus } from '@/generated/VaultStatus';
 import type { Worktree } from '@/generated/Worktree';
 import type { WorktreeAttention } from '@/generated/WorktreeAttention';
@@ -168,13 +169,14 @@ export const api = {
   /** Set (or clear to the default with null/empty) the terminal launch command. */
   setWorktreeTerminal: (command: string | null) =>
     invoke<void>('set_worktree_terminal', { command }),
+  /** Installed terminals Blink can offer as one-click choices in Settings. */
+  listTerminals: () => invoke<TerminalOption[]>('list_terminals'),
   /** The editor launch command ({path} = the worktree path). */
   getWorktreeEditor: () => invoke<string>('get_worktree_editor'),
   /** Installed editors Blink can offer as one-click choices in Settings. */
-  listWorktreeEditors: () => invoke<EditorOption[]>('list_worktree_editors'),
+  listEditors: () => invoke<EditorOption[]>('list_editors'),
   /** Set (or clear to the default with null/empty) the editor launch command. */
-  setWorktreeEditor: (command: string | null) =>
-    invoke<void>('set_worktree_editor', { command }),
+  setWorktreeEditor: (command: string | null) => invoke<void>('set_worktree_editor', { command }),
 };
 
 // --- Browser fallback -------------------------------------------------------
@@ -584,7 +586,13 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       mockWorktreeTerminal = command ? command : null;
       return undefined as T;
     }
-    case 'list_worktree_editors':
+    case 'list_terminals':
+      // Browser mock — a representative couple so the picker is developable.
+      return [
+        { name: 'Alacritty', command: 'alacritty -e tmux attach -t {session}' },
+        { name: 'kitty', command: 'kitty tmux attach -t {session}' },
+      ] as T;
+    case 'list_editors':
       // Browser mock — a representative couple so the picker is developable.
       return [
         { name: 'VS Code', command: 'code {path}' },
