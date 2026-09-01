@@ -15,7 +15,9 @@ export interface WorktreesView {
   /** Remove the worktree, its session, and its local branch; `deleteRemote` also deletes
    *  the branch on GitHub. */
   remove: (branch: string, force: boolean, deleteRemote: boolean) => Promise<void>;
-  open: (branch: string) => Promise<void>;
+  openInTerminal: (branch: string) => Promise<void>;
+  /** Open the worktree's folder in the configured editor. */
+  openInEditor: (branch: string) => Promise<void>;
   prunePreview: () => Promise<PruneCandidate[]>;
   pruneApply: () => Promise<void>;
 }
@@ -59,7 +61,7 @@ export function useWorktrees(repoPath: string | null): WorktreesView {
       setError('');
       try {
         await api.addWorktree(repoPath, branch);
-        await api.openWorktree(repoPath, branch);
+        await api.openWorktreeInTerminal(repoPath, branch);
         await load(repoPath);
       } catch (e) {
         setError(errorMessage(e, 'Could not create the worktree'));
@@ -85,18 +87,31 @@ export function useWorktrees(repoPath: string | null): WorktreesView {
     [repoPath, load],
   );
 
-  const open = useCallback(
+  const openInTerminal = useCallback(
     async (branch: string) => {
       if (!repoPath) return;
       setError('');
       try {
-        await api.openWorktree(repoPath, branch);
+        await api.openWorktreeInTerminal(repoPath, branch);
         await load(repoPath);
       } catch (e) {
         setError(errorMessage(e, 'Could not open the worktree'));
       }
     },
     [repoPath, load],
+  );
+
+  const openInEditor = useCallback(
+    async (branch: string) => {
+      if (!repoPath) return;
+      setError('');
+      try {
+        await api.openWorktreeInEditor(repoPath, branch);
+      } catch (e) {
+        setError(errorMessage(e, 'Could not open the worktree in your editor'));
+      }
+    },
+    [repoPath],
   );
 
   const prunePreview = useCallback(async () => {
@@ -122,5 +137,16 @@ export function useWorktrees(repoPath: string | null): WorktreesView {
     }
   }, [repoPath, load]);
 
-  return { worktrees, loading, error, refresh, create, remove, open, prunePreview, pruneApply };
+  return {
+    worktrees,
+    loading,
+    error,
+    refresh,
+    create,
+    remove,
+    openInTerminal,
+    openInEditor,
+    prunePreview,
+    pruneApply,
+  };
 }

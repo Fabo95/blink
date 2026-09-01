@@ -49,6 +49,7 @@ const HINTS = {
   x: { keys: 'x', label: 'prune' },
   'mod+o': { keys: '⌘o', label: 'add repo' },
   b: { keys: 'b', label: 'remote' },
+  e: { keys: 'e', label: 'editor' },
 } satisfies Record<string, Hint>;
 
 /**
@@ -388,7 +389,14 @@ export const SHORTCUTS = {
     level: 3,
     order: 90,
   },
-  'worktree.open': {
+  'worktree.editor': {
+    keys: 'e',
+    hint: HINTS.e,
+    level: 2,
+    describe: 'Open the worktree in your editor',
+    order: 30,
+  },
+  'worktree.terminal': {
     keys: 'o',
     hint: HINTS.o,
     level: 2,
@@ -455,6 +463,15 @@ export const SHORTCUTS = {
     hint: HINTS['mod+enter'],
     level: 3,
     describe: 'Save the terminal command',
+    order: 20,
+    opts: { enableOnFormTags: true },
+  },
+  // Shares ⌘↵ with worktreeTerminal.save — mutually exclusive by which field is focused.
+  'worktreeEditor.save': {
+    keys: 'mod+enter',
+    hint: HINTS['mod+enter'],
+    level: 3,
+    describe: 'Save the editor command',
     order: 20,
     opts: { enableOnFormTags: true },
   },
@@ -562,7 +579,8 @@ export const CHEATSHEET: { title: string; ids: ShortcutId[] }[] = [
       'repos.remove',
       'worktree.switchPrev',
       'worktree.new',
-      'worktree.open',
+      'worktree.terminal',
+      'worktree.editor',
       'worktree.remove',
       'worktree.prune',
     ],

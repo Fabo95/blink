@@ -69,17 +69,6 @@ pub fn prune_worktrees(
     worktree_service.prune(&repo_service.find(&repo_path)?, apply)
 }
 
-/// Open a terminal attached to the worktree's tmux/Claude session (creating it if needed).
-#[tauri::command]
-pub fn open_worktree(
-    repo_service: State<'_, RepoService>,
-    worktree_service: State<'_, WorktreeService>,
-    repo_path: String,
-    branch: String,
-) -> AppResult<()> {
-    worktree_service.open(&repo_service.find(&repo_path)?, branch)
-}
-
 /// The current attention snapshot across every managed repo's live sessions. The webview
 /// loads this once for initial state, then keeps it live via the `worktree-attention` event.
 #[tauri::command]
@@ -118,19 +107,4 @@ pub async fn pick_worktree_base_dir(
 ) -> AppResult<Option<String>> {
     let picked = dialog::pick_folder(&app, "Choose the worktree base directory").await;
     worktree_service.set_base_dir_if_provided(picked)
-}
-
-/// The terminal launch command (`{session}` = the tmux session name).
-#[tauri::command]
-pub fn get_worktree_terminal(worktree_service: State<'_, WorktreeService>) -> AppResult<String> {
-    worktree_service.terminal_command()
-}
-
-/// Set (or clear, back to the default) the terminal launch command.
-#[tauri::command]
-pub fn set_worktree_terminal(
-    worktree_service: State<'_, WorktreeService>,
-    command: Option<String>,
-) -> AppResult<()> {
-    worktree_service.set_terminal_command(command)
 }

@@ -181,10 +181,16 @@ export function WorktreesPage() {
     enabled: !overlayOpen && activeRepo !== null,
     callback: () => void startPrune(),
   });
-  useShortcut('worktree.open', {
+  useShortcut('worktree.terminal', {
     enabled: !overlayOpen && cursor.focused !== null,
     callback: () => {
-      if (cursor.focused) void wt.open(cursor.focused.branch);
+      if (cursor.focused) void wt.openInTerminal(cursor.focused.branch);
+    },
+  });
+  useShortcut('worktree.editor', {
+    enabled: !overlayOpen && cursor.focused !== null,
+    callback: () => {
+      if (cursor.focused) void wt.openInEditor(cursor.focused.branch);
     },
   });
   useShortcut('worktree.remove', {

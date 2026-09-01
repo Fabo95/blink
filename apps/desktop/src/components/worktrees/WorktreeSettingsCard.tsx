@@ -1,16 +1,18 @@
-import { FolderTree, Terminal as TerminalIcon, X } from 'lucide-react';
+import { FolderTree, PenLine, Terminal as TerminalIcon, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import type { EditorOption } from '@/generated/EditorOption';
 import { api } from '@/lib/api';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
-import { errorMessage } from '@/lib/utils';
+import { cn, errorMessage } from '@/lib/utils';
 
 /**
  * Worktree behaviour settings — the "worktree stuff" config. **Location** (where worktrees
  * are created) is a native folder picker: click to choose, ✕ to reset to the default. The
- * **Terminal** command (how a worktree opens) is free text — you can't pick a command — and
- * saves on ⌘↵.
+ * **Terminal** command (how a worktree opens) is free text saved on ⌘↵. The **Editor** (how
+ * `e` opens a worktree's folder) is picked from the editors Blink detects — click one — with
+ * a "Custom…" pill that falls back to a free-text command for anything unlisted.
  */
 export function WorktreeSettingsCard() {
   // null = use the derived default (a worktrees/ folder beside each repo).
@@ -20,6 +22,12 @@ export function WorktreeSettingsCard() {
   const [terminalFocused, setTerminalFocused] = useState(false);
   const [savingTerminal, setSavingTerminal] = useState(false);
 
+  const [editor, setEditor] = useState('');
+  const [editors, setEditors] = useState<EditorOption[]>([]);
+  const [customEditor, setCustomEditor] = useState(false);
+  const [editorFocused, setEditorFocused] = useState(false);
+  const [savingEditor, setSavingEditor] = useState(false);
+
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -27,6 +35,14 @@ export function WorktreeSettingsCard() {
       try {
         setBaseDir(await api.getWorktreeBaseDir());
         setTerminal(await api.getWorktreeTerminal());
+        const [command, detected] = await Promise.all([
+          api.getWorktreeEditor(),
+          api.listWorktreeEditors(),
+        ]);
+        setEditor(command);
+        setEditors(detected);
+        // Fall back to the free-text field only when the current command isn't one we detect.
+        setCustomEditor(!detected.some((o) => o.command === command));
       } catch (e) {
         setError(errorMessage(e, 'Could not load worktree settings'));
       }
@@ -69,9 +85,40 @@ export function WorktreeSettingsCard() {
     }
   };
 
+  const saveEditor = async () => {
+    if (savingEditor) return;
+    setSavingEditor(true);
+    setError('');
+    try {
+      const value = editor.trim();
+      await api.setWorktreeEditor(value ? value : null);
+      setEditor(await api.getWorktreeEditor());
+    } catch (e) {
+      setError(errorMessage(e, 'Could not save the editor command'));
+    } finally {
+      setSavingEditor(false);
+    }
+  };
+
+  // Picking a detected editor saves its command immediately — no typing, no ⌘↵.
+  const selectEditor = async (command: string) => {
+    setCustomEditor(false);
+    setEditor(command);
+    setError('');
+    try {
+      await api.setWorktreeEditor(command);
+    } catch (e) {
+      setError(errorMessage(e, 'Could not save the editor'));
+    }
+  };
+
   useShortcut('worktreeTerminal.save', {
     enabled: terminalFocused && !savingTerminal,
     callback: () => void saveTerminal(),
+  });
+  useShortcut('worktreeEditor.save', {
+    enabled: editorFocused && !savingEditor,
+    callback: () => void saveEditor(),
   });
 
   return (
@@ -143,8 +190,78 @@ export function WorktreeSettingsCard() {
           </p>
         </div>
 
+        <div className="space-y-2">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Editor
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {editors.map((option) => (
+              <Pill
+                key={option.command}
+                label={option.name}
+                selected={!customEditor && editor === option.command}
+                onSelect={() => void selectEditor(option.command)}
+              />
+            ))}
+            <Pill
+              label="Custom…"
+              selected={customEditor}
+              onSelect={() => setCustomEditor(true)}
+            />
+          </div>
+          {customEditor && (
+            <div className="flex h-9 items-center gap-2 rounded-md border border-input bg-transparent px-3 shadow-sm transition-colors focus-within:ring-1 focus-within:ring-ring">
+              <PenLine className="size-3.5 shrink-0 text-muted-foreground" />
+              <Input
+                value={editor}
+                onChange={(e) => setEditor(e.target.value)}
+                onFocus={() => setEditorFocused(true)}
+                onBlur={() => setEditorFocused(false)}
+                placeholder="webstorm {path}"
+                className="h-auto min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-[13px] shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+              />
+            </div>
+          )}
+          <p className="text-[11px] text-muted-foreground">
+            {savingEditor
+              ? 'Saving…'
+              : customEditor
+                ? 'Command the e shortcut runs. {path} is the worktree path; ⌘↵ saves.'
+                : 'Which editor the e shortcut opens a worktree in.'}
+          </p>
+        </div>
+
         {error && <p className="text-[11px] text-destructive">{error}</p>}
       </CardContent>
     </Card>
+  );
+}
+
+// Mouse-only selector (like the repo / group-filter pills): out of the Tab order, mousedown
+// preventDefault keeps focus on <body> so the keyboard shortcuts keep firing.
+function Pill({
+  label,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      tabIndex={-1}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onSelect}
+      className={cn(
+        'rounded-full border px-3 py-1 text-[11px] font-medium transition-colors',
+        selected
+          ? 'border-primary/40 bg-card/70 text-foreground'
+          : 'border-border/60 bg-card/40 text-muted-foreground',
+      )}
+    >
+      {label}
+    </button>
   );
 }

@@ -202,6 +202,19 @@ pub enum WorktreeAttention {
     Errored,
 }
 
+/// An installed editor Blink detected on the login-shell PATH — offered in Settings so the
+/// user can pick one instead of typing the launch command. `command` is the ready-to-store
+/// value (`<launcher> {path}`).
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct EditorOption {
+    /// Display name, e.g. "WebStorm".
+    pub name: String,
+    /// The editor command to store, e.g. "webstorm {path}".
+    pub command: String,
+}
+
 /// One worktree's live attention state, identified by its repo + branch. Carried both by
 /// the `worktree-attention` event (a full snapshot each tick) and the on-demand command.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

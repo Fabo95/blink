@@ -18,7 +18,9 @@ use crate::repository::{Db, Repository};
 use crate::services::ai_key_service::AiKeyService;
 use crate::services::ai_service::AiService;
 use crate::services::attention_service::AttentionService;
+use crate::services::editor_service::EditorService;
 use crate::services::hook_service::HookService;
+use crate::services::terminal_service::TerminalService;
 use crate::services::auth_service::AuthService;
 use crate::services::capture_service::CaptureService;
 use crate::services::hlc_service::HlcService;
@@ -104,11 +106,13 @@ pub fn run() {
                 crate::core::paths::shell_quote(&hook_service.settings_path().to_string_lossy())
             );
 
+            let terminal_service =
+                TerminalService::new(TmuxCli::new(), repository.settings.clone(), claude_command);
+            let editor_service = EditorService::new(repository.settings.clone());
             let worktree_service = WorktreeService::new(
                 GitCli::new(),
-                TmuxCli::new(),
                 repository.settings.clone(),
-                claude_command,
+                terminal_service.clone(),
             );
             let attention_service = Arc::new(AttentionService::new(
                 repo_service.clone(),
@@ -117,6 +121,8 @@ pub fn run() {
             ));
             app.manage(repo_service);
             app.manage(worktree_service);
+            app.manage(terminal_service);
+            app.manage(editor_service);
             app.manage(attention_service);
             app.manage(vault_service.clone());
             let sync_service = Arc::new(SyncService::new(
@@ -178,13 +184,17 @@ pub fn run() {
             commands::worktree::remove_worktree,
             commands::worktree::delete_remote_branch,
             commands::worktree::prune_worktrees,
-            commands::worktree::open_worktree,
             commands::worktree::get_worktree_attention,
             commands::worktree::get_worktree_base_dir,
             commands::worktree::set_worktree_base_dir,
             commands::worktree::pick_worktree_base_dir,
-            commands::worktree::get_worktree_terminal,
-            commands::worktree::set_worktree_terminal,
+            commands::terminal::open_worktree_in_terminal,
+            commands::terminal::get_worktree_terminal,
+            commands::terminal::set_worktree_terminal,
+            commands::editor::open_worktree_in_editor,
+            commands::editor::get_worktree_editor,
+            commands::editor::set_worktree_editor,
+            commands::editor::list_worktree_editors,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Blink")

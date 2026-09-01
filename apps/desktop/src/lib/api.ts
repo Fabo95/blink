@@ -2,6 +2,7 @@ import type { AuthResult } from '@/generated/AuthResult';
 import type { AuthUser } from '@/generated/AuthUser';
 import type { CaptureDraft } from '@/generated/CaptureDraft';
 import type { CaptureSource } from '@/generated/CaptureSource';
+import type { EditorOption } from '@/generated/EditorOption';
 import type { ManagedRepo } from '@/generated/ManagedRepo';
 import type { NewTask } from '@/generated/NewTask';
 import type { NewTaskGroup } from '@/generated/NewTaskGroup';
@@ -146,8 +147,11 @@ export const api = {
   pruneWorktrees: (repoPath: string, apply: boolean) =>
     invoke<PruneCandidate[]>('prune_worktrees', { repoPath, apply }),
   /** Open a terminal attached to the worktree's tmux/Claude session (creating it if needed). */
-  openWorktree: (repoPath: string, branch: string) =>
-    invoke<void>('open_worktree', { repoPath, branch }),
+  openWorktreeInTerminal: (repoPath: string, branch: string) =>
+    invoke<void>('open_worktree_in_terminal', { repoPath, branch }),
+  /** Open the worktree's folder in the configured editor. */
+  openWorktreeInEditor: (repoPath: string, branch: string) =>
+    invoke<void>('open_worktree_in_editor', { repoPath, branch }),
   /** The attention snapshot across every managed repo's live sessions. Initial state for the
    *  dashboard; the `worktree-attention` event keeps it live thereafter. */
   getWorktreeAttention: () => invoke<WorktreeAttentionUpdate[]>('get_worktree_attention'),
@@ -164,6 +168,13 @@ export const api = {
   /** Set (or clear to the default with null/empty) the terminal launch command. */
   setWorktreeTerminal: (command: string | null) =>
     invoke<void>('set_worktree_terminal', { command }),
+  /** The editor launch command ({path} = the worktree path). */
+  getWorktreeEditor: () => invoke<string>('get_worktree_editor'),
+  /** Installed editors Blink can offer as one-click choices in Settings. */
+  listWorktreeEditors: () => invoke<EditorOption[]>('list_worktree_editors'),
+  /** Set (or clear to the default with null/empty) the editor launch command. */
+  setWorktreeEditor: (command: string | null) =>
+    invoke<void>('set_worktree_editor', { command }),
 };
 
 // --- Browser fallback -------------------------------------------------------
@@ -289,7 +300,9 @@ let mockAiKey: string | null = null;
 // Browser-only worktree state — no real git/tmux; enough to develop the Worktrees page.
 let mockWorktreeBaseDir: string | null = null;
 let mockWorktreeTerminal: string | null = null;
+let mockWorktreeEditor: string | null = null;
 const DEFAULT_TERMINAL_COMMAND = 'alacritty -e tmux attach -t {session}';
+const DEFAULT_EDITOR_COMMAND = 'code {path}';
 let mockManagedRepos: ManagedRepo[] = [
   { name: 'blink', path: '/Users/you/repositories/blink', baseBranch: null },
 ];
@@ -571,6 +584,22 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       mockWorktreeTerminal = command ? command : null;
       return undefined as T;
     }
+    case 'list_worktree_editors':
+      // Browser mock — a representative couple so the picker is developable.
+      return [
+        { name: 'VS Code', command: 'code {path}' },
+        { name: 'Cursor', command: 'cursor {path}' },
+      ] as T;
+    case 'get_worktree_editor':
+      return (mockWorktreeEditor ?? DEFAULT_EDITOR_COMMAND) as T;
+    case 'set_worktree_editor': {
+      const command = typeof args?.command === 'string' ? args.command.trim() : '';
+      mockWorktreeEditor = command ? command : null;
+      return undefined as T;
+    }
+    case 'open_worktree_in_editor':
+      // No real editor in the browser — nothing to launch.
+      return undefined as T;
     case 'list_managed_repos':
       return [...mockManagedRepos] as T;
     case 'remove_managed_repo': {
@@ -640,7 +669,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       }
       return candidates as T;
     }
-    case 'open_worktree': {
+    case 'open_worktree_in_terminal': {
       const list = mockWorktrees[String(args?.repoPath ?? '')];
       const worktree = list?.find((w) => w.branch === String(args?.branch ?? ''));
       if (worktree) worktree.sessionLive = true;
