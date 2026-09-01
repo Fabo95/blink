@@ -14,12 +14,16 @@
 //! (`<repo-parent>/worktrees/<repo>/<branch>`), or under a configurable base dir
 //! (`<base>/<repo>/<branch>`); each gets a tmux session `<repo>-<branch>` running `claude`.
 
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use crate::clients::git_cli::GitCli;
+use crate::clients::github_cli::GitHubCli;
 use crate::core::error::{AppError, AppResult};
-use crate::core::models::{ManagedRepo, PruneCandidate, Worktree};
+use crate::core::models::{
+    GitRemoteStatus, ManagedRepo, PrState, PruneCandidate, Worktree, WorktreePr,
+};
 use crate::core::paths::expand_tilde;
 use crate::repository::SettingsRepository;
 use crate::services::terminal_service::TerminalService;
@@ -31,6 +35,7 @@ const WORKTREE_BASE_DIR_KEY: &str = "worktree_base_dir";
 #[derive(Clone)]
 pub struct WorktreeService {
     git_cli: GitCli,
+    github_cli: GitHubCli,
     settings_repository: SettingsRepository,
     /// Session mechanics for the worktree lifecycle — decoupled from worktrees, keyed by the
     /// session name this service mints (see [`Self::session_name`]).
@@ -40,11 +45,13 @@ pub struct WorktreeService {
 impl WorktreeService {
     pub fn new(
         git_cli: GitCli,
+        github_cli: GitHubCli,
         settings_repository: SettingsRepository,
         terminal_service: TerminalService,
     ) -> Self {
         Self {
             git_cli,
+            github_cli,
             settings_repository,
             terminal_service,
         }
@@ -81,6 +88,7 @@ impl WorktreeService {
 
     pub fn list(&self, repo: &ManagedRepo) -> AppResult<Vec<Worktree>> {
         let root = Path::new(&repo.path);
+        let remote = self.remote_state(repo, root);
         let mut worktrees = Vec::new();
         for entry in self.git_cli.list_worktrees(root)? {
             let branch = entry.branch.unwrap_or_else(|| "(detached)".to_string());
@@ -89,6 +97,7 @@ impl WorktreeService {
                 repo: repo.path.clone(),
                 is_dirty: self.git_cli.worktree_has_changes(Path::new(&entry.path)),
                 session_live: self.terminal_service.session_exists(&session),
+                remote_status: remote.status_of(&self.git_cli, root, &branch),
                 is_main: entry.is_main,
                 branch,
                 path: entry.path,
@@ -130,10 +139,12 @@ impl WorktreeService {
         let session = tmux_session_name(&repo.name, &branch);
         self.terminal_service.ensure_session(&session, &wt_path)?;
 
+        let remote = self.remote_state(repo, root);
         Ok(Worktree {
             repo: repo.path.clone(),
             is_dirty: self.git_cli.worktree_has_changes(&wt_path),
             session_live: self.terminal_service.session_exists(&session),
+            remote_status: remote.status_of(&self.git_cli, root, &branch),
             is_main: false,
             branch,
             path: wt_path_str,
@@ -247,6 +258,35 @@ impl WorktreeService {
             .collect())
     }
 
+    /// The pull-request state for each of the repo's branches, fetched on demand from GitHub
+    /// (`gh`) — the authoritative merge signal the local git heuristic in [`Self::list`]
+    /// can't see (merges into a non-default base, squash/rebase merges). One PR per branch:
+    /// when a branch has several, the most recent (highest number) wins. Only branches with
+    /// a PR appear; the rest keep their local [`GitRemoteStatus`].
+    pub fn pull_requests(&self, repo: &ManagedRepo) -> AppResult<Vec<WorktreePr>> {
+        let root = Path::new(&repo.path);
+        let mut latest: HashMap<String, (u64, WorktreePr)> = HashMap::new();
+        for row in self.github_cli.pull_requests(root)? {
+            let state = match (row.state.as_str(), row.is_draft) {
+                (_, true) if row.state.eq_ignore_ascii_case("open") => PrState::Draft,
+                (s, _) if s.eq_ignore_ascii_case("open") => PrState::Open,
+                (s, _) if s.eq_ignore_ascii_case("merged") => PrState::Merged,
+                _ => PrState::Closed,
+            };
+            let pr = WorktreePr { branch: row.head_ref_name.clone(), state, url: row.url };
+            latest
+                .entry(row.head_ref_name)
+                .and_modify(|(number, current)| {
+                    if row.number > *number {
+                        *number = row.number;
+                        *current = pr.clone();
+                    }
+                })
+                .or_insert((row.number, pr));
+        }
+        Ok(latest.into_values().map(|(_, pr)| pr).collect())
+    }
+
     // ── resolution (used by the open-in-terminal / open-in-editor commands) ─────────────
 
     /// The tmux/Claude session name for a worktree — the `<repo>-<branch>` convention. The
@@ -272,6 +312,20 @@ impl WorktreeService {
     }
 
     // ── internals ─────────────────────────────────────────────────────────────────────
+
+    /// The repo-wide sets a per-branch [`GitRemoteStatus`] is read from — computed once per
+    /// `list`/`add` (each is a single git call) and reused for every worktree. No fetch, so
+    /// this reflects the local repo's last-known remote state.
+    fn remote_state(&self, repo: &ManagedRepo, root: &Path) -> RemoteState {
+        let base = repo
+            .base_branch
+            .clone()
+            .unwrap_or_else(|| self.git_cli.default_base_branch(root));
+        RemoteState {
+            merged: self.git_cli.branches_merged_into(root, &base).into_iter().collect(),
+            gone: self.git_cli.branches_with_gone_upstream(root).into_iter().collect(),
+        }
+    }
 
     /// Where a worktree lives: `<base>/<repo-name>/<branch>` if a base directory is
     /// configured, else the derived default beside the repo
@@ -302,4 +356,26 @@ impl WorktreeService {
 
 fn tmux_session_name(repo_name: &str, branch: &str) -> String {
     format!("{repo_name}-{}", branch.replace('/', "-"))
+}
+
+/// Repo-wide remote facts, gathered once, that classify each branch. `gone` wins over
+/// `merged` (a merged-then-cleaned PR reads as done+removed), and a present `origin/<branch>`
+/// distinguishes a published branch from a purely local one.
+struct RemoteState {
+    merged: HashSet<String>,
+    gone: HashSet<String>,
+}
+
+impl RemoteState {
+    fn status_of(&self, git_cli: &GitCli, root: &Path, branch: &str) -> GitRemoteStatus {
+        if self.gone.contains(branch) {
+            GitRemoteStatus::Gone
+        } else if self.merged.contains(branch) {
+            GitRemoteStatus::Merged
+        } else if git_cli.has_remote_branch(root, branch) {
+            GitRemoteStatus::Published
+        } else {
+            GitRemoteStatus::Local
+        }
+    }
 }

@@ -11,9 +11,11 @@ import type { Task } from '@/generated/Task';
 import type { TaskGroup } from '@/generated/TaskGroup';
 import type { TerminalOption } from '@/generated/TerminalOption';
 import type { VaultStatus } from '@/generated/VaultStatus';
+import type { PrState } from '@/generated/PrState';
 import type { Worktree } from '@/generated/Worktree';
 import type { WorktreeAttention } from '@/generated/WorktreeAttention';
 import type { WorktreeAttentionUpdate } from '@/generated/WorktreeAttentionUpdate';
+import type { WorktreePr } from '@/generated/WorktreePr';
 
 /**
  * Typed façade over the Tauri IPC boundary. Each method maps to a `#[tauri::command]`
@@ -147,6 +149,10 @@ export const api = {
   /** Preview (`apply=false`) or perform (`apply=true`) a prune of merged/gone worktrees. */
   pruneWorktrees: (repoPath: string, apply: boolean) =>
     invoke<PruneCandidate[]>('prune_worktrees', { repoPath, apply }),
+  /** The GitHub PR state for each of the repo's branches (via `gh`). Fetched on demand — a
+   *  manual refresh — so the page shows local git status until asked. */
+  listWorktreePullRequests: (repoPath: string) =>
+    invoke<WorktreePr[]>('list_worktree_pull_requests', { repoPath }),
   /** Open a terminal attached to the worktree's tmux/Claude session (creating it if needed). */
   openWorktreeInTerminal: (repoPath: string, branch: string) =>
     invoke<void>('open_worktree_in_terminal', { repoPath, branch }),
@@ -317,6 +323,7 @@ const mockWorktrees: Record<string, Worktree[]> = {
       isMain: false,
       isDirty: true,
       sessionLive: true,
+      remoteStatus: 'published',
     },
     {
       repo: '/Users/you/repositories/blink',
@@ -325,6 +332,7 @@ const mockWorktrees: Record<string, Worktree[]> = {
       isMain: false,
       isDirty: false,
       sessionLive: false,
+      remoteStatus: 'merged',
     },
   ],
 };
@@ -642,6 +650,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
           isMain: false,
           isDirty: false,
           sessionLive: true,
+          remoteStatus: 'local',
         };
         list.push(worktree);
       } else {
@@ -682,6 +691,20 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       const worktree = list?.find((w) => w.branch === String(args?.branch ?? ''));
       if (worktree) worktree.sessionLive = true;
       return undefined as T;
+    }
+    case 'list_worktree_pull_requests': {
+      // No real gh in the browser — synthesize a spread of PR states so the badge is
+      // developable. Every other linked branch gets a PR; the rest keep local status.
+      const repoPath = String(args?.repoPath ?? '');
+      const states: PrState[] = ['open', 'merged', 'draft', 'closed'];
+      const prs: WorktreePr[] = (mockWorktrees[repoPath] ?? [])
+        .filter((w) => !w.isMain)
+        .map((w, i) => ({
+          branch: w.branch,
+          state: states[i % states.length] as PrState,
+          url: `https://github.com/you/${repoPath.split('/').pop()}/pull/${i + 1}`,
+        }));
+      return prs as T;
     }
     case 'get_worktree_attention': {
       // No real tmux in the browser — synthesize a spread of states across the live

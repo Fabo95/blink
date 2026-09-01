@@ -50,6 +50,7 @@ const HINTS = {
   'mod+o': { keys: '⌘o', label: 'add repo' },
   b: { keys: 'b', label: 'remote' },
   e: { keys: 'e', label: 'editor' },
+  g: { keys: 'g', label: 'github' },
 } satisfies Record<string, Hint>;
 
 /**
@@ -360,6 +361,13 @@ export const SHORTCUTS = {
     describe: 'Prune merged or gone worktrees',
     order: 56,
   },
+  'worktree.github': {
+    keys: 'g',
+    hint: HINTS.g,
+    level: 1,
+    describe: 'Refresh GitHub PR status',
+    order: 55,
+  },
   // Repositories section (top of the Worktrees page): add via picker, remove the active.
   'repos.add': {
     keys: 'mod+o',
@@ -583,6 +591,7 @@ export const CHEATSHEET: { title: string; ids: ShortcutId[] }[] = [
       'worktree.editor',
       'worktree.remove',
       'worktree.prune',
+      'worktree.github',
     ],
   },
 ];

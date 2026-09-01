@@ -158,6 +158,23 @@ pub struct ManagedRepo {
     pub base_branch: Option<String>,
 }
 
+/// A worktree branch's standing against `origin` — how it relates to the remote and the
+/// repo's base branch. Reflects the local repo's last-known remote state (no fetch on
+/// list), so `merged`/`gone` are as fresh as the last `git fetch` (e.g. a prune).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub enum GitRemoteStatus {
+    /// No `origin/<branch>` — the branch exists only locally (never pushed).
+    Local,
+    /// `origin/<branch>` exists — pushed and still present on the remote.
+    Published,
+    /// Merged into the repo's base branch.
+    Merged,
+    /// Its upstream was deleted on the remote (`[gone]`) — typically a merged PR cleaned up.
+    Gone,
+}
+
 /// One linked worktree of a managed repo, as shown on the Worktrees page.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../src/generated/")]
@@ -173,6 +190,37 @@ pub struct Worktree {
     pub is_dirty: bool,
     /// A tmux session for this worktree is currently running.
     pub session_live: bool,
+    /// How the branch stands against `origin` and the base branch.
+    pub remote_status: GitRemoteStatus,
+}
+
+/// A branch's pull-request state on GitHub — the authoritative "is it merged" signal,
+/// unlike the local [`GitRemoteStatus`] which only sees merges into the local base branch.
+/// A GitHub draft PR is `Draft`; an ordinary open one is `Open`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub enum PrState {
+    /// Open draft PR.
+    Draft,
+    /// Open PR (ready for review).
+    Open,
+    /// Merged.
+    Merged,
+    /// Closed without merging.
+    Closed,
+}
+
+/// The pull request Blink surfaces for a worktree's branch, fetched on demand from GitHub
+/// (`gh`). One per branch — the most recent PR when a branch has several.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct WorktreePr {
+    pub branch: String,
+    pub state: PrState,
+    /// Link to the PR on GitHub.
+    pub url: String,
 }
 
 /// A worktree `prune` would remove, with the reason it qualifies. Shown in the

@@ -10,6 +10,7 @@ use std::sync::Arc;
 use tauri::Manager;
 
 use crate::clients::git_cli::GitCli;
+use crate::clients::github_cli::GitHubCli;
 use crate::clients::server_client::ServerClient;
 use crate::clients::tmux_cli::TmuxCli;
 use crate::core::state::{PendingCapture, PendingSource};
@@ -111,6 +112,7 @@ pub fn run() {
             let editor_service = EditorService::new(repository.settings.clone());
             let worktree_service = WorktreeService::new(
                 GitCli::new(),
+                GitHubCli::new(),
                 repository.settings.clone(),
                 terminal_service.clone(),
             );
@@ -184,6 +186,7 @@ pub fn run() {
             commands::worktree::remove_worktree,
             commands::worktree::delete_remote_branch,
             commands::worktree::prune_worktrees,
+            commands::worktree::list_worktree_pull_requests,
             commands::worktree::get_worktree_attention,
             commands::worktree::get_worktree_base_dir,
             commands::worktree::set_worktree_base_dir,

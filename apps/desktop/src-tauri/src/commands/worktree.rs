@@ -7,7 +7,7 @@ use tauri::{AppHandle, State};
 use std::sync::Arc;
 
 use crate::core::error::AppResult;
-use crate::core::models::{PruneCandidate, Worktree, WorktreeAttentionUpdate};
+use crate::core::models::{PruneCandidate, Worktree, WorktreeAttentionUpdate, WorktreePr};
 use crate::platform::dialog;
 use crate::services::attention_service::AttentionService;
 use crate::services::repo_service::RepoService;
@@ -56,6 +56,18 @@ pub async fn delete_remote_branch(
     branch: String,
 ) -> AppResult<()> {
     worktree_service.delete_remote_branch(&repo_service.find(&repo_path)?, &branch)
+}
+
+/// The GitHub pull-request state for each of the repo's branches (via `gh`). Async — it
+/// reaches the network — and fetched on demand (a manual refresh), so the Worktrees page
+/// stays offline-first: it shows the local git status until the user asks for PR state.
+#[tauri::command]
+pub async fn list_worktree_pull_requests(
+    repo_service: State<'_, RepoService>,
+    worktree_service: State<'_, WorktreeService>,
+    repo_path: String,
+) -> AppResult<Vec<WorktreePr>> {
+    worktree_service.pull_requests(&repo_service.find(&repo_path)?)
 }
 
 /// Preview (`apply = false`) or perform (`apply = true`) a prune of merged/gone worktrees.

@@ -181,6 +181,10 @@ export function WorktreesPage() {
     enabled: !overlayOpen && activeRepo !== null,
     callback: () => void startPrune(),
   });
+  useShortcut('worktree.github', {
+    enabled: !overlayOpen && activeRepo !== null,
+    callback: () => void wt.refreshGithub(),
+  });
   useShortcut('worktree.terminal', {
     enabled: !overlayOpen && cursor.focused !== null,
     callback: () => {
@@ -273,6 +277,7 @@ export function WorktreesPage() {
                     <WorktreeRow
                       key={worktree.branch}
                       worktree={worktree}
+                      pr={wt.prs[worktree.branch] ?? null}
                       attention={
                         activePath ? attention.attentionOf(activePath, worktree.branch) : null
                       }
@@ -358,6 +363,9 @@ export function WorktreesPage() {
         </section>
       )}
 
+      {wt.githubLoading && (
+        <p className="text-[11px] text-muted-foreground">Checking GitHub PR status…</p>
+      )}
       {(wt.error || repos.error) && (
         <p className="line-clamp-2 text-[11px] text-destructive">{wt.error || repos.error}</p>
       )}
