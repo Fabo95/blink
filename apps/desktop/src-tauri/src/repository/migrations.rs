@@ -82,5 +82,17 @@ pub(super) fn migrations() -> Migrations<'static> {
         // Expected effort ('quick' | 'standard' | 'deep'). Existing rows are unlabelled,
         // which is exactly 'standard' — they stay in the main inbox section.
         M::up("ALTER TABLE tasks ADD COLUMN effort TEXT NOT NULL DEFAULT 'standard';"),
+        // End-to-end encryption is gone: the server now stores a readable replica
+        // rather than opaque ciphertext, so server migration 0008 dropped and
+        // recreated `records` (nothing could decrypt the old rows anyway). Re-mark
+        // every local row dirty so the next push rebuilds the replica from this
+        // device — the local DB was always the source of truth — and rewind the pull
+        // cursor, which also matches the server's `seq` sequence restarting from 1.
+        // Re-merging a row we still hold is a no-op under LWW, so a rewind is safe.
+        M::up(
+            "UPDATE tasks SET dirty = 1;
+            UPDATE task_groups SET dirty = 1;
+            DELETE FROM sync_state WHERE key = 'last_pulled_seq';",
+        ),
     ])
 }

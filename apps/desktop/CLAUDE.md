@@ -108,7 +108,7 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   `requestSubmit()` keeps native validation, plain Enter is swallowed), `Esc` steps back, `⌘R`
   resends the code, `⌘N` toggles sign-in ↔ sign-up, `⌘F` opens forgot-password — each a plain
   `useShortcut` whose chip shows in the statusline (no clickable chips). `⌘⇧O` signs out — a
-  base-level (0) statusline chip, so it shows wherever it's enabled (inbox footer + vault gate);
+  base-level (0) statusline chip, so it shows wherever it's enabled (inbox footer);
   the header dropdown keeps a clickable "Sign out" item. Not `⌘⇧Q` — that's macOS's own Log Out. `useLoginState` holds only what spans steps (`step` + the
   email/password carried forward + busy/error + navigation); each form owns its own
   submit/resend via `useSession`.

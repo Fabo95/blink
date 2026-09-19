@@ -3,33 +3,8 @@ import { z } from 'zod';
 // The single source of truth for everything that crosses the client ↔ server sync
 // boundary. Each shape is defined once, as a zod schema:
 //   - the server validates incoming requests with the schema (runtime),
-//   - the client and the crypto package derive their TypeScript types from it
-//     via `z.infer` (compile-time).
+//   - the client derives its TypeScript types from it via `z.infer` (compile-time).
 // One definition per shape → nothing can drift.
-
-/** An opaque AES-GCM ciphertext the server stores verbatim (zero-knowledge). Used
- * both for a synced record's payload (encrypted under the VMK) and for the wrapped
- * VMK itself (encrypted under the KEK). No KDF params here — the key is a raw 256-bit
- * key, not password-derived; KDF params for deriving the KEK live on {@link zKeyset}. */
-export const zRecordCipher = z.object({
-  ciphertext: z.string(),
-  iv: z.string(),
-});
-export type RecordCipher = z.infer<typeof zRecordCipher>;
-
-/** Legacy password-derived envelope. Still consumed by `@blink/crypto` (not yet
- * ported to the VMK model); the sync path uses {@link zRecordCipher} instead. */
-export const zEncryptedEnvelope = z.object({
-  ciphertext: z.string(),
-  iv: z.string(),
-  kdf: z.object({
-    algorithm: z.literal('PBKDF2'),
-    hash: z.literal('SHA-256'),
-    iterations: z.number(),
-    salt: z.string(),
-  }),
-});
-export type EncryptedEnvelope = z.infer<typeof zEncryptedEnvelope>;
 
 /** Per-device clock used to order and merge concurrent edits (LWW). */
 export const zHybridLogicalClock = z.object({
@@ -39,14 +14,25 @@ export const zHybridLogicalClock = z.object({
 });
 export type HybridLogicalClock = z.infer<typeof zHybridLogicalClock>;
 
-/** The unit the client pushes. The whole local row (of any kind — task, group,
- * setting) is serialized and encrypted into `cipher`; the server never learns the
- * shape or `kind`. `id` is the client-owned UUID, stable across devices, and the
- * LWW conflict key. */
+/** The payload of a synced row: the whole client row as JSON, tagged by `kind` so a
+ * pulled record routes back to the right local table. Deliberately *loose* — the
+ * server validates only `kind` (which it promotes to a generated column for indexing)
+ * and stores the rest verbatim. That keeps the desktop free to add fields without a
+ * server migration, which matters because the native app updates on its own schedule.
+ *
+ * Field names are snake_case to match the Rust structs in `core/wire.rs` exactly —
+ * those derive plain serde, with no `rename_all` on the body structs. */
+export const zRecordBody = z.looseObject({
+  kind: z.string().min(1),
+});
+export type RecordBody = z.infer<typeof zRecordBody>;
+
+/** The unit the client pushes. `id` is the client-owned UUID, stable across devices,
+ * and the LWW conflict key. */
 export const zSyncPacket = z.object({
   id: z.string().uuid(),
   clock: zHybridLogicalClock,
-  cipher: zRecordCipher,
+  body: zRecordBody,
 });
 export type SyncPacket = z.infer<typeof zSyncPacket>;
 
@@ -57,14 +43,3 @@ export const zSyncRecord = zSyncPacket.extend({
   seq: z.number(),
 });
 export type SyncRecord = z.infer<typeof zSyncRecord>;
-
-/** The per-user account keyset (1Password-style 2SKD). `wrappedVmk` is the Vault
- * Master Key encrypted under the KEK; `kdfSalt`/`kdfIterations` let a new device
- * re-derive the KEK from the master password + Secret Key. All zero-knowledge — the
- * server can't derive the KEK (it never sees the Secret Key or password). */
-export const zKeyset = z.object({
-  wrappedVmk: zRecordCipher,
-  kdfSalt: z.string(),
-  kdfIterations: z.number(),
-});
-export type Keyset = z.infer<typeof zKeyset>;

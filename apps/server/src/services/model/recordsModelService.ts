@@ -7,7 +7,7 @@ interface RecordsModelServiceDeps {
 }
 
 /**
- * Thin Drizzle wrapper over the `records` table (the zero-knowledge sync store).
+ * Thin Drizzle wrapper over the `records` table (the sync store).
  * No business logic here — that lives in the common services. Each method opens a
  * transaction and sets `app.current_user_id`, which is what Row-Level Security
  * reads to scope rows to the caller (the API connects as a least-privilege role,
@@ -31,7 +31,7 @@ export class RecordsModelService {
           .onConflictDoUpdate({
             target: records.id,
             set: {
-              cipher: row.cipher,
+              body: row.body,
               hlcPhysical: row.hlcPhysical,
               hlcCounter: row.hlcCounter,
               hlcNodeId: row.hlcNodeId,

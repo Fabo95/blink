@@ -1,12 +1,11 @@
 //! The Rust mirror of the client↔server sync wire format (`@blink/contract`). Shared
 //! by the transport ([`ServerClient`](crate::clients::server_client::ServerClient),
 //! which serializes requests) and the sync service (which deserializes responses), so
-//! it lives in `core` rather than either layer. The record payload is an opaque
-//! [`Envelope`](super::crypto::Envelope) — the server never sees plaintext.
+//! it lives in `core` rather than either layer. The record payload is the local row
+//! itself as JSON — the server stores a readable replica.
 
 use serde::{Deserialize, Serialize};
 
-use super::crypto::Envelope;
 use super::models::TaskEffort;
 
 /// A Hybrid Logical Clock as it crosses the wire (camelCase `nodeId`).
@@ -18,13 +17,13 @@ pub struct Clock {
     pub node_id: String,
 }
 
-/// Client → server push unit: the whole local row, encrypted into `cipher`. `id` is
-/// the client-owned UUID (stable across devices), the LWW conflict key.
+/// Client → server push unit: the whole local row as `body`. `id` is the
+/// client-owned UUID (stable across devices), the LWW conflict key.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncPacket {
     pub id: String,
     pub clock: Clock,
-    pub cipher: Envelope,
+    pub body: RecordBody,
 }
 
 /// Server → client pull unit: a packet plus the server-assigned `seq` cursor (the
@@ -33,14 +32,15 @@ pub struct SyncPacket {
 pub struct SyncRecord {
     pub id: String,
     pub clock: Clock,
-    pub cipher: Envelope,
+    pub body: RecordBody,
     pub seq: i64,
 }
 
-/// The decrypted payload of a record — the whole local row, tagged by table so a
-/// pulled record routes back to the right repository. This is what's serialized to
-/// JSON and encrypted into a packet's `cipher`; the server never sees it. Field names
-/// match the DB columns. `deleted` rides inside so a tombstone carries its own flag.
+/// The payload of a record — the whole local row, tagged by table so a pulled record
+/// routes back to the right repository. This is what's serialized to JSON into a
+/// packet's `body`. Field names match the DB columns (and, on the server, the
+/// `kind`/`status` generated columns read straight out of this JSON). `deleted` rides
+/// inside so a tombstone carries its own flag.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RecordBody {
@@ -80,10 +80,10 @@ pub struct GroupBody {
     pub deleted: bool,
 }
 
-/// A local row that needs pushing (or a decrypted one being merged): its wire id,
-/// clock, and decrypted body. `list_dirty` builds these; the sync service encrypts the
-/// `body` into a packet, and `clear_dirty` uses the `clock` to clear the flag only if
-/// the row wasn't re-edited meanwhile.
+/// A local row that needs pushing (or a pulled one being merged): its wire id, clock,
+/// and body. `list_dirty` builds these; the sync service wraps the `body` in a packet,
+/// and `clear_dirty` uses the `clock` to clear the flag only if the row wasn't
+/// re-edited meanwhile.
 #[derive(Debug, Clone)]
 pub struct LocalChange {
     pub id: String,

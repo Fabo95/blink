@@ -2,7 +2,7 @@
 
 Enterprise-ready, local-first task ingestion. Capture rough text (clipboard via the copy-capture
 hotkey), sanitize it on-device, optionally clean it up with AI, and store it as tasks in a
-local encrypted database — with a planned self-hosted, zero-knowledge sync tier. macOS-first
+local encrypted database — synced to a self-hosted server. macOS-first
 desktop app, dark-violet theme.
 
 **Per-app guides** (auto-loaded when working in that subtree; read them before touching an app):
@@ -22,7 +22,7 @@ boundaries, and conventions.
 - **Sync server** (`apps/server`): Fastify 5 + zod 4 + **awilix DI** + Drizzle ORM + Postgres 17
   (RLS) + **Better Auth** (email/password + email-OTP verification & password reset via
   **Resend**), OpenAPI-documented. The desktop core authenticates against it today;
-  zero-knowledge encrypted task sync is Phase 2.
+  task sync is live: the server keeps a readable replica of the desktop's rows.
 - **Tooling**: Biome (format + lint), not Prettier/ESLint.
 
 ## Layout
@@ -34,7 +34,6 @@ apps/
 packages/
   contract/         zod wire schemas — single source of truth, client↔server. Built to dist.
   core/             Shared brand/theme constants (exports src, no build).
-  crypto/           E2EE envelope helpers (AES-GCM + PBKDF2; not yet wired).
   db/               Drizzle schema + postgres client + SQL migrations. Built to dist.
   sync/             Sync client stubs (HLC, LWW) — not yet wired.
   ai/               `suggestTitle` heuristic (currently unused by the app).
@@ -75,7 +74,7 @@ Both type boundaries are single-source — never hand-maintain a duplicate:
 - **Client ↔ Server**: `@blink/contract` zod schemas are the wire format; the server also emits
   an OpenAPI doc (`openapi.json`) from its routes.
 - **Rust owns all server communication.** The flow is webview → Tauri IPC → Rust → server,
-  never webview → server. This keeps the bearer token and (later) E2EE keys in the native layer
+  never webview → server. This keeps the bearer token in the native layer
   + OS keychain, out of the JS heap; sidesteps CORS; and puts sync next to the local DB it
   reconciles.
 

@@ -4,9 +4,7 @@ import type { NameAndRegistrationPair } from 'awilix';
 import type { AuthClient } from '@/clients/authClient.js';
 import type { EmailClient } from '@/clients/emailClient.js';
 import type { AuthService } from '@/services/common/authService.js';
-import type { KeysetService } from '@/services/common/keysetService.js';
 import type { SyncService } from '@/services/common/syncService.js';
-import type { KeysetsModelService } from '@/services/model/keysetsModelService.js';
 import type { RecordsModelService } from '@/services/model/recordsModelService.js';
 
 declare module '@fastify/awilix' {
@@ -19,10 +17,8 @@ declare module '@fastify/awilix' {
   // Per-request services — awilix builds a fresh graph per `req.diScope`.
   interface RequestCradle {
     recordsModelService: RecordsModelService;
-    keysetsModelService: KeysetsModelService;
     authService: AuthService;
     syncService: SyncService;
-    keysetService: KeysetService;
   }
 }
 

@@ -1,5 +1,5 @@
 //! Client for the Blink sync server — the only thing that talks to it (auth +
-//! zero-knowledge record/keyset sync). One public method per endpoint we call; each
+//! record sync). One public method per endpoint we call; each
 //! owns its path + request body and returns the raw response for the service to
 //! interpret. Base URL overridable via `BLINK_SERVER_URL`.
 
@@ -7,7 +7,6 @@ use reqwest::Response;
 use serde::Serialize;
 
 use crate::core::config::config;
-use crate::core::crypto::Keyset;
 use crate::core::wire::SyncPacket;
 
 pub struct ServerClient {
@@ -105,7 +104,7 @@ impl ServerClient {
             .await
     }
 
-    /// `POST /v1/sync/push` — upload locally-changed encrypted records.
+    /// `POST /v1/sync/push` — upload locally-changed records.
     pub async fn push_records(
         &self,
         token: &str,
@@ -129,15 +128,6 @@ impl ServerClient {
             .await
     }
 
-    /// `GET /v1/keyset` — fetch the account keyset (its `data.keyset` is null until setup).
-    pub async fn get_keyset(&self, token: &str) -> reqwest::Result<Response> {
-        self.http.get(url("v1/keyset")).bearer_auth(token).send().await
-    }
-
-    /// `PUT /v1/keyset` — store the account keyset (first-time setup or password change).
-    pub async fn put_keyset(&self, token: &str, keyset: &Keyset) -> reqwest::Result<Response> {
-        self.http.put(url("v1/keyset")).bearer_auth(token).json(keyset).send().await
-    }
 }
 
 /// Join a path onto the configured server base URL.

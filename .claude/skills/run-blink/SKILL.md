@@ -39,9 +39,23 @@ pgrep -fl '/Applications/Blink.app/Contents/MacOS/blink|target/(debug|release)/b
 
 ## 2. Build the release bundle
 
+**Export `BLINK_SERVER_URL` first, or you ship a localhost build.** `core/config.rs`
+resolves the sync server as runtime env → `option_env!("BLINK_SERVER_URL")` → the
+`http://localhost:8787` default. `option_env!` reads *cargo's own environment at compile
+time*; it does not read `.env`. And the dotenvy load in `lib.rs` is
+`#[cfg(all(desktop, debug_assertions))]`, so a release bundle never sees the file either.
+Build without the var and the app silently points at localhost.
+
 ```bash
+test -f apps/desktop/src-tauri/.env || { echo "missing apps/desktop/src-tauri/.env"; exit 1; }
+set -a; . apps/desktop/src-tauri/.env; set +a
+test -n "$BLINK_SERVER_URL" || { echo "BLINK_SERVER_URL unset"; exit 1; }
+echo "building against $BLINK_SERVER_URL"
 pnpm tauri build --bundles app
 ```
+
+`build.rs` declares `cargo:rerun-if-env-changed=BLINK_SERVER_URL`, so changing the value
+does force a rebuild — a stale binary is not a failure mode here.
 
 - `--bundles app` skips the `.dmg` — nothing here needs an installer.
 - Tauri's `beforeBuildCommand` is `pnpm build`, i.e. `tsc --noEmit && vite build`. **A
@@ -87,6 +101,15 @@ A PID means the window is up. No PID means it crashed on start — get the reaso
 ```bash
 log show --predicate 'process == "blink"' --last 2m --style compact | tail -30
 ```
+
+Then prove the right server got baked in — the failure this catches is silent, the app
+just fails to sign in:
+
+```bash
+strings /Applications/Blink.app/Contents/MacOS/blink | grep -c "$BLINK_SERVER_URL"
+```
+
+Zero hits means step 2 ran without the env var. Rebuild; don't hand over the bundle.
 
 ## 5. Report what to look at
 

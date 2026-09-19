@@ -32,7 +32,6 @@ use crate::services::sync_service::SyncService;
 use crate::services::task_group_service::TaskGroupService;
 use crate::services::task_service::TaskService;
 use crate::services::repo_service::RepoService;
-use crate::services::vault_service::VaultService;
 use crate::services::worktree_service::WorktreeService;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -66,8 +65,6 @@ pub fn run() {
             let repository = Repository::new(db);
 
             let hlc_service = Arc::new(HlcService::new(repository.sync_state.clone())?);
-            // Shared encryption vault (keychain-backed VMK); the sync service holds it too.
-            let vault_service = Arc::new(VaultService::new());
 
             let (sync_sender, sync_receiver) = sync_channel::init();
 
@@ -77,6 +74,7 @@ pub fn run() {
                 ServerClient::new(),
                 SessionTokenService::new(),
                 repository.settings.clone(),
+                sync_sender.clone(),
             ));
             app.manage(TaskService::new(
                 repository.tasks.clone(),
@@ -88,7 +86,7 @@ pub fn run() {
                 repository.settings.clone(),
                 repository.tasks.clone(),
                 hlc_service.clone(),
-                sync_sender.clone(),
+                sync_sender,
             ));
             app.manage(ShortcutService::new(repository.settings.clone()));
             let repo_service = RepoService::new(GitCli::new(), repository.settings.clone());
@@ -126,15 +124,12 @@ pub fn run() {
             app.manage(terminal_service);
             app.manage(editor_service);
             app.manage(attention_service);
-            app.manage(vault_service.clone());
             let sync_service = Arc::new(SyncService::new(
                 ServerClient::new(),
-                vault_service,
                 SessionTokenService::new(),
                 repository.tasks.clone(),
                 repository.task_groups.clone(),
                 repository.sync_state.clone(),
-                sync_sender,
             ));
             app.manage(sync_service.clone());
 
@@ -172,12 +167,7 @@ pub fn run() {
             commands::link::open_link,
             commands::shortcut::get_capture_shortcut,
             commands::shortcut::set_capture_shortcut,
-            commands::sync::vault_status,
-            commands::sync::setup_vault,
-            commands::sync::unlock_vault,
             commands::sync::sync_now,
-            commands::sync::is_vault_unlocked,
-            commands::sync::lock_vault,
             commands::repo::list_managed_repos,
             commands::repo::remove_managed_repo,
             commands::repo::pick_managed_repo,

@@ -1,68 +1,56 @@
-//! Bidirectional sync orchestration. Push encrypts locally-changed rows and uploads
-//! them; pull downloads remote changes, decrypts them, and merges last-write-wins. It
-//! ties together the vault (encryption), the server client (transport), the entity
-//! repos (dirty rows + merge), and `sync_state` (the pull cursor), and drives the
-//! account keyset round-trip (setup / unlock). All record payloads are opaque to the
-//! server — it only ever sees ciphertext + clocks.
-
-use std::sync::Arc;
+//! Bidirectional sync orchestration. Push uploads locally-changed rows; pull
+//! downloads remote changes and merges them last-write-wins. It ties together the
+//! server client (transport), the entity repos (dirty rows + merge), and `sync_state`
+//! (the pull cursor).
+//!
+//! The server keeps a readable replica of these rows rather than opaque ciphertext —
+//! the payload it stores is the local row itself, as JSON.
 
 use serde::Deserialize;
 
 use crate::clients::server_client::ServerClient;
-use crate::core::crypto::Keyset;
 use crate::core::error::{AppError, AppResult};
-use crate::core::models::VaultStatus;
-use crate::core::sync_channel::SyncSignalSender;
 use crate::core::wire::{RecordBody, SyncPacket, SyncRecord};
 use crate::repository::{SyncStateRepository, TaskGroupRepository, TaskRepository};
 use crate::services::session_token_service::SessionTokenService;
-use crate::services::vault_service::VaultService;
 
 const LAST_PULLED_SEQ_KEY: &str = "last_pulled_seq";
 
 pub struct SyncService {
     server_client: ServerClient,
-    vault_service: Arc<VaultService>,
     session_token_service: SessionTokenService,
     task_repository: TaskRepository,
     task_group_repository: TaskGroupRepository,
     sync_state_repository: SyncStateRepository,
-    sync_signal: SyncSignalSender,
 }
 
 impl SyncService {
     pub fn new(
         server_client: ServerClient,
-        vault_service: Arc<VaultService>,
         session_token_service: SessionTokenService,
         task_repository: TaskRepository,
         task_group_repository: TaskGroupRepository,
         sync_state_repository: SyncStateRepository,
-        sync_signal: SyncSignalSender,
     ) -> Self {
         Self {
             server_client,
-            vault_service,
             session_token_service,
             task_repository,
             task_group_repository,
             sync_state_repository,
-            sync_signal,
         }
     }
 
-    /// Whether a sync cycle would actually do anything: signed in and the vault
-    /// unlocked. The background loop checks this before signalling activity, so the UI
-    /// indicator doesn't flicker every cycle before the user has set sync up.
+    /// Whether a sync cycle would actually do anything: signed in. The background loop
+    /// checks this before signalling activity, so the UI indicator doesn't flicker
+    /// every cycle before the user has signed in.
     pub fn is_ready(&self) -> bool {
-        self.vault_service.is_unlocked()
-            && self.session_token_service.read().ok().flatten().is_some()
+        self.session_token_service.read().ok().flatten().is_some()
     }
 
     /// One sync cycle: pull remote changes first (so a fresh device fills in), then
     /// push local ones. A no-op when not [`is_ready`](Self::is_ready), so callers can
-    /// invoke it freely before the user has set sync up.
+    /// invoke it freely before the user has signed in.
     pub async fn sync(&self) -> AppResult<()> {
         if !self.is_ready() {
             return Ok(());
@@ -72,7 +60,7 @@ impl SyncService {
         Ok(())
     }
 
-    /// Encrypt and upload every locally-changed row, then clear their dirty flags.
+    /// Upload every locally-changed row, then clear their dirty flags.
     pub async fn push(&self) -> AppResult<usize> {
         let token = self.token()?;
         let task_changes = self.task_repository.list_dirty()?;
@@ -83,12 +71,10 @@ impl SyncService {
 
         let mut packets = Vec::with_capacity(task_changes.len() + group_changes.len());
         for change in task_changes.iter().chain(group_changes.iter()) {
-            let plaintext = serde_json::to_vec(&change.body)
-                .map_err(|e| AppError::Sync(format!("serialize record: {e}")))?;
             packets.push(SyncPacket {
                 id: change.id.clone(),
                 clock: change.clock.clone(),
-                cipher: self.vault_service.encrypt(&plaintext)?,
+                body: change.body.clone(),
             });
         }
 
@@ -101,8 +87,9 @@ impl SyncService {
         Ok(packets.len())
     }
 
-    /// Pull remote changes since the cursor, decrypt, LWW-merge, and advance the cursor.
-    /// Records arrive in `seq` order, so a referenced group always precedes its tasks.
+    /// Pull remote changes since the cursor and LWW-merge them, then advance the
+    /// cursor. Records arrive in `seq` order, so a referenced group always precedes
+    /// its tasks.
     pub async fn pull(&self) -> AppResult<usize> {
         let token = self.token()?;
         let since = self.last_pulled_seq()?;
@@ -114,15 +101,12 @@ impl SyncService {
 
         let mut max_seq = since;
         for record in &records {
-            let plaintext = self.vault_service.decrypt(&record.cipher)?;
-            let body: RecordBody = serde_json::from_slice(&plaintext)
-                .map_err(|e| AppError::Sync(format!("deserialize record: {e}")))?;
-            match body {
+            match &record.body {
                 RecordBody::Task(task) => {
-                    self.task_repository.merge(&record.id, &record.clock, &task)?;
+                    self.task_repository.merge(&record.id, &record.clock, task)?;
                 }
                 RecordBody::Group(group) => {
-                    self.task_group_repository.merge(&record.id, &record.clock, &group)?;
+                    self.task_group_repository.merge(&record.id, &record.clock, group)?;
                 }
             }
             max_seq = max_seq.max(record.seq);
@@ -132,47 +116,6 @@ impl SyncService {
             self.sync_state_repository.set(LAST_PULLED_SEQ_KEY, &max_seq.to_string())?;
         }
         Ok(records.len())
-    }
-
-    /// Which vault screen the post-login gate should show: unlocked (proceed), or —
-    /// when locked — whether a keyset already exists on the server (unlock) or not
-    /// (first-time setup).
-    pub async fn vault_status(&self) -> AppResult<VaultStatus> {
-        if self.vault_service.is_unlocked() {
-            return Ok(VaultStatus::Unlocked);
-        }
-        let token = self.token()?;
-        let resp = self.server_client.get_keyset(&token).await.map_err(net_err)?;
-        ensure_ok(&resp)?;
-        let keyset = resp.json::<ApiResponse<KeysetData>>().await.map_err(net_err)?.data.keyset;
-        Ok(if keyset.is_some() { VaultStatus::NeedsUnlock } else { VaultStatus::NeedsSetup })
-    }
-
-    /// First-time vault setup: create the keyset locally and upload it. Returns the
-    /// Secret Key to show the user **once**.
-    pub async fn setup_vault(&self, master_password: &str) -> AppResult<String> {
-        let token = self.token()?;
-        let setup = self.vault_service.setup(master_password)?;
-        let resp = self.server_client.put_keyset(&token, &setup.keyset).await.map_err(net_err)?;
-        ensure_ok(&resp)?;
-        // Now unlocked — kick a sync to push anything already captured locally.
-        self.sync_signal.send();
-        Ok(setup.secret_key)
-    }
-
-    /// Unlock the vault on this device from the server-stored keyset. Errors if the
-    /// account hasn't been set up, or the master password / Secret Key is wrong.
-    pub async fn unlock_vault(&self, master_password: &str, secret_key: &str) -> AppResult<()> {
-        let token = self.token()?;
-        let resp = self.server_client.get_keyset(&token).await.map_err(net_err)?;
-        ensure_ok(&resp)?;
-        let keyset = resp.json::<ApiResponse<KeysetData>>().await.map_err(net_err)?.data.keyset;
-        let keyset =
-            keyset.ok_or_else(|| AppError::Sync("no keyset on server — run setup first".into()))?;
-        self.vault_service.unlock(master_password, secret_key, &keyset)?;
-        // Now unlocked — kick a sync to pull this device's data down.
-        self.sync_signal.send();
-        Ok(())
     }
 
     fn token(&self) -> AppResult<String> {
@@ -197,11 +140,6 @@ struct ApiResponse<T> {
 #[derive(Deserialize)]
 struct PullData {
     records: Vec<SyncRecord>,
-}
-
-#[derive(Deserialize)]
-struct KeysetData {
-    keyset: Option<Keyset>,
 }
 
 fn net_err(e: reqwest::Error) -> AppError {

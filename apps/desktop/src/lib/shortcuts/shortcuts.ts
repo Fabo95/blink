@@ -537,8 +537,8 @@ export const SHORTCUTS = {
   // help + dialect toggle have their own footer affordances (no statusline chip).
   'app.help': { keys: 'c', hint: null, order: 50 },
   'app.hintDialect': { keys: 'v', hint: null, order: 50 },
-  // Sign-out is a base-level (0) statusline chip so it shows wherever it's enabled — the
-  // inbox footer and, crucially, the vault gate (which has no header to hang it off).
+  // Sign-out is a base-level (0) statusline chip so it shows wherever it's enabled,
+  // starting with the inbox footer.
   'app.signOut': {
     keys: 'mod+shift+o',
     hint: HINTS['mod+shift+o'],

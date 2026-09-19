@@ -8,8 +8,9 @@ interface SyncServiceDeps {
 
 /**
  * Bidirectional sync orchestration. Maps between the client wire format
- * ({@link SyncPacket}) and DB rows. The server only ever moves ciphertext — it
- * never decrypts `cipher`.
+ * ({@link SyncPacket}) and DB rows. The row body is stored as the client sent it —
+ * the server reads only `kind` (and `status`), both of which Postgres derives into
+ * generated columns, so the rest of the shape stays the desktop's business.
  */
 export class SyncService {
   private deps: SyncServiceDeps;
@@ -34,7 +35,7 @@ function packetToRow(userId: string, packet: SyncPacket): NewRecordRow {
   return {
     id: packet.id,
     ownerId: userId,
-    cipher: packet.cipher,
+    body: packet.body,
     hlcPhysical: packet.clock.physical,
     hlcCounter: packet.clock.counter,
     hlcNodeId: packet.clock.nodeId,
@@ -45,7 +46,7 @@ function rowToRecord(row: RecordRow): SyncRecord {
   return {
     id: row.id,
     clock: { physical: row.hlcPhysical, counter: row.hlcCounter, nodeId: row.hlcNodeId },
-    cipher: row.cipher,
+    body: row.body,
     seq: row.seq,
   };
 }

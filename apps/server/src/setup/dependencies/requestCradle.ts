@@ -1,8 +1,6 @@
 import { asClass } from 'awilix';
 import { AuthService } from '@/services/common/authService.js';
-import { KeysetService } from '@/services/common/keysetService.js';
 import { SyncService } from '@/services/common/syncService.js';
-import { KeysetsModelService } from '@/services/model/keysetsModelService.js';
 import { RecordsModelService } from '@/services/model/recordsModelService.js';
 import type { RequestRegistrations } from './types.js';
 
@@ -15,9 +13,7 @@ import type { RequestRegistrations } from './types.js';
 export function createRequestCradle(): RequestRegistrations {
   return {
     recordsModelService: asClass(RecordsModelService).scoped(),
-    keysetsModelService: asClass(KeysetsModelService).scoped(),
     authService: asClass(AuthService).scoped(),
     syncService: asClass(SyncService).scoped(),
-    keysetService: asClass(KeysetService).scoped(),
   };
 }

@@ -10,6 +10,7 @@ use serde::Deserialize;
 use crate::clients::server_client::ServerClient;
 use crate::core::error::{AppError, AppResult};
 use crate::core::models::{AuthResult, AuthStatus, AuthUser};
+use crate::core::sync_channel::SyncSignalSender;
 use crate::repository::SettingsRepository;
 use crate::services::session_token_service::SessionTokenService;
 
@@ -24,6 +25,7 @@ pub struct AuthService {
     server_client: ServerClient,
     session_token_service: SessionTokenService,
     settings_repository: SettingsRepository,
+    sync_signal: SyncSignalSender,
 }
 
 impl AuthService {
@@ -31,11 +33,13 @@ impl AuthService {
         server_client: ServerClient,
         session_token_service: SessionTokenService,
         settings_repository: SettingsRepository,
+        sync_signal: SyncSignalSender,
     ) -> Self {
         Self {
             server_client,
             session_token_service,
             settings_repository,
+            sync_signal,
         }
     }
 
@@ -50,6 +54,8 @@ impl AuthService {
             let (user, token) = read_session(response).await?;
             self.session_token_service.store(&token)?;
             self.cache_user(&user)?;
+            // Fill a fresh device in immediately rather than after the next poll.
+            self.sync_signal.send();
             return Ok(authenticated(user));
         }
 

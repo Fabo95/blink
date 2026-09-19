@@ -32,8 +32,8 @@ it, and a keyboard-only UI with zero buttons.
   client↔server wire format, with an OpenAPI doc generated from the server's routes.
 - **Security-conscious sync design** — the self-hosted server (Fastify + Better Auth +
   Postgres 17) never trusts itself: it connects as a least-privilege role and Row-Level
-  Security scopes every query to the requesting user. Task payloads are stored as ciphertext
-  columns, ready for the zero-knowledge E2EE sync tier (Phase 2).
+  Security scopes every query to the requesting user, and the sync store keeps a readable
+  replica of the desktop's rows so the server can act on them.
 
 ## How a capture flows
 
@@ -44,7 +44,7 @@ it, and a keyboard-only UI with zero buttons.
    → on-device DLP filter redacts secrets
    → review panel: edit · ⌘I improve with AI · ⌘G pick group · ⌘↵ save
    → SQLCipher store (AES-256, key in the macOS keychain)
-   → (Phase 2) HLC/LWW sync → E2EE envelopes → self-hosted Postgres
+   → HLC/LWW sync → self-hosted Postgres replica
 ```
 
 ## Architecture
@@ -56,8 +56,7 @@ it, and a keyboard-only UI with zero buttons.
 | Sync/auth server | Fastify 5 + zod 4 + awilix DI + Better Auth (email OTP via Resend) | `apps/server` |
 | Database | Postgres 17, Drizzle ORM, hand-written RLS/role migrations | `packages/db` |
 | Wire contract | zod schemas, single source of truth client↔server (+ OpenAPI) | `packages/contract` |
-| E2EE primitives | AES-GCM + PBKDF2 envelope helpers (Phase 2 seam) | `packages/crypto` |
-| Sync engine | Hybrid logical clocks + LWW stubs (Phase 2 seam) | `packages/sync` |
+| Sync engine | Hybrid logical clocks + LWW, in the Rust core | `apps/desktop/src-tauri/src/services/sync_service.rs` |
 
 Three boundaries hold the design together:
 
@@ -66,14 +65,15 @@ Three boundaries hold the design together:
 - **Client ↔ server**: `@blink/contract` zod schemas are the wire format; the server also
   emits `openapi.json` from its routes.
 - **Rust owns all server communication.** The webview only ever talks to the Rust core over
-  Tauri IPC; the bearer token (and later the E2EE keys) live in the native layer and the OS
-  keychain, never in the JS heap.
+  Tauri IPC; the bearer token lives in the native layer and the OS keychain, never in the JS
+  heap.
 
 The server side is defense-in-depth: migrations run as the schema owner, but the API connects
 as a separate `blink_api` role that can't touch anything it wasn't explicitly granted, and RLS
 policies bind every row to `app.current_user_id` set per request. Even a fully compromised API
-process can't read another user's rows — and since payloads are ciphertext columns, Phase 2's
-zero-knowledge sync means the operator stores nothing readable at all.
+process can't read another user's rows. The local SQLite store stays the source of truth and is
+encrypted at rest (SQLCipher); the server holds a replica it *can* read, which keeps the door
+open for server-side features (a web inbox, integrations) that an opaque store would rule out.
 
 ## Getting started
 
@@ -124,8 +124,7 @@ blink/
 ├── packages/
 │   ├── contract/           # zod wire schemas — client↔server single source of truth
 │   ├── db/                 # Drizzle schema + RLS/role migrations + withUser() client
-│   ├── crypto/             # E2EE envelope primitives (Phase 2)
-│   ├── sync/               # HLC/LWW sync engine stubs (Phase 2)
+│   ├── sync/               # legacy TS sync stubs — superseded by the Rust core
 │   ├── ai/                 # title heuristics
 │   └── core/               # shared brand/theme tokens
 └── docker-compose.yml      # Postgres + migrate + API for local self-hosting
@@ -138,8 +137,7 @@ Monorepo: pnpm workspaces + Turborepo, Biome for lint/format, TypeScript 7.
 1. **Phase 1 — Local-first MVP** *(current)*: capture (`⌘⇧B`/`⌘⇧M`), DLP filter, encrypted
    local store, AI improve, keyboard-driven inbox with groups and archive, account
    sign-in/verification against the self-hosted server.
-2. **Phase 2 — Zero-knowledge sync**: multi-device sync over the existing server; E2EE
-   envelopes client-side, HLC/LWW conflict resolution (seams already in `packages/crypto`
-   and `packages/sync`).
+2. **Phase 2 — Sync** *(done)*: multi-device sync over the self-hosted server, with hybrid
+   logical clocks and last-write-wins conflict resolution.
 3. **Phase 3 — Teams**: workspaces, roles, SSO.
 4. **Phase 4 — On-premise / VPC**: the full stack as a private-network deployment.

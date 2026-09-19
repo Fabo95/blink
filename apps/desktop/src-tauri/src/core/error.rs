@@ -21,9 +21,6 @@ pub enum AppError {
     Link(String),
     /// Writing to the system clipboard failed.
     Clipboard(String),
-    /// An encryption/decryption or key-derivation failure in the sync crypto layer
-    /// (e.g. a wrong master password / Secret Key, or tampered ciphertext).
-    Crypto(String),
     /// A sync failure — talking to the server, or (de)serializing a record payload.
     Sync(String),
     /// A managed-repo operation failed (not a git repo, unreadable path, or bad list).
@@ -44,7 +41,6 @@ impl fmt::Display for AppError {
             AppError::Shortcut(msg) => write!(f, "shortcut error: {msg}"),
             AppError::Link(msg) => write!(f, "link error: {msg}"),
             AppError::Clipboard(msg) => write!(f, "clipboard error: {msg}"),
-            AppError::Crypto(msg) => write!(f, "crypto error: {msg}"),
             AppError::Sync(msg) => write!(f, "sync error: {msg}"),
             AppError::Repo(msg) => write!(f, "repo error: {msg}"),
             AppError::Worktree(msg) => write!(f, "worktree error: {msg}"),
