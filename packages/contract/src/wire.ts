@@ -27,6 +27,35 @@ export const zRecordBody = z.looseObject({
 });
 export type RecordBody = z.infer<typeof zRecordBody>;
 
+/** How much work a task is. Mirrors the Rust `TaskEffort` stored spellings. */
+export const zTaskEffort = z.enum(['quick', 'standard', 'deep']);
+export type TaskEffort = z.infer<typeof zTaskEffort>;
+
+/** A task row as it rides in {@link zRecordBody}. The server needs this one shape (and
+ * only this one) so it can synthesize a task from a remote capture; every other kind
+ * stays opaque to it. Mirrors `core::wire::TaskBody` field for field — snake_case,
+ * because those Rust structs derive plain serde with no `rename_all`. */
+export const zTaskBody = z.object({
+  kind: z.literal('task'),
+  text: z.string(),
+  raw_text: z.string(),
+  status: z.string(),
+  effort: zTaskEffort,
+  app_id: z.string(),
+  app_name: z.string(),
+  window_title: z.string(),
+  captured_at: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  improved: z.boolean(),
+  link: z.string().nullable(),
+  completed_at: z.string().nullable(),
+  task_group_id: z.string().nullable(),
+  position: z.number(),
+  deleted: z.boolean(),
+});
+export type TaskBody = z.infer<typeof zTaskBody>;
+
 /** The unit the client pushes. `id` is the client-owned UUID, stable across devices,
  * and the LWW conflict key. */
 export const zSyncPacket = z.object({
@@ -43,3 +72,16 @@ export const zSyncRecord = zSyncPacket.extend({
   seq: z.number(),
 });
 export type SyncRecord = z.infer<typeof zSyncRecord>;
+
+/** What an outside agent posts to `/v1/capture` to file a task — the minimum an iOS
+ * Shortcut, a shell script or an LLM tool call should have to know. The server fills
+ * in everything else a task row needs. */
+export const zCaptureInput = z.object({
+  text: z.string().min(1).max(10_000),
+  link: z.string().url().nullish(),
+  effort: zTaskEffort.default('standard'),
+  taskGroupId: z.string().uuid().nullish(),
+  /** Shown in the inbox as the capture's origin (e.g. "Siri", "Gemini"). */
+  via: z.string().min(1).max(60).default('remote'),
+});
+export type CaptureInput = z.infer<typeof zCaptureInput>;

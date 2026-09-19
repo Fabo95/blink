@@ -217,16 +217,6 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
 
-  packages/crypto:
-    dependencies:
-      '@blink/contract':
-        specifier: workspace:*
-        version: link:../contract
-    devDependencies:
-      typescript:
-        specifier: ^7.0.2
-        version: 7.0.2
-
   packages/db:
     dependencies:
       drizzle-orm:

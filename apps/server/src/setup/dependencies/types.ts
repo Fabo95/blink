@@ -4,6 +4,7 @@ import type { NameAndRegistrationPair } from 'awilix';
 import type { AuthClient } from '@/clients/authClient.js';
 import type { EmailClient } from '@/clients/emailClient.js';
 import type { AuthService } from '@/services/common/authService.js';
+import type { CaptureService } from '@/services/common/captureService.js';
 import type { SyncService } from '@/services/common/syncService.js';
 import type { RecordsModelService } from '@/services/model/recordsModelService.js';
 
@@ -19,6 +20,7 @@ declare module '@fastify/awilix' {
     recordsModelService: RecordsModelService;
     authService: AuthService;
     syncService: SyncService;
+    captureService: CaptureService;
   }
 }
 

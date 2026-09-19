@@ -1,10 +1,11 @@
 # Blink sync server (`apps/server`)
 
 Fastify 5 + zod 4 + awilix DI + Drizzle/Postgres 17 (RLS) + Better Auth. The desktop core is the
-only client — it authenticates here (email/password + OTP email flows) and syncs through
+main client — it authenticates here (email/password + OTP email flows) and syncs through
 `/v1/sync/push` + `/v1/sync/pull` over the `records` table, which holds a **readable replica** of
-the desktop's rows. Monorepo-wide rules live in the root `CLAUDE.md` — this file is the
-server-specific guide.
+the desktop's rows. `/v1/capture` is the other way in: an outside agent (an iOS Shortcut, a
+script) posts a task with the same session bearer and it reaches the inbox on the next pull.
+Monorepo-wide rules live in the root `CLAUDE.md` — this file is the server-specific guide.
 
 ## Layout — `src`
 
@@ -14,10 +15,11 @@ server.ts           Fastify app: trustProxy, cors, zod validator/serializer, @fa
                     awilix DI, routes, error handler (ApiError → response envelope)
 router.ts           registers the route modules
 routes/             one folder per endpoint, handler in latest.ts (versioned convention):
-                    auth/ (Better Auth catch-all), sync/pull, sync/push, health-check.ts
+                    auth/ (Better Auth catch-all), sync/pull, sync/push, capture,
+                    health-check.ts
 clients/            transport to external systems: authClient.ts (the Better Auth instance),
                     emailClient.ts (Resend)
-services/common/    business logic (authService, syncService)
+services/common/    business logic (authService, syncService, captureService)
 services/model/     thin Drizzle wrappers (recordsModelService) — no logic
 setup/database/     the postgres/Drizzle connection (getDb)
 setup/dependencies/ awilix wiring: singletonCradle + requestCradle + setup + types
@@ -32,7 +34,7 @@ env.ts              zod-validated env — no defaults, all required
 
 - **DI (awilix)**: `createSingletonCradle()` registers app-lifetime singletons (`db`,
   `emailClient`, `authClient`) via `asValue`; `createRequestCradle()` registers per-request
-  services (`recordsModelService`, `authService`, `syncService`) via
+  services (`recordsModelService`, `authService`, `syncService`, `captureService`) via
   `asClass(...).scoped()`.
   Both go on `diContainer` in `setup.ts`; `types.ts` augments `@fastify/awilix`'s `Cradle` /
   `RequestCradle`. Services take a single `{ dep }` object (awilix PROXY injection). Handlers
@@ -54,10 +56,18 @@ env.ts              zod-validated env — no defaults, all required
   `userId`, and RLS (`FORCE ROW LEVEL SECURITY` on `records`) scopes rows to that
   user — each model-service method opens a transaction and runs
   `set_config('app.current_user_id', userId, true)`, which the policies read.
+- **Remote capture**: `POST /v1/capture` uses the **same session bearer as every other route** —
+  deliberately one auth path, no second credential type. `captureService.capture` synthesizes a
+  whole task row (status/source/HLC/position) and writes it through `recordsModelService`, so the
+  desktop picks it up on its next pull with no client-side special case. A dedicated write-only
+  capture token was considered and dropped: Better Auth keys session refresh on the *same* token
+  value (`updateSession(session.token, { expiresAt })`), so a copied bearer doesn't rotate and
+  the desktop's own sync polls keep it alive — which removed the only argument that justified
+  the extra table and routes.
 - **DB roles (least-privilege)**: the server connects as `blink_api`, a non-owner role with only
   the grants it needs (`organizations` in `0001`, the Better Auth tables in `0003`,
-  `records` + the `records_seq_seq` sequence in `0008`, which drops and recreates `records`),
-  so RLS is enforced and a compromise can't touch the schema. The owner `blink` is used **only** for
+  `records` + the `records_seq_seq` sequence in `0008`), so RLS is enforced and a compromise
+  can't touch the schema. The owner `blink` is used **only** for
   migrations/DDL + `GRANT`s (the compose `migrate` service). Grants are hand-written SQL
   migrations in `@blink/db` — Drizzle can't express roles/grants/policies — so a new server-read
   table needs a matching `GRANT`. Migration 0001 creates `blink_api` with LOGIN but **no
