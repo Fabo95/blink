@@ -11,7 +11,7 @@ use serde_rusqlite::{from_rows, to_params_named};
 use uuid::Uuid;
 
 use crate::core::error::{AppError, AppResult};
-use crate::core::models::{CaptureSource, NewTask, Task};
+use crate::core::models::{CaptureSource, NewTask, Task, TaskEffort};
 use crate::core::wire::{Clock, LocalChange, RecordBody, TaskBody};
 
 use super::db::{serde_err, store_err, Db};
@@ -29,6 +29,7 @@ pub struct TaskPatch {
     pub source_name: Option<String>,
     pub improved: Option<bool>,
     pub task_group_id: Option<String>,
+    pub effort: Option<TaskEffort>,
 }
 
 /// The task repository — task-specific queries over the shared [`Db`]. Constructed
@@ -64,6 +65,7 @@ impl TaskRepository {
             text: new.text,
             raw_text,
             status: "inbox".to_string(),
+            effort: TaskEffort::default(),
             improved: new.improved,
             link: new.link,
             task_group_id: new.task_group_id,
@@ -75,12 +77,12 @@ impl TaskRepository {
         let params = to_params_named(TaskRow::from(&task)).map_err(serde_err)?;
         let conn = self.db.lock()?;
         conn.execute(
-            "INSERT INTO tasks (id, text, raw_text, status, app_id, app_name, window_title, \
-             captured_at, created_at, updated_at, improved, link, completed_at, \
+            "INSERT INTO tasks (id, text, raw_text, status, effort, app_id, app_name, \
+             window_title, captured_at, created_at, updated_at, improved, link, completed_at, \
              task_group_id) \
-             VALUES (:id, :text, :raw_text, :status, :app_id, :app_name, :window_title, \
-             :captured_at, :created_at, :updated_at, :improved, :link, :completed_at, \
-             :task_group_id)",
+             VALUES (:id, :text, :raw_text, :status, :effort, :app_id, :app_name, \
+             :window_title, :captured_at, :created_at, :updated_at, :improved, :link, \
+             :completed_at, :task_group_id)",
             params.to_slice().as_slice(),
         )
         .map_err(store_err)?;
@@ -168,6 +170,14 @@ impl TaskRepository {
             .map_err(store_err)?;
         }
 
+        if let Some(effort) = patch.effort {
+            conn.execute(
+                "UPDATE tasks SET effort = ?1, updated_at = ?2 WHERE id = ?3",
+                params![effort.as_str(), now, id],
+            )
+            .map_err(store_err)?;
+        }
+
         if let Some(completed) = patch.completed {
             let status = if completed { "done" } else { "inbox" };
             // Stamp the completion time (cleared when moved back to the inbox).
@@ -230,6 +240,7 @@ impl TaskRepository {
                         text: row.get("text")?,
                         raw_text: row.get("raw_text")?,
                         status: row.get("status")?,
+                        effort: TaskEffort::from_stored(&row.get::<_, String>("effort")?),
                         app_id: row.get("app_id")?,
                         app_name: row.get("app_name")?,
                         window_title: row.get("window_title")?,
@@ -256,9 +267,9 @@ impl TaskRepository {
         conn.execute(
             "INSERT INTO tasks (id, text, raw_text, status, app_id, app_name, window_title, \
              captured_at, created_at, updated_at, improved, link, completed_at, task_group_id, \
-             position, deleted, hlc_physical, hlc_counter, hlc_node_id, dirty) \
+             position, deleted, hlc_physical, hlc_counter, hlc_node_id, effort, dirty) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, \
-             ?18, ?19, 0) \
+             ?18, ?19, ?20, 0) \
              ON CONFLICT(id) DO UPDATE SET \
              text = excluded.text, raw_text = excluded.raw_text, status = excluded.status, \
              app_id = excluded.app_id, app_name = excluded.app_name, \
@@ -268,14 +279,14 @@ impl TaskRepository {
              completed_at = excluded.completed_at, task_group_id = excluded.task_group_id, \
              position = excluded.position, deleted = excluded.deleted, \
              hlc_physical = excluded.hlc_physical, hlc_counter = excluded.hlc_counter, \
-             hlc_node_id = excluded.hlc_node_id, dirty = 0 \
+             hlc_node_id = excluded.hlc_node_id, effort = excluded.effort, dirty = 0 \
              WHERE (tasks.hlc_physical, tasks.hlc_counter, tasks.hlc_node_id) \
              < (excluded.hlc_physical, excluded.hlc_counter, excluded.hlc_node_id)",
             params![
                 id, body.text, body.raw_text, body.status, body.app_id, body.app_name,
                 body.window_title, body.captured_at, body.created_at, body.updated_at,
                 body.improved, body.link, body.completed_at, body.task_group_id, body.position,
-                body.deleted, clock.physical, clock.counter, clock.node_id
+                body.deleted, clock.physical, clock.counter, clock.node_id, body.effort.as_str()
             ],
         )
         .map_err(store_err)?;
@@ -325,6 +336,7 @@ struct TaskRow {
     text: String,
     raw_text: String,
     status: String,
+    effort: String,
     app_id: String,
     app_name: String,
     window_title: String,
@@ -344,6 +356,7 @@ impl From<&Task> for TaskRow {
             text: task.text.clone(),
             raw_text: task.raw_text.clone(),
             status: task.status.clone(),
+            effort: task.effort.as_str().to_string(),
             app_id: task.source.app_id.clone(),
             app_name: task.source.app_name.clone(),
             window_title: task.source.window_title.clone(),
@@ -365,6 +378,7 @@ impl From<TaskRow> for Task {
             text: row.text,
             raw_text: row.raw_text,
             status: row.status,
+            effort: TaskEffort::from_stored(&row.effort),
             improved: row.improved,
             link: row.link,
             task_group_id: row.task_group_id,

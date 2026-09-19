@@ -85,6 +85,41 @@ pub struct SanitizeResult {
     pub matched: Vec<String>,
 }
 
+/// How long a task is expected to take. `Quick` is the ≤5-minute bucket: the inbox
+/// collects those into their own section instead of leaving them interleaved with real
+/// work, so they can be handled in one pass rather than one interruption each.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub enum TaskEffort {
+    Quick,
+    #[default]
+    Standard,
+    Deep,
+}
+
+impl TaskEffort {
+    /// The stored (and wire) spelling — the same string `serde` emits, kept in one place
+    /// so the column values and the generated TS union can't drift.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Quick => "quick",
+            Self::Standard => "standard",
+            Self::Deep => "deep",
+        }
+    }
+
+    /// An unrecognized value (a row written by a newer version, or the pre-migration
+    /// default) reads as the default rather than failing the whole query.
+    pub fn from_stored(value: &str) -> Self {
+        match value {
+            "quick" => Self::Quick,
+            "deep" => Self::Deep,
+            _ => Self::Standard,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../src/generated/")]
 #[serde(rename_all = "camelCase")]
@@ -94,6 +129,7 @@ pub struct Task {
     /// The post-sanitization, pre-edit captured text — frozen at capture, never updated.
     pub raw_text: String,
     pub status: String,
+    pub effort: TaskEffort,
     pub improved: bool,
     pub link: Option<String>,
     pub task_group_id: Option<String>,
@@ -158,21 +194,31 @@ pub struct ManagedRepo {
     pub base_branch: Option<String>,
 }
 
-/// A worktree branch's standing against `origin` — how it relates to the remote and the
-/// repo's base branch. Reflects the local repo's last-known remote state (no fetch on
-/// list), so `merged`/`gone` are as fresh as the last `git fetch` (e.g. a prune).
+/// A worktree branch's status — one flat set covering both sources. The first three are
+/// what local git can tell (no fetch); the rest are the GitHub PR state. Resolved
+/// server-side per branch: the PR state when the branch has a PR, otherwise the local one.
+///
+/// No local "merged": `git branch --merged` false-positives on freshly-created branches (a
+/// new branch's tip is already an ancestor of base) and misses squash/rebase/non-default-base
+/// merges — "merged" is only ever the GitHub PR state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../src/generated/")]
 #[serde(rename_all = "camelCase")]
-pub enum GitRemoteStatus {
+pub enum WorktreeStatus {
     /// No `origin/<branch>` — the branch exists only locally (never pushed).
     Local,
-    /// `origin/<branch>` exists — pushed and still present on the remote.
-    Published,
-    /// Merged into the repo's base branch.
-    Merged,
-    /// Its upstream was deleted on the remote (`[gone]`) — typically a merged PR cleaned up.
+    /// `origin/<branch>` exists — pushed, no PR (or none fetched yet).
+    Pushed,
+    /// Its upstream was deleted on the remote (`[gone]`).
     Gone,
+    /// Open draft PR.
+    Draft,
+    /// Open PR (ready for review).
+    Open,
+    /// Merged PR.
+    Merged,
+    /// PR closed without merging.
+    Closed,
 }
 
 /// One linked worktree of a managed repo, as shown on the Worktrees page.
@@ -190,38 +236,12 @@ pub struct Worktree {
     pub is_dirty: bool,
     /// A tmux session for this worktree is currently running.
     pub session_live: bool,
-    /// How the branch stands against `origin` and the base branch.
-    pub remote_status: GitRemoteStatus,
+    /// The branch's status: the GitHub PR state when it has a PR, otherwise the local git
+    /// standing. Resolved server-side (`list_worktrees` merges both) so the client renders
+    /// one field and never has to combine two sources.
+    pub status: WorktreeStatus,
 }
 
-/// A branch's pull-request state on GitHub — the authoritative "is it merged" signal,
-/// unlike the local [`GitRemoteStatus`] which only sees merges into the local base branch.
-/// A GitHub draft PR is `Draft`; an ordinary open one is `Open`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/generated/")]
-#[serde(rename_all = "camelCase")]
-pub enum PrState {
-    /// Open draft PR.
-    Draft,
-    /// Open PR (ready for review).
-    Open,
-    /// Merged.
-    Merged,
-    /// Closed without merging.
-    Closed,
-}
-
-/// The pull request Blink surfaces for a worktree's branch, fetched on demand from GitHub
-/// (`gh`). One per branch — the most recent PR when a branch has several.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/generated/")]
-#[serde(rename_all = "camelCase")]
-pub struct WorktreePr {
-    pub branch: String,
-    pub state: PrState,
-    /// Link to the PR on GitHub.
-    pub url: String,
-}
 
 /// A worktree `prune` would remove, with the reason it qualifies. Shown in the
 /// prune confirmation before anything is deleted.

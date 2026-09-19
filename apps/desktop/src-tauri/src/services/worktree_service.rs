@@ -21,9 +21,7 @@ use std::path::{Path, PathBuf};
 use crate::clients::git_cli::GitCli;
 use crate::clients::github_cli::GitHubCli;
 use crate::core::error::{AppError, AppResult};
-use crate::core::models::{
-    GitRemoteStatus, ManagedRepo, PrState, PruneCandidate, Worktree, WorktreePr,
-};
+use crate::core::models::{ManagedRepo, PruneCandidate, Worktree, WorktreeStatus};
 use crate::core::paths::expand_tilde;
 use crate::repository::SettingsRepository;
 use crate::services::terminal_service::TerminalService;
@@ -88,7 +86,7 @@ impl WorktreeService {
 
     pub fn list(&self, repo: &ManagedRepo) -> AppResult<Vec<Worktree>> {
         let root = Path::new(&repo.path);
-        let remote = self.remote_state(repo, root);
+        let gone = self.gone_branches(root);
         let mut worktrees = Vec::new();
         for entry in self.git_cli.list_worktrees(root)? {
             let branch = entry.branch.unwrap_or_else(|| "(detached)".to_string());
@@ -97,7 +95,7 @@ impl WorktreeService {
                 repo: repo.path.clone(),
                 is_dirty: self.git_cli.worktree_has_changes(Path::new(&entry.path)),
                 session_live: self.terminal_service.session_exists(&session),
-                remote_status: remote.status_of(&self.git_cli, root, &branch),
+                status: self.local_status(root, &branch, &gone),
                 is_main: entry.is_main,
                 branch,
                 path: entry.path,
@@ -139,12 +137,12 @@ impl WorktreeService {
         let session = tmux_session_name(&repo.name, &branch);
         self.terminal_service.ensure_session(&session, &wt_path)?;
 
-        let remote = self.remote_state(repo, root);
+        let gone = self.gone_branches(root);
         Ok(Worktree {
             repo: repo.path.clone(),
             is_dirty: self.git_cli.worktree_has_changes(&wt_path),
             session_live: self.terminal_service.session_exists(&session),
-            remote_status: remote.status_of(&self.git_cli, root, &branch),
+            status: self.local_status(root, &branch, &gone),
             is_main: false,
             branch,
             path: wt_path_str,
@@ -258,33 +256,35 @@ impl WorktreeService {
             .collect())
     }
 
-    /// The pull-request state for each of the repo's branches, fetched on demand from GitHub
-    /// (`gh`) — the authoritative merge signal the local git heuristic in [`Self::list`]
-    /// can't see (merges into a non-default base, squash/rebase merges). One PR per branch:
-    /// when a branch has several, the most recent (highest number) wins. Only branches with
-    /// a PR appear; the rest keep their local [`GitRemoteStatus`].
-    pub fn pull_requests(&self, repo: &ManagedRepo) -> AppResult<Vec<WorktreePr>> {
-        let root = Path::new(&repo.path);
-        let mut latest: HashMap<String, (u64, WorktreePr)> = HashMap::new();
-        for row in self.github_cli.pull_requests(root)? {
-            let state = match (row.state.as_str(), row.is_draft) {
-                (_, true) if row.state.eq_ignore_ascii_case("open") => PrState::Draft,
-                (s, _) if s.eq_ignore_ascii_case("open") => PrState::Open,
-                (s, _) if s.eq_ignore_ascii_case("merged") => PrState::Merged,
-                _ => PrState::Closed,
-            };
-            let pr = WorktreePr { branch: row.head_ref_name.clone(), state, url: row.url };
+    /// The GitHub PR status for each branch that has a PR (via `gh`) — the enrichment the
+    /// webview fetches *after* the fast local [`Self::list`], so the list isn't blocked on the
+    /// network. Only branches with a PR appear; the rest keep the local status `list` gave
+    /// them. Best-effort: a `gh` failure yields an empty map (branches stay on local status).
+    pub fn pull_request_statuses(&self, repo: &ManagedRepo) -> HashMap<String, WorktreeStatus> {
+        self.pr_statuses(Path::new(&repo.path))
+    }
+
+    /// The GitHub PR status per branch (via `gh`), the most recent PR winning when a branch
+    /// has several. Best-effort — a `gh` failure (absent, not a GitHub repo, unauthenticated)
+    /// yields an empty map so the caller falls back to local status rather than erroring.
+    fn pr_statuses(&self, root: &Path) -> HashMap<String, WorktreeStatus> {
+        let Ok(rows) = self.github_cli.pull_requests(root) else {
+            return HashMap::new();
+        };
+        let mut latest: HashMap<String, (u64, WorktreeStatus)> = HashMap::new();
+        for row in rows {
+            let status = pr_status(&row.state, row.is_draft);
             latest
                 .entry(row.head_ref_name)
                 .and_modify(|(number, current)| {
                     if row.number > *number {
                         *number = row.number;
-                        *current = pr.clone();
+                        *current = status;
                     }
                 })
-                .or_insert((row.number, pr));
+                .or_insert((row.number, status));
         }
-        Ok(latest.into_values().map(|(_, pr)| pr).collect())
+        latest.into_iter().map(|(branch, (_, status))| (branch, status)).collect()
     }
 
     // ── resolution (used by the open-in-terminal / open-in-editor commands) ─────────────
@@ -313,17 +313,22 @@ impl WorktreeService {
 
     // ── internals ─────────────────────────────────────────────────────────────────────
 
-    /// The repo-wide sets a per-branch [`GitRemoteStatus`] is read from — computed once per
-    /// `list`/`add` (each is a single git call) and reused for every worktree. No fetch, so
-    /// this reflects the local repo's last-known remote state.
-    fn remote_state(&self, repo: &ManagedRepo, root: &Path) -> RemoteState {
-        let base = repo
-            .base_branch
-            .clone()
-            .unwrap_or_else(|| self.git_cli.default_base_branch(root));
-        RemoteState {
-            merged: self.git_cli.branches_merged_into(root, &base).into_iter().collect(),
-            gone: self.git_cli.branches_with_gone_upstream(root).into_iter().collect(),
+    /// Branches whose upstream is `[gone]` — one git call, computed once per `list`/`add` and
+    /// passed to [`Self::local_status`] for every branch. No fetch, so this reflects the
+    /// local repo's last-known remote state.
+    fn gone_branches(&self, root: &Path) -> HashSet<String> {
+        self.git_cli.branches_with_gone_upstream(root).into_iter().collect()
+    }
+
+    /// A branch's local git status (no network): `gone` > `pushed` > `local`. `gone` is the
+    /// precomputed set from [`Self::gone_branches`]; the rest is one ref-existence check.
+    fn local_status(&self, root: &Path, branch: &str, gone: &HashSet<String>) -> WorktreeStatus {
+        if gone.contains(branch) {
+            WorktreeStatus::Gone
+        } else if self.git_cli.has_remote_branch(root, branch) {
+            WorktreeStatus::Pushed
+        } else {
+            WorktreeStatus::Local
         }
     }
 
@@ -358,24 +363,13 @@ fn tmux_session_name(repo_name: &str, branch: &str) -> String {
     format!("{repo_name}-{}", branch.replace('/', "-"))
 }
 
-/// Repo-wide remote facts, gathered once, that classify each branch. `gone` wins over
-/// `merged` (a merged-then-cleaned PR reads as done+removed), and a present `origin/<branch>`
-/// distinguishes a published branch from a purely local one.
-struct RemoteState {
-    merged: HashSet<String>,
-    gone: HashSet<String>,
-}
-
-impl RemoteState {
-    fn status_of(&self, git_cli: &GitCli, root: &Path, branch: &str) -> GitRemoteStatus {
-        if self.gone.contains(branch) {
-            GitRemoteStatus::Gone
-        } else if self.merged.contains(branch) {
-            GitRemoteStatus::Merged
-        } else if git_cli.has_remote_branch(root, branch) {
-            GitRemoteStatus::Published
-        } else {
-            GitRemoteStatus::Local
-        }
+/// Map a `gh` PR row's raw state (`OPEN` / `CLOSED` / `MERGED`, plus the draft flag) to a
+/// [`WorktreeStatus`]. A GitHub draft is `OPEN` with `is_draft`.
+fn pr_status(state: &str, is_draft: bool) -> WorktreeStatus {
+    match (state, is_draft) {
+        (s, true) if s.eq_ignore_ascii_case("open") => WorktreeStatus::Draft,
+        (s, _) if s.eq_ignore_ascii_case("open") => WorktreeStatus::Open,
+        (s, _) if s.eq_ignore_ascii_case("merged") => WorktreeStatus::Merged,
+        _ => WorktreeStatus::Closed,
     }
 }

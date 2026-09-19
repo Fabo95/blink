@@ -6,13 +6,12 @@ import {
   GitPullRequest,
   GitPullRequestClosed,
   GitPullRequestDraft,
+  Loader2,
   type LucideIcon,
 } from 'lucide-react';
-import type { GitRemoteStatus } from '@/generated/GitRemoteStatus';
-import type { PrState } from '@/generated/PrState';
 import type { Worktree } from '@/generated/Worktree';
 import type { WorktreeAttention } from '@/generated/WorktreeAttention';
-import type { WorktreePr } from '@/generated/WorktreePr';
+import type { WorktreeStatus } from '@/generated/WorktreeStatus';
 import { cn } from '@/lib/utils';
 
 interface Badge {
@@ -21,28 +20,23 @@ interface Badge {
   text: string;
 }
 
-/** How each attention state reads on the row — the dot colour + label. `working` pulses to
+/** How each attention state reads on the row — the dot colour + label. `grinding` pulses to
  *  signal it's actively moving; the rest are steady. */
 const ATTENTION: Record<WorktreeAttention, { label: string; dot: string; text: string }> = {
-  working: { label: 'working', dot: 'bg-primary animate-pulse', text: 'text-primary' },
-  needsInput: { label: 'needs you', dot: 'bg-blink-bright', text: 'text-blink-bright' },
-  done: { label: 'done', dot: 'bg-blink-success', text: 'text-blink-success' },
-  errored: { label: 'error', dot: 'bg-destructive', text: 'text-destructive' },
+  working: { label: 'grinding', dot: 'bg-primary animate-pulse', text: 'text-primary' },
+  needsInput: { label: 'your turn', dot: 'bg-blink-bright', text: 'text-blink-bright' },
+  done: { label: 'chilling', dot: 'bg-blink-success', text: 'text-blink-success' },
+  errored: { label: 'borked', dot: 'bg-destructive', text: 'text-destructive' },
 };
 
-/** The branch's local git standing, shown until a GitHub refresh (`g`) upgrades it to a PR
- *  state. `merged`/`gone` mark a done branch; `published` vs `local` answers "is it on origin".
- *  Local `merged` shares merged-PR's colour so "merged" reads the same however it was found. */
-const REMOTE: Record<GitRemoteStatus, Badge> = {
+/** How each `WorktreeStatus` value reads — the icon + label + colour. Local git states
+ *  (`local`/`pushed`/`gone`) stay quiet; PR states follow GitHub's own colours (open green,
+ *  merged violet, closed red, draft grey). The status is resolved server-side, so the row
+ *  just looks up the one value it's given. */
+const STATUS: Record<WorktreeStatus, Badge> = {
   local: { label: 'local', icon: CloudOff, text: 'text-muted-foreground' },
-  published: { label: 'pushed', icon: Cloud, text: 'text-foreground/70' },
-  merged: { label: 'merged', icon: GitMerge, text: 'text-primary' },
+  pushed: { label: 'pushed', icon: Cloud, text: 'text-foreground/70' },
   gone: { label: 'gone', icon: CloudOff, text: 'text-blink-bright' },
-};
-
-/** The branch's GitHub PR state (once refreshed) — the authoritative merge signal. Colours
- *  follow GitHub's own: open green, merged violet, closed red, draft grey. */
-const PR: Record<PrState, Badge> = {
   draft: { label: 'draft', icon: GitPullRequestDraft, text: 'text-muted-foreground' },
   open: { label: 'open', icon: GitPullRequest, text: 'text-blink-success' },
   merged: { label: 'merged', icon: GitMerge, text: 'text-primary' },
@@ -51,27 +45,29 @@ const PR: Record<PrState, Badge> = {
 
 /**
  * One linked worktree row on the Worktrees page: branch, a dirty marker, its git standing —
- * the local remote status (local / pushed / merged / gone), upgraded to the GitHub PR state
- * (draft / open / merged / closed) once refreshed with `g` — and its Claude session's
- * attention state (working / needs you / done / errored, from reading the tmux pane), falling
- * back to a plain live/idle dot when there's no live session. Click-to-select (parity with
- * the task rows); the cursor + actions are keyboard shortcuts owned by the page.
+ * one `status` (the GitHub PR state when the branch has a PR, else the local git status:
+ * local / pushed / gone) — and its Claude session's attention state (grinding / your turn /
+ * chilling / borked, from reading the tmux pane), falling back to a plain idle/asleep dot
+ * when there's no attention (a session with no report = idle, none = asleep). The git-status
+ * chip shows a spinner while PR status is being fetched (`statusLoading`) — the list itself
+ * is already up. Click-to-select (parity with the task rows); the cursor + actions are
+ * keyboard shortcuts owned by the page.
  */
 export function WorktreeRow({
   worktree,
-  pr,
+  statusLoading,
   attention,
   selected,
   onSelect,
 }: {
   worktree: Worktree;
-  pr: WorktreePr | null;
+  statusLoading: boolean;
   attention: WorktreeAttention | null;
   selected: boolean;
   onSelect: () => void;
 }) {
   const status = attention ? ATTENTION[attention] : null;
-  const git = pr ? PR[pr.state] : REMOTE[worktree.remoteStatus];
+  const git = STATUS[worktree.status];
   const GitIcon = git.icon;
   return (
     <button
@@ -90,10 +86,16 @@ export function WorktreeRow({
         <span className="shrink-0 text-[11px] font-medium text-blink-bright">dirty</span>
       )}
       <span className="flex-1" />
-      <span className={cn('flex shrink-0 items-center gap-1 text-[11px] font-medium', git.text)}>
-        <GitIcon className="size-3" />
-        {git.label}
-      </span>
+      {statusLoading ? (
+        <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+          <Loader2 className="size-3 animate-spin" />
+        </span>
+      ) : (
+        <span className={cn('flex shrink-0 items-center gap-1 text-[11px] font-medium', git.text)}>
+          <GitIcon className="size-3" />
+          {git.label}
+        </span>
+      )}
       {status ? (
         <span
           className={cn(
@@ -117,7 +119,7 @@ export function WorktreeRow({
               worktree.sessionLive ? 'bg-blink-success' : 'bg-muted-foreground/40',
             )}
           />
-          {worktree.sessionLive ? 'live' : 'idle'}
+          {worktree.sessionLive ? 'idle' : 'asleep'}
         </span>
       )}
     </button>

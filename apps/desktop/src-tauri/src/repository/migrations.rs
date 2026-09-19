@@ -79,5 +79,8 @@ pub(super) fn migrations() -> Migrations<'static> {
         ),
         // Optional per-group context, folded into the prompt-generation system prompt.
         M::up("ALTER TABLE task_groups ADD COLUMN context TEXT;"),
+        // Expected effort ('quick' | 'standard' | 'deep'). Existing rows are unlabelled,
+        // which is exactly 'standard' — they stay in the main inbox section.
+        M::up("ALTER TABLE tasks ADD COLUMN effort TEXT NOT NULL DEFAULT 'standard';"),
     ])
 }

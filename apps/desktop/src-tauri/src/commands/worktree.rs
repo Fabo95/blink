@@ -4,15 +4,19 @@
 
 use tauri::{AppHandle, State};
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::core::error::AppResult;
-use crate::core::models::{PruneCandidate, Worktree, WorktreeAttentionUpdate, WorktreePr};
+use crate::core::models::{PruneCandidate, Worktree, WorktreeAttentionUpdate, WorktreeStatus};
 use crate::platform::dialog;
 use crate::services::attention_service::AttentionService;
 use crate::services::repo_service::RepoService;
 use crate::services::worktree_service::WorktreeService;
 
+/// The repo's linked worktrees with their **local** git status (no network) — fast, so the
+/// list renders immediately. GitHub PR status is fetched separately via
+/// [`list_worktree_pr_statuses`] and overlaid by the webview.
 #[tauri::command]
 pub fn list_worktrees(
     repo_service: State<'_, RepoService>,
@@ -20,6 +24,18 @@ pub fn list_worktrees(
     repo_path: String,
 ) -> AppResult<Vec<Worktree>> {
     worktree_service.list(&repo_service.find(&repo_path)?)
+}
+
+/// The GitHub PR status per branch (via `gh`), keyed by branch — only branches with a PR.
+/// Async (network) and fetched after `list_worktrees` so it never blocks the list. Best-effort:
+/// a `gh` failure (absent / not a GitHub repo / unauthenticated) yields an empty map.
+#[tauri::command]
+pub async fn list_worktree_pr_statuses(
+    repo_service: State<'_, RepoService>,
+    worktree_service: State<'_, WorktreeService>,
+    repo_path: String,
+) -> AppResult<HashMap<String, WorktreeStatus>> {
+    Ok(worktree_service.pull_request_statuses(&repo_service.find(&repo_path)?))
 }
 
 /// Create (or attach) a worktree for `branch` and ensure its tmux/Claude session.
@@ -56,18 +72,6 @@ pub async fn delete_remote_branch(
     branch: String,
 ) -> AppResult<()> {
     worktree_service.delete_remote_branch(&repo_service.find(&repo_path)?, &branch)
-}
-
-/// The GitHub pull-request state for each of the repo's branches (via `gh`). Async — it
-/// reaches the network — and fetched on demand (a manual refresh), so the Worktrees page
-/// stays offline-first: it shows the local git status until the user asks for PR state.
-#[tauri::command]
-pub async fn list_worktree_pull_requests(
-    repo_service: State<'_, RepoService>,
-    worktree_service: State<'_, WorktreeService>,
-    repo_path: String,
-) -> AppResult<Vec<WorktreePr>> {
-    worktree_service.pull_requests(&repo_service.find(&repo_path)?)
 }
 
 /// Preview (`apply = false`) or perform (`apply = true`) a prune of merged/gone worktrees.

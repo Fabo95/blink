@@ -1,7 +1,9 @@
 import { Check, ExternalLink, Tag, WandSparkles } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverAnchor } from '@/components/ui/popover';
 import type { Task } from '@/generated/Task';
+import { EFFORT_BADGE, effortLabel } from '@/lib/effort';
 import { linkLabel } from '@/lib/link';
 import { cn } from '@/lib/utils';
 import { DeleteTaskPopover } from './DeleteTaskPopover';
@@ -41,6 +43,7 @@ export function TaskRow({
 }: TaskRowProps) {
   const done = task.status === 'done';
   const source = task.source.appName || task.source.appId;
+  const effortBadge = EFFORT_BADGE[task.effort];
   // The editor and the delete-confirm share the row's one popover — they're mutually
   // exclusive (you cancel one to open the other).
   const overlayOpen = editing || confirmingDelete;
@@ -144,6 +147,19 @@ export function TaskRow({
                 )}
               </div>
             </div>
+            {/* Right-aligned so the badges line up into a scannable column — that column is
+                what replaces a separate section for the quick pile. */}
+            {effortBadge && (
+              <Badge
+                className={cn(
+                  'shrink-0 text-[10px] shadow-none',
+                  effortBadge,
+                  done && 'opacity-50',
+                )}
+              >
+                {effortLabel(task.effort)}
+              </Badge>
+            )}
           </div>
         </li>
       </PopoverAnchor>

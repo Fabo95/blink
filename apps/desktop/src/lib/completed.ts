@@ -10,7 +10,10 @@ export interface DayGroup {
 }
 
 export interface TaskBuckets {
-  /** Not done — the inbox. */
+  /** Not done and labelled `quick` — the ≤5-minute batch, kept separate so the inbox can
+   *  hoist it to the top and reorder within it. */
+  quick: Task[];
+  /** Not done, everything else — the rest of the inbox, in manual order. */
   active: Task[];
   /** Done within the last {@link RECENT_COMPLETION_MS}. */
   recentCompleted: Task[];
@@ -21,10 +24,12 @@ export interface TaskBuckets {
 /** Split tasks into the three sections the inbox renders. */
 export function splitTasks(tasks: Task[], now: number = Date.now()): TaskBuckets {
   const recentSince = now - RECENT_COMPLETION_MS;
-  const buckets: TaskBuckets = { active: [], recentCompleted: [], archived: [] };
+  const buckets: TaskBuckets = { quick: [], active: [], recentCompleted: [], archived: [] };
   for (const task of tasks) {
     if (task.status !== 'done') {
-      buckets.active.push(task);
+      // Only open tasks split by effort — once done, a quick hit is just a completion.
+      if (task.effort === 'quick') buckets.quick.push(task);
+      else buckets.active.push(task);
     } else if (task.completedAt != null && Date.parse(task.completedAt) >= recentSince) {
       buckets.recentCompleted.push(task);
     } else {

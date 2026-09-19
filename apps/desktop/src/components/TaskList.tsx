@@ -7,6 +7,7 @@ import { TaskEditor } from '@/components/tasks/TaskEditor';
 import { TaskRow } from '@/components/tasks/TaskRow';
 import { TaskSection } from '@/components/tasks/TaskSection';
 import type { Task } from '@/generated/Task';
+import type { TaskEffort } from '@/generated/TaskEffort';
 import { useAiStatus } from '@/hooks/useAiStatus';
 import { useArchive } from '@/hooks/useArchive';
 import { useListCursor } from '@/hooks/useListCursor';
@@ -55,7 +56,13 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
     taskGroups.selectedId === null
       ? tasks
       : tasks.filter((t) => t.taskGroupId === taskGroups.selectedId);
-  const { active, recentCompleted, archived } = splitTasks(visible);
+  const { quick, active, recentCompleted, archived } = splitTasks(visible);
+  // One Inbox section, with the ≤5-min pile hoisted to the top of it — the badge on each
+  // row carries the label, so no second section is needed to say it. `deep` is not
+  // demoted: only the quick batch moves, everything else keeps its manual order.
+  const open = [...quick, ...active];
+  // A reorder swaps within the row's own rung, so `⌥↑↓` can't fight the hoist.
+  const quickIds = new Set(quick.map((t) => t.id));
   const groupNames = new Map(taskGroups.groups.map((g) => [g.id, g.name]));
   const archive = useArchive(archived, { enabled, open: archiveOpen, setOpen: setArchiveOpen });
 
@@ -97,10 +104,23 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
     }
   };
 
-  // Reordering is inbox-only: swap the focused active task with its neighbour above/below.
+  // Label the expected effort (`1`/`2`/`3`). The row may jump between Quick hits and the
+  // Inbox; the cursor tracks it by id, so it stays focused where it lands.
+  const setEffort = async (task: Task, effort: TaskEffort) => {
+    if (task.effort === effort) return;
+    try {
+      await api.updateTask(task.id, { effort });
+      onChanged();
+    } catch (e) {
+      report(e, 'Could not set the effort');
+    }
+  };
+
+  // Reordering is inbox-only, and stays within the row's own rung.
   const moveActive = async (task: Task, delta: -1 | 1) => {
-    const idx = active.findIndex((t) => t.id === task.id);
-    const neighbour = idx === -1 ? undefined : active[idx + delta];
+    const rung = quickIds.has(task.id) ? quick : active;
+    const idx = rung.findIndex((t) => t.id === task.id);
+    const neighbour = idx === -1 ? undefined : rung[idx + delta];
     if (!neighbour) return;
     try {
       await api.reorderTask(task.id, neighbour.id);
@@ -112,7 +132,7 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
 
   // One cursor over whichever page is showing: the inbox (Inbox + Completed, both always
   // open) or the archive page (its current, searched, paged slice) — never both at once.
-  const navItems = archiveOpen ? archive.items : [...active, ...recentCompleted];
+  const navItems = archiveOpen ? archive.items : [...open, ...recentCompleted];
   const {
     focusedId,
     setFocusedId,
@@ -156,15 +176,35 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
       if (focusedTask) setDeletingTask(focusedTask);
     },
   });
-  const reorderable = focusedEnabled && active.some((t) => t.id === focusedTask?.id);
+  // Labelling and reordering both apply to open rows only — Quick hits + Inbox together
+  // are every non-done task, so completed and archived rows are excluded by status.
+  const rowIsOpen = focusedEnabled && focusedTask?.status !== 'done';
+  useShortcut('task.effortQuick', {
+    enabled: rowIsOpen,
+    callback: () => {
+      if (focusedTask) void setEffort(focusedTask, 'quick');
+    },
+  });
+  useShortcut('task.effortStandard', {
+    enabled: rowIsOpen,
+    callback: () => {
+      if (focusedTask) void setEffort(focusedTask, 'standard');
+    },
+  });
+  useShortcut('task.effortDeep', {
+    enabled: rowIsOpen,
+    callback: () => {
+      if (focusedTask) void setEffort(focusedTask, 'deep');
+    },
+  });
   useShortcut('task.moveUp', {
-    enabled: reorderable,
+    enabled: rowIsOpen,
     callback: () => {
       if (focusedTask) void moveActive(focusedTask, -1);
     },
   });
   useShortcut('task.moveDown', {
-    enabled: reorderable,
+    enabled: rowIsOpen,
     callback: () => {
       if (focusedTask) void moveActive(focusedTask, 1);
     },
@@ -280,8 +320,8 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
         <>
           <CaptureCard />
           <GroupFilterBar view={taskGroups} />
-          <TaskSection title="Inbox" count={active.length}>
-            {active.length === 0 ? (
+          <TaskSection title="Inbox" count={open.length}>
+            {open.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-6 text-muted-foreground">
                 <Inbox className="size-6" />
                 <p className="text-sm">
@@ -291,7 +331,7 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
                 </p>
               </div>
             ) : (
-              <ul className="space-y-2">{active.map(renderRow)}</ul>
+              <ul className="space-y-2">{open.map(renderRow)}</ul>
             )}
             {error && <p className="mt-2 line-clamp-2 text-[11px] text-destructive">{error}</p>}
           </TaskSection>

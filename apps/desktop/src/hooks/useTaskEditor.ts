@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Task } from '@/generated/Task';
+import type { TaskEffort } from '@/generated/TaskEffort';
 import { useAiStatus } from '@/hooks/useAiStatus';
 import { api } from '@/lib/api';
 import { normalizeLink } from '@/lib/link';
@@ -15,6 +16,9 @@ export interface TaskEditor {
   source: string;
   /** The draft's group id, or `null` for no group. */
   taskGroupId: string | null;
+  /** The draft's expected effort — `1`/`2`/`3` set it on a focused row without opening
+   *  the editor; this field is the pointer-reachable twin. */
+  effort: TaskEffort;
   /** True while the draft holds AI-improved text (gates ⌘I to once per version). */
   improved: boolean;
   improving: boolean;
@@ -23,6 +27,7 @@ export interface TaskEditor {
   setLink: (value: string) => void;
   setSource: (value: string) => void;
   setTaskGroupId: (value: string | null) => void;
+  setEffort: (value: TaskEffort) => void;
   start: (task: Task) => void;
   cancel: () => void;
 }
@@ -60,6 +65,7 @@ export function useTaskEditor({ onSaved, setError }: Options): TaskEditor {
   const [link, setLink] = useState('');
   const [source, setSource] = useState('');
   const [taskGroupId, setTaskGroupId] = useState<string | null>(null);
+  const [effort, setEffort] = useState<TaskEffort>('standard');
   const [improved, setImproved] = useState(false);
   const [improving, setImproving] = useState(false);
 
@@ -69,6 +75,7 @@ export function useTaskEditor({ onSaved, setError }: Options): TaskEditor {
     setLink(next.link ?? '');
     setSource(next.source.appName || next.source.appId);
     setTaskGroupId(next.taskGroupId);
+    setEffort(next.effort);
     setImproved(next.improved);
     setError('');
   };
@@ -79,6 +86,7 @@ export function useTaskEditor({ onSaved, setError }: Options): TaskEditor {
     setLink('');
     setSource('');
     setTaskGroupId(null);
+    setEffort('standard');
     setImproved(false);
   };
 
@@ -100,6 +108,7 @@ export function useTaskEditor({ onSaved, setError }: Options): TaskEditor {
       source?: string;
       improved?: boolean;
       taskGroupId?: string;
+      effort?: TaskEffort;
     } = {};
     if (text !== task.text) patch.text = text;
     const nextLink = normalizeLink(link) ?? '';
@@ -109,6 +118,7 @@ export function useTaskEditor({ onSaved, setError }: Options): TaskEditor {
     if (improved !== task.improved) patch.improved = improved;
     // Empty string clears the group server-side (the link pattern).
     if ((taskGroupId ?? '') !== (task.taskGroupId ?? '')) patch.taskGroupId = taskGroupId ?? '';
+    if (effort !== task.effort) patch.effort = effort;
 
     if (Object.keys(patch).length === 0) {
       cancel();
@@ -162,12 +172,14 @@ export function useTaskEditor({ onSaved, setError }: Options): TaskEditor {
     link,
     source,
     taskGroupId,
+    effort,
     improved,
     improving,
     setDraft,
     setLink,
     setSource,
     setTaskGroupId,
+    setEffort,
     start,
     cancel,
   };

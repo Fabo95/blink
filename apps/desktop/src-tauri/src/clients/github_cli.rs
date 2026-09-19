@@ -19,7 +19,6 @@ pub struct PrRow {
     pub head_ref_name: String,
     pub state: String,
     pub is_draft: bool,
-    pub url: String,
 }
 
 #[derive(Clone)]
@@ -39,7 +38,7 @@ impl GitHubCli {
             .arg("list")
             .args(["--state", "all"])
             .args(["--limit", "200"])
-            .args(["--json", "number,headRefName,state,isDraft,url"])
+            .args(["--json", "number,headRefName,state,isDraft"])
             .current_dir(repo)
             .output()
             .map_err(|e| {

@@ -1,22 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PruneCandidate } from '@/generated/PruneCandidate';
 import type { Worktree } from '@/generated/Worktree';
-import type { WorktreePr } from '@/generated/WorktreePr';
 import { api } from '@/lib/api';
 import { errorMessage } from '@/lib/utils';
 
 export interface WorktreesView {
   worktrees: Worktree[];
+  /** The worktree list itself is loading (fast, local git only). */
   loading: boolean;
+  /** The GitHub PR status is being fetched (a second, network pass after the list). Drives
+   *  the per-row status-badge spinner — the list is already visible while this is true. */
+  statusLoading: boolean;
   error: string;
-  /** GitHub PR state per branch, keyed by branch name. Empty until the first `refreshGithub`
-   *  for this repo — the page shows local git status until then; cached per repo thereafter
-   *  so switching repos/tabs keeps the last-pulled state. */
-  prs: Record<string, WorktreePr>;
-  githubLoading: boolean;
-  /** Pull PR state for the repo's branches from GitHub (`gh`) and cache it. Manual (`g`) and
-   *  on window focus — costs a network call. */
-  refreshGithub: () => Promise<void>;
+  /** Reload the list (fast local pass) then re-fetch PR status. Bound to `g` and window focus. */
   refresh: () => Promise<void>;
   /** Create (or attach) a worktree, then open its terminal. Rethrows so the caller can
    *  keep its prompt open on failure. */
@@ -31,10 +27,6 @@ export interface WorktreesView {
   pruneApply: () => Promise<void>;
 }
 
-/** Last-pulled GitHub PR state per repo path, kept at module scope so it survives repo
- *  switches and Worktrees-tab unmounts (a `gh` pull is expensive — don't throw it away). */
-const prCache = new Map<string, Record<string, WorktreePr>>();
-
 /**
  * Worktree operations for a single repo — the "worktree stuff". Given the active repo's
  * path, it loads that repo's worktrees and exposes create/remove/open/prune. It knows
@@ -43,64 +35,67 @@ const prCache = new Map<string, Record<string, WorktreePr>>();
 export function useWorktrees(repoPath: string | null): WorktreesView {
   const [worktrees, setWorktrees] = useState<Worktree[]>([]);
   const [loading, setLoading] = useState(false);
+  const [statusLoading, setStatusLoading] = useState(false);
   const [error, setError] = useState('');
-  const [prs, setPrs] = useState<Record<string, WorktreePr>>({});
-  const [githubLoading, setGithubLoading] = useState(false);
-  // Guards against overlapping `gh` pulls (a burst of focus events, or `g` mid-refresh).
-  const githubInFlight = useRef(false);
+  // The repo the latest load() is for — so a slow PR-status response for a repo we've since
+  // switched away from is dropped instead of overwriting the current one.
+  const activeRepo = useRef<string | null>(null);
 
-  const load = useCallback(async (path: string | null) => {
-    // Show this repo's last-pulled PR state (empty until its first refresh) — cached per
-    // repo so switching away and back keeps it, rather than dropping to local status.
-    setPrs(path ? (prCache.get(path) ?? {}) : {});
-    if (!path) {
-      setWorktrees([]);
-      return;
-    }
-    setLoading(true);
-    setError('');
+  // Second pass: fetch GitHub PR status and overlay it onto the branches that have a PR.
+  const loadStatuses = useCallback(async (path: string) => {
+    setStatusLoading(true);
     try {
-      setWorktrees(await api.listWorktrees(path));
-    } catch (e) {
-      setError(errorMessage(e, 'Could not load worktrees'));
-      setWorktrees([]);
+      const prs = await api.listWorktreePrStatuses(path);
+      if (activeRepo.current !== path) return;
+      setWorktrees((prev) => prev.map((w) => ({ ...w, status: prs[w.branch] ?? w.status })));
+    } catch {
+      // Best-effort: no gh / not a GitHub repo — leave the local statuses as they are.
     } finally {
-      setLoading(false);
+      if (activeRepo.current === path) setStatusLoading(false);
     }
   }, []);
 
-  const refreshGithub = useCallback(async () => {
-    if (!repoPath || githubInFlight.current) return;
-    githubInFlight.current = true;
-    setGithubLoading(true);
-    setError('');
-    try {
-      const list = await api.listWorktreePullRequests(repoPath);
-      const map = Object.fromEntries(list.map((pr) => [pr.branch, pr]));
-      prCache.set(repoPath, map);
-      setPrs(map);
-    } catch (e) {
-      setError(errorMessage(e, 'Could not load GitHub PR status'));
-    } finally {
-      githubInFlight.current = false;
-      setGithubLoading(false);
-    }
-  }, [repoPath]);
+  const load = useCallback(
+    async (path: string | null) => {
+      activeRepo.current = path;
+      setStatusLoading(false);
+      if (!path) {
+        setWorktrees([]);
+        return;
+      }
+      setLoading(true);
+      setError('');
+      try {
+        const wts = await api.listWorktrees(path);
+        if (activeRepo.current !== path) return;
+        setWorktrees(wts);
+        // Enrich with PR status only once the fast list is on screen.
+        if (wts.length) void loadStatuses(path);
+      } catch (e) {
+        if (activeRepo.current !== path) return;
+        setError(errorMessage(e, 'Could not load worktrees'));
+        setWorktrees([]);
+      } finally {
+        if (activeRepo.current === path) setLoading(false);
+      }
+    },
+    [loadStatuses],
+  );
 
   useEffect(() => {
     void load(repoPath);
   }, [repoPath, load]);
 
-  // Re-pull PR state when the window regains focus (e.g. after merging a PR in the browser
-  // and tabbing back). Only while the Worktrees page is mounted, and never overlapping runs.
+  const refresh = useCallback(() => load(repoPath), [load, repoPath]);
+
+  // Reload when the window regains focus (e.g. after merging a PR in the browser and tabbing
+  // back) so the PR-resolved status refreshes without needing an explicit `g`.
   useEffect(() => {
     if (!repoPath) return;
-    const onFocus = () => void refreshGithub();
+    const onFocus = () => void refresh();
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [repoPath, refreshGithub]);
-
-  const refresh = useCallback(() => load(repoPath), [load, repoPath]);
+  }, [repoPath, refresh]);
 
   const create = useCallback(
     async (branch: string) => {
@@ -187,10 +182,8 @@ export function useWorktrees(repoPath: string | null): WorktreesView {
   return {
     worktrees,
     loading,
+    statusLoading,
     error,
-    prs,
-    githubLoading,
-    refreshGithub,
     refresh,
     create,
     remove,

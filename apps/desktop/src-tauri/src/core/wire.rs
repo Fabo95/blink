@@ -7,6 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::crypto::Envelope;
+use super::models::TaskEffort;
 
 /// A Hybrid Logical Clock as it crosses the wire (camelCase `nodeId`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,6 +53,10 @@ pub struct TaskBody {
     pub text: String,
     pub raw_text: String,
     pub status: String,
+    /// Added after the first sync release — a body pulled from a device that predates it
+    /// carries no `effort`, so it reads as the default.
+    #[serde(default)]
+    pub effort: TaskEffort,
     pub app_id: String,
     pub app_name: String,
     pub window_title: String,

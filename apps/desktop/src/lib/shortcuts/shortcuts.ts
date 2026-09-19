@@ -36,6 +36,7 @@ const HINTS = {
   'backspace, delete, d': { keys: '⌫', vim: 'd', label: 'delete' },
   'mod+backspace, mod+delete': { keys: '⌘⌫', label: 'remove' },
   'alt+up, alt+k': { keys: '⌥↑↓', vim: '⌥kj', label: 'reorder' },
+  '1': { keys: '123', label: 'effort' },
   s: { keys: 's', label: 'search' },
   'left, h': { keys: '←→', vim: 'hl', label: 'switch' },
   escape: { keys: 'Esc', label: 'cancel' },
@@ -50,7 +51,7 @@ const HINTS = {
   'mod+o': { keys: '⌘o', label: 'add repo' },
   b: { keys: 'b', label: 'remote' },
   e: { keys: 'e', label: 'editor' },
-  g: { keys: 'g', label: 'github' },
+  g: { keys: 'g', label: 'refresh' },
 } satisfies Record<string, Hint>;
 
 /**
@@ -120,6 +121,17 @@ export const SHORTCUTS = {
     level: 2,
     order: 33,
   },
+  // One key per rung rather than a cycling key: labelling is a snap judgement, and the
+  // ≤5-min rung is the one that decides whether the task gets batched at all.
+  'task.effortQuick': {
+    keys: '1',
+    hint: HINTS['1'],
+    level: 2,
+    describe: 'Label the effort — 1 five-minute · 2 normal · 3 deep',
+    order: 34,
+  },
+  'task.effortStandard': { keys: '2', hint: null, level: 2, order: 34 },
+  'task.effortDeep': { keys: '3', hint: null, level: 2, order: 34 },
   'cursor.unselect': {
     keys: 'escape',
     hint: HINTS.escape,
@@ -361,11 +373,11 @@ export const SHORTCUTS = {
     describe: 'Prune merged or gone worktrees',
     order: 56,
   },
-  'worktree.github': {
+  'worktree.refresh': {
     keys: 'g',
     hint: HINTS.g,
     level: 1,
-    describe: 'Refresh GitHub PR status',
+    describe: 'Refresh worktrees + PR status',
     order: 55,
   },
   // Repositories section (top of the Worktrees page): add via picker, remove the active.
@@ -571,6 +583,7 @@ export const CHEATSHEET: { title: string; ids: ShortcutId[] }[] = [
       'task.edit',
       'task.open',
       'task.prompt',
+      'task.effortQuick',
       'task.delete',
       'task.moveUp',
       'cursor.unselect',
@@ -591,7 +604,7 @@ export const CHEATSHEET: { title: string; ids: ShortcutId[] }[] = [
       'worktree.editor',
       'worktree.remove',
       'worktree.prune',
-      'worktree.github',
+      'worktree.refresh',
     ],
   },
 ];

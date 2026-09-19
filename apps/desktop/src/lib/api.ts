@@ -8,14 +8,14 @@ import type { NewTask } from '@/generated/NewTask';
 import type { NewTaskGroup } from '@/generated/NewTaskGroup';
 import type { PruneCandidate } from '@/generated/PruneCandidate';
 import type { Task } from '@/generated/Task';
+import type { TaskEffort } from '@/generated/TaskEffort';
 import type { TaskGroup } from '@/generated/TaskGroup';
 import type { TerminalOption } from '@/generated/TerminalOption';
 import type { VaultStatus } from '@/generated/VaultStatus';
-import type { PrState } from '@/generated/PrState';
 import type { Worktree } from '@/generated/Worktree';
 import type { WorktreeAttention } from '@/generated/WorktreeAttention';
 import type { WorktreeAttentionUpdate } from '@/generated/WorktreeAttentionUpdate';
-import type { WorktreePr } from '@/generated/WorktreePr';
+import type { WorktreeStatus } from '@/generated/WorktreeStatus';
 
 /**
  * Typed façade over the Tauri IPC boundary. Each method maps to a `#[tauri::command]`
@@ -63,6 +63,7 @@ export const api = {
       improved?: boolean;
       /** New group id; an empty string un-groups the task. */
       taskGroupId?: string;
+      effort?: TaskEffort;
     },
   ) =>
     invoke<Task>('update_task', {
@@ -73,6 +74,7 @@ export const api = {
       source: patch.source,
       improved: patch.improved,
       taskGroupId: patch.taskGroupId,
+      effort: patch.effort,
     }),
   listTaskGroups: () => invoke<TaskGroup[]>('list_task_groups'),
   createTaskGroup: (group: NewTaskGroup) => invoke<TaskGroup>('create_task_group', { group }),
@@ -146,13 +148,13 @@ export const api = {
   /** Delete the branch on the remote (GitHub). No-op if it was never pushed. */
   deleteRemoteBranch: (repoPath: string, branch: string) =>
     invoke<void>('delete_remote_branch', { repoPath, branch }),
+  /** GitHub PR status per branch (only branches with a PR), fetched after `listWorktrees` so
+   *  the list isn't blocked on the network. Overlaid onto each worktree's local status. */
+  listWorktreePrStatuses: (repoPath: string) =>
+    invoke<Record<string, WorktreeStatus>>('list_worktree_pr_statuses', { repoPath }),
   /** Preview (`apply=false`) or perform (`apply=true`) a prune of merged/gone worktrees. */
   pruneWorktrees: (repoPath: string, apply: boolean) =>
     invoke<PruneCandidate[]>('prune_worktrees', { repoPath, apply }),
-  /** The GitHub PR state for each of the repo's branches (via `gh`). Fetched on demand — a
-   *  manual refresh — so the page shows local git status until asked. */
-  listWorktreePullRequests: (repoPath: string) =>
-    invoke<WorktreePr[]>('list_worktree_pull_requests', { repoPath }),
   /** Open a terminal attached to the worktree's tmux/Claude session (creating it if needed). */
   openWorktreeInTerminal: (repoPath: string, branch: string) =>
     invoke<void>('open_worktree_in_terminal', { repoPath, branch }),
@@ -223,6 +225,7 @@ function seedMockStore(): Task[] {
     text,
     rawText,
     status: 'done',
+    effort: 'standard',
     improved: false,
     link,
     taskGroupId: null,
@@ -237,11 +240,13 @@ function seedMockStore(): Task[] {
     link: string | null = null,
     taskGroupId: string | null = null,
     rawText: string = text,
+    effort: TaskEffort = 'standard',
   ): Task => ({
     id: crypto.randomUUID(),
     text,
     rawText,
     status: 'inbox',
+    effort,
     improved: false,
     link,
     taskGroupId,
@@ -270,7 +275,9 @@ function seedMockStore(): Task[] {
         'so RLS scopes the query. blocked on BLK-142',
     ),
     active('Reply to the security questionnaire', mail),
-    active('Book the Tuesday climbing slot', notion, null, sport),
+    active('Book the Tuesday climbing slot', notion, null, sport, undefined, 'quick'),
+    active('Approve the Figma invite', slack, null, work, undefined, 'quick'),
+    active('Confirm the offsite date with Lena', mail, null, work, undefined, 'quick'),
     // Completed in the last 24h → Completed card
     done('Ship the archive view', 3, chrome),
     done('Review DLP ruleset PR', 10, slack, 'https://github.com/blink/desktop/pull/88'),
@@ -323,7 +330,7 @@ const mockWorktrees: Record<string, Worktree[]> = {
       isMain: false,
       isDirty: true,
       sessionLive: true,
-      remoteStatus: 'published',
+      status: 'pushed',
     },
     {
       repo: '/Users/you/repositories/blink',
@@ -332,7 +339,7 @@ const mockWorktrees: Record<string, Worktree[]> = {
       isMain: false,
       isDirty: false,
       sessionLive: false,
-      remoteStatus: 'merged',
+      status: 'gone',
     },
   ],
 };
@@ -391,6 +398,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
         text: input.text,
         rawText: input.rawText.trim() ? input.rawText : input.text,
         status: 'inbox',
+        effort: 'standard',
         improved: input.improved,
         link: input.link,
         taskGroupId: input.taskGroupId,
@@ -445,6 +453,10 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       const nextTaskGroupId = args?.taskGroupId;
       if (typeof nextTaskGroupId === 'string') {
         task.taskGroupId = nextTaskGroupId.trim() ? nextTaskGroupId.trim() : null;
+      }
+      const nextEffort = args?.effort;
+      if (nextEffort === 'quick' || nextEffort === 'standard' || nextEffort === 'deep') {
+        task.effort = nextEffort;
       }
       task.updatedAt = new Date().toISOString();
       return task as T;
@@ -650,7 +662,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
           isMain: false,
           isDirty: false,
           sessionLive: true,
-          remoteStatus: 'local',
+          status: 'local',
         };
         list.push(worktree);
       } else {
@@ -692,19 +704,19 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       if (worktree) worktree.sessionLive = true;
       return undefined as T;
     }
-    case 'list_worktree_pull_requests': {
-      // No real gh in the browser — synthesize a spread of PR states so the badge is
-      // developable. Every other linked branch gets a PR; the rest keep local status.
+    case 'list_worktree_pr_statuses': {
+      // No real gh — after a short delay (so the loading state is visible), give every other
+      // linked branch a PR status; the rest keep their local status.
       const repoPath = String(args?.repoPath ?? '');
-      const states: PrState[] = ['open', 'merged', 'draft', 'closed'];
-      const prs: WorktreePr[] = (mockWorktrees[repoPath] ?? [])
+      const prStates: WorktreeStatus[] = ['open', 'merged', 'draft', 'closed'];
+      const map: Record<string, WorktreeStatus> = {};
+      (mockWorktrees[repoPath] ?? [])
         .filter((w) => !w.isMain)
-        .map((w, i) => ({
-          branch: w.branch,
-          state: states[i % states.length] as PrState,
-          url: `https://github.com/you/${repoPath.split('/').pop()}/pull/${i + 1}`,
-        }));
-      return prs as T;
+        .forEach((w, i) => {
+          if (i % 2 === 0) map[w.branch] = prStates[i % prStates.length] as WorktreeStatus;
+        });
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      return map as T;
     }
     case 'get_worktree_attention': {
       // No real tmux in the browser — synthesize a spread of states across the live

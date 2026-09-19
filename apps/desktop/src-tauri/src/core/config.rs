@@ -15,8 +15,14 @@ pub struct Config {
 impl Config {
     fn from_env() -> Self {
         Self {
+            // Release bundles get no `.env` — the dotenvy load next to the crate is
+            // debug-only, and a Finder-launched app's CWD is `/`. So a build-time
+            // `BLINK_SERVER_URL` is baked in as the fallback, which is how shipped
+            // installers learn their server. A runtime var still overrides it.
             server_url: std::env::var("BLINK_SERVER_URL")
-                .unwrap_or_else(|_| DEFAULT_SERVER_URL.to_string()),
+                .ok()
+                .or_else(|| option_env!("BLINK_SERVER_URL").map(str::to_string))
+                .unwrap_or_else(|| DEFAULT_SERVER_URL.to_string()),
         }
     }
 }
