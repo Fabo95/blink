@@ -25,22 +25,29 @@ const MAX_COMPLETION_TOKENS = 300;
  * user with hundreds of groups shouldn't silently inflate every prompt. */
 const MAX_GROUPS_IN_PROMPT = 100;
 
-const SYSTEM_PROMPT = `You turn a rough, usually dictated note into one task for a personal inbox.
+const SYSTEM_PROMPT = `You extract task fields from a dictated note.
 
-Return the task text as a short imperative line: no preamble, no "task:" prefix, no trailing period.
-Strip the spoken instructions about *filing* the task — "add this to my work group", "this is a quick
-one", "put it in errands" — those belong in the other fields, not in the text. Keep every concrete
-detail that was actually said (names, amounts, dates). Invent nothing.
+Extract only what the note actually says. Never infer a field from the subject matter, and never
+guess. An empty field is correct; a plausible-looking guess is not.
 
-effort: "quick" for under ~5 minutes, "deep" for focused work over an hour, otherwise "standard".
-Use null if the note gives you nothing to judge by.
+text: the task as a short imperative line — no preamble, no "task:" prefix, no trailing period.
+Remove the spoken filing instructions ("add this to my work group", "this is a quick one") since
+those belong in the other fields. Keep every concrete detail that was actually said (names,
+amounts, dates). Invent nothing. This is the one field you may rewrite.
 
-group: exactly one name from the list you are given, or null. Only pick one if the note actually
-indicates it. Never invent a name that isn't in the list.
+effort: only when the note states how much work it is. "quick", "won't take long", "two minutes"
+→ "quick". "big job", "deep work", "will take all afternoon" → "deep". "normal" or similar →
+"standard". If the note says nothing about effort, return null — do NOT judge it from the task
+itself. "Buy milk" tells you nothing about effort, so it is null, not "quick".
 
-link: a URL if the note contains one, otherwise null.
+group: only when the note names one of the groups listed below, or refers to one unmistakably
+("put it in errands", "that's for work"). Topic similarity is NOT enough: a note about groceries
+does not belong to a group called "Errands" unless the note actually says so. Never use a name
+that isn't in the list. If the note doesn't name a group, return null.
 
-If you cannot work something out, return null for it rather than guessing.`;
+link: a URL only if one literally appears in the note. Otherwise null.
+
+When in doubt, return null.`;
 
 /** OpenAI Structured Outputs in `strict` mode: every key required, nothing extra, and
  * "unknown" expressed as an explicit null rather than an absent field. */
@@ -84,13 +91,13 @@ export class CaptureService {
    * and no desktop code knows this endpoint exists. */
   async capture(userId: string, input: CaptureInput): Promise<{ id: string }> {
     const groups = await this.listGroups(userId);
-    const parsed = await this.parse(userId, input.text, groups);
+    const generatedTask = await this.generateTask(userId, input.text, groups);
 
     // Whatever the model couldn't work out stays empty rather than being guessed at.
-    const text = parsed?.text.trim() || input.text;
-    const effort: TaskEffort = parsed?.effort ?? 'standard';
-    const link = parsed?.link ?? null;
-    const taskGroupId = matchGroup(parsed?.group ?? null, groups)?.id ?? null;
+    const text = generatedTask?.text.trim() || input.text;
+    const effort: TaskEffort = generatedTask?.effort ?? 'standard';
+    const link = generatedTask?.link ?? null;
+    const taskGroupId = matchGroup(generatedTask?.group ?? null, groups)?.id ?? null;
 
     const id = randomUUID();
     const now = new Date().toISOString();
@@ -109,7 +116,7 @@ export class CaptureService {
       created_at: now,
       updated_at: now,
       // The model cleaned the phrasing, so don't offer ⌘I on it again.
-      improved: parsed !== null,
+      improved: generatedTask !== null,
       link,
       completed_at: null,
       task_group_id: taskGroupId,
@@ -147,7 +154,7 @@ export class CaptureService {
   /** Ask the model for the task shape. Returns null when it can't be had — a bad key,
    * a timeout, a refusal, unparseable content — because a capture must never be lost
    * to the model being unavailable. The caller then files the raw text as-is. */
-  private async parse(
+  private async generateTask(
     userId: string,
     text: string,
     groups: { id: string; name: string }[],

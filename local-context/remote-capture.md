@@ -72,17 +72,43 @@ Blink. Leave it out if you'd rather it be silent.
 
 Then: **"Hey Siri, Blink"** → speak → it's in your inbox.
 
-### Optional fields
+### Speaking the details
 
-The endpoint also accepts `effort` (`quick` | `standard` | `deep`), `link`, and `taskGroupId`.
-A second Shortcut named "Blink quick" that hardcodes `effort: quick` is a cheap way to label
-sub-5-minute interrupts by voice.
+The server runs the note through OpenAI (`gpt-4o-mini`, the same model the desktop's ⌘I uses),
+so you can dictate the filing instructions and they land in the right fields instead of in the
+task text:
+
+> "add buy a new keyboard to my errands group, it's a quick one"
+
+→ text `Buy a new keyboard`, group **Errands**, effort **quick**.
+
+- **It extracts, it doesn't infer.** A field is filled only when you actually said it. "Buy
+  milk" gets no effort label, because nothing in the note is about effort — say "it's a quick
+  one" and it does. A note about groceries doesn't land in an "Errands" group on topic
+  similarity alone; you have to name the group.
+- **Groups are matched against your real ones** — the server reads them off the `kind` generated
+  column and hands the model that list, so it can only pick a name you actually have. Anything
+  else resolves to empty.
+- **Unstated fields stay empty**, which for effort means the app's normal "standard" — i.e.
+  unlabelled, exactly as if you'd typed the task in yourself.
+- **If the model is down, slow or returns nonsense, the note is filed verbatim.** A capture is
+  never lost to the model being unavailable — check the server log for `could not parse the
+  note` if a task arrives unpolished. The call retries transient failures (429/5xx/network)
+  with jittered backoff inside a 15s total budget, and a circuit breaker skips it entirely for
+  60s after a run of failures, so an OpenAI outage costs you fast plain captures rather than
+  slow ones.
+- `raw_text` keeps the note exactly as spoken, so the original survives the rewrite.
+
+The request body is just `{ text, via }` — deliberately. Everything else is derived, because the
+caller is a dictation button: it can't know a group UUID, and anything you'd want to state
+explicitly you can simply say out loud.
 
 ## What the server fills in
 
 `CaptureService.capture` builds a whole `TaskBody` so the desktop needs no special case:
 
-- `status: 'inbox'`, `improved: false` (so `⌘I` is still offered), `deleted: false`
+- `status: 'inbox'`, `deleted: false`, and `improved: true` when the model cleaned the text
+  (so the inbox doesn't offer `⌘I` on something already polished)
 - source triple `app_id: 'app.blink.remote'`, `app_name: <via>`, `window_title: 'remote capture'`
   — `CaptureSource` is a struct, not an enum, so this needed no model change
 - HLC `{ physical: Date.now(), counter: 0, nodeId: 'server-capture' }` — the server is just

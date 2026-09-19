@@ -58,7 +58,9 @@ env.ts              zod-validated env — no defaults, all required
   `set_config('app.current_user_id', userId, true)`, which the policies read.
 - **Capture parsing**: `/v1/capture` runs the note through OpenAI (`gpt-4o-mini`, matching the
   desktop's `ai_service.rs`) with Structured Outputs in `strict` mode, so a dictated "add this to
-  my errands group, it's quick" lands as text + group + effort instead of literal text. Groups
+  my errands group, it's quick" lands as text + group + effort instead of literal text. The
+  prompt is deliberately **extractive, not inferential**: a field is filled only when the note
+  says it, so "buy milk" gets no effort label and topic similarity never picks a group. Groups
   come from `recordsModelService.listByKind(userId, 'group')` — a read off the `kind` generated
   column — and are handed to the model as a closed list, so it can only pick a real one. The
   reply is zod-validated (`zParsedTask`), not trusted. **Any failure files the note verbatim
