@@ -44,6 +44,7 @@ const HINTS = {
   'mod+n': { keys: '⌘n', label: 'switch' },
   'mod+f': { keys: '⌘f', label: 'forgot' },
   'mod+shift+o': { keys: '⌘⇧o', label: 'sign out' },
+  'mod+shift+s': { keys: '⌘⇧s', label: 'sync' },
   a: { keys: 'a', label: 'archive' },
   n: { keys: 'n', label: 'new' },
   r: { keys: 'r', label: 'edit' },
@@ -539,6 +540,15 @@ export const SHORTCUTS = {
   'app.hintDialect': { keys: 'v', hint: null, order: 50 },
   // Sign-out is a base-level (0) statusline chip so it shows wherever it's enabled,
   // starting with the inbox footer.
+  // Sync runs itself on a timer; this is the "don't make me wait for the next poll" key,
+  // and the header's sync indicator is its (secondary) click affordance.
+  'app.sync': {
+    keys: 'mod+shift+s',
+    hint: HINTS['mod+shift+s'],
+    level: 0,
+    order: 50,
+    describe: 'Sync now instead of waiting for the next poll',
+  },
   'app.signOut': {
     keys: 'mod+shift+o',
     hint: HINTS['mod+shift+o'],
@@ -593,6 +603,7 @@ export const CHEATSHEET: { title: string; ids: ShortcutId[] }[] = [
     title: 'Editing a task',
     ids: ['editor.field', 'editor.improve', 'editor.save', 'editor.cancel'],
   },
+  { title: 'App', ids: ['app.sync', 'app.signOut'] },
   {
     title: 'Worktrees',
     ids: [

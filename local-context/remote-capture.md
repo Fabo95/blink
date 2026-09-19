@@ -65,6 +65,8 @@ Add two actions, in order:
   - `text` (Text) → the **Dictated Text** variable from ①
   - `via` (Text) → `Siri`
 
+That's the whole body — the server derives the group, effort and link from what you said.
+
 Optionally add **③ Show Notification** with "Captured" so you get confirmation without opening
 Blink. Leave it out if you'd rather it be silent.
 

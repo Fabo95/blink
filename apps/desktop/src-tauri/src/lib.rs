@@ -86,7 +86,7 @@ pub fn run() {
                 repository.settings.clone(),
                 repository.tasks.clone(),
                 hlc_service.clone(),
-                sync_sender,
+                sync_sender.clone(),
             ));
             app.manage(ShortcutService::new(repository.settings.clone()));
             let repo_service = RepoService::new(GitCli::new(), repository.settings.clone());
@@ -130,6 +130,7 @@ pub fn run() {
                 repository.tasks.clone(),
                 repository.task_groups.clone(),
                 repository.sync_state.clone(),
+                sync_sender,
             ));
             app.manage(sync_service.clone());
 

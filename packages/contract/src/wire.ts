@@ -73,14 +73,13 @@ export const zSyncRecord = zSyncPacket.extend({
 });
 export type SyncRecord = z.infer<typeof zSyncRecord>;
 
-/** What an outside agent posts to `/v1/capture` to file a task — the minimum an iOS
- * Shortcut, a shell script or an LLM tool call should have to know. The server fills
- * in everything else a task row needs. */
+/** What an outside agent posts to `/v1/capture` to file a task — deliberately just the
+ * spoken note and where it came from. Everything else a task row needs (group, effort,
+ * link, status, ordering) the server derives: the caller is a dictation button, not
+ * something that knows about UUIDs. Add a field here when a caller genuinely can't say
+ * it out loud, not before. */
 export const zCaptureInput = z.object({
   text: z.string().min(1).max(10_000),
-  link: z.string().url().nullish(),
-  effort: zTaskEffort.default('standard'),
-  taskGroupId: z.string().uuid().nullish(),
   /** Shown in the inbox as the capture's origin (e.g. "Siri", "Gemini"). */
   via: z.string().min(1).max(60).default('remote'),
 });

@@ -1,6 +1,7 @@
 import { asClass, asValue } from 'awilix';
 import { AuthClient } from '@/clients/authClient.js';
 import { EmailClient } from '@/clients/emailClient.js';
+import { OpenAiClient } from '@/clients/openaiClient.js';
 import { getDb } from '@/setup/database/db.js';
 import type { SingletonRegistrations } from './types.js';
 
@@ -15,5 +16,6 @@ export function createSingletonCradle(): SingletonRegistrations {
     db: asValue(getDb()),
     emailClient: asClass(EmailClient).singleton(),
     authClient: asClass(AuthClient).singleton(),
+    openAiClient: asClass(OpenAiClient).singleton(),
   };
 }

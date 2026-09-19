@@ -18,7 +18,7 @@ routes/             one folder per endpoint, handler in latest.ts (versioned con
                     auth/ (Better Auth catch-all), sync/pull, sync/push, capture,
                     health-check.ts
 clients/            transport to external systems: authClient.ts (the Better Auth instance),
-                    emailClient.ts (Resend)
+                    emailClient.ts (Resend), openaiClient.ts (task parsing for capture)
 services/common/    business logic (authService, syncService, captureService)
 services/model/     thin Drizzle wrappers (recordsModelService) — no logic
 setup/database/     the postgres/Drizzle connection (getDb)
@@ -56,6 +56,23 @@ env.ts              zod-validated env — no defaults, all required
   `userId`, and RLS (`FORCE ROW LEVEL SECURITY` on `records`) scopes rows to that
   user — each model-service method opens a transaction and runs
   `set_config('app.current_user_id', userId, true)`, which the policies read.
+- **Capture parsing**: `/v1/capture` runs the note through OpenAI (`gpt-4o-mini`, matching the
+  desktop's `ai_service.rs`) with Structured Outputs in `strict` mode, so a dictated "add this to
+  my errands group, it's quick" lands as text + group + effort instead of literal text. Groups
+  come from `recordsModelService.listByKind(userId, 'group')` — a read off the `kind` generated
+  column — and are handed to the model as a closed list, so it can only pick a real one. The
+  reply is zod-validated (`zParsedTask`), not trusted. **Any failure files the note verbatim
+  rather than failing the capture**. The request body is only `{ text, via }`: the caller is a
+  dictation button, so group/effort/link are all derived rather than passed.
+- **`OpenAiClient` hardening** (it's on a user-facing latency path, so the defaults matter):
+  up to 3 attempts with exponential backoff + full jitter, retrying only 408/409/429/5xx and
+  genuine network errors — a 400/401/403 fails immediately rather than burning latency on a
+  config bug. A 429's `Retry-After` overrides the backoff. 8s per attempt inside a **15s total
+  budget**, so the Shortcut's worst case is bounded. A **circuit breaker** opens for 60s after 5
+  consecutive failures, so a sustained outage doesn't make every capture pay the full budget
+  before falling back. Cost and privacy: `max_completion_tokens` cap, `temperature: 0`,
+  `store: false`, and a hashed `user` id — never the real one. Logs carry the request id and
+  token counts (so a surprising bill is answerable) but **never the note text**.
 - **Remote capture**: `POST /v1/capture` uses the **same session bearer as every other route** —
   deliberately one auth path, no second credential type. `captureService.capture` synthesizes a
   whole task row (status/source/HLC/position) and writes it through `recordsModelService`, so the
@@ -93,7 +110,8 @@ env.ts              zod-validated env — no defaults, all required
 `apps/server/.env`, validated by `src/env.ts` — **no defaults, all required**: `PORT`,
 `ENVIRONMENT` (development|test|staging|production), `DATABASE_URL` (the `blink_api`
 connection), `BETTER_AUTH_SECRET` (≥32 chars), `BETTER_AUTH_URL` (public base URL),
-`CORS_ORIGINS` (comma-separated; `regex:` prefix supported), `RESEND_API_KEY`.
+`CORS_ORIGINS` (comma-separated; `regex:` prefix supported), `RESEND_API_KEY`,
+`OPENAI_API_KEY`.
 
 ## Deployment
 

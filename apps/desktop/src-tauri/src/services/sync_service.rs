@@ -10,6 +10,7 @@ use serde::Deserialize;
 
 use crate::clients::server_client::ServerClient;
 use crate::core::error::{AppError, AppResult};
+use crate::core::sync_channel::SyncSignalSender;
 use crate::core::wire::{RecordBody, SyncPacket, SyncRecord};
 use crate::repository::{SyncStateRepository, TaskGroupRepository, TaskRepository};
 use crate::services::session_token_service::SessionTokenService;
@@ -22,6 +23,7 @@ pub struct SyncService {
     task_repository: TaskRepository,
     task_group_repository: TaskGroupRepository,
     sync_state_repository: SyncStateRepository,
+    sync_signal: SyncSignalSender,
 }
 
 impl SyncService {
@@ -31,6 +33,7 @@ impl SyncService {
         task_repository: TaskRepository,
         task_group_repository: TaskGroupRepository,
         sync_state_repository: SyncStateRepository,
+        sync_signal: SyncSignalSender,
     ) -> Self {
         Self {
             server_client,
@@ -38,7 +41,16 @@ impl SyncService {
             task_repository,
             task_group_repository,
             sync_state_repository,
+            sync_signal,
         }
+    }
+
+    /// Ask the background loop to run a cycle now. Deliberately goes through the loop
+    /// rather than calling [`sync`](Self::sync) directly: the loop owns the `sync-state`
+    /// events the UI indicator reads, coalesces bursts through its debounce, and resets
+    /// its pull backoff to the floor — none of which a direct call would do.
+    pub fn request_sync(&self) {
+        self.sync_signal.send();
     }
 
     /// Whether a sync cycle would actually do anything: signed in. The background loop
@@ -50,14 +62,15 @@ impl SyncService {
 
     /// One sync cycle: pull remote changes first (so a fresh device fills in), then
     /// push local ones. A no-op when not [`is_ready`](Self::is_ready), so callers can
-    /// invoke it freely before the user has signed in.
-    pub async fn sync(&self) -> AppResult<()> {
+    /// invoke it freely before the user has signed in. Returns how many records the
+    /// pull merged, so the caller can tell the webview to re-read the DB.
+    pub async fn sync(&self) -> AppResult<usize> {
         if !self.is_ready() {
-            return Ok(());
+            return Ok(0);
         }
-        self.pull().await?;
+        let merged = self.pull().await?;
         self.push().await?;
-        Ok(())
+        Ok(merged)
     }
 
     /// Upload every locally-changed row, then clear their dirty flags.

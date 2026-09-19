@@ -24,6 +24,11 @@ const MIN_PULL: Duration = Duration::from_secs(15);
 /// Pull cadence when nothing's changing — the backoff ceiling.
 const MAX_PULL: Duration = Duration::from_secs(120);
 
+/// Emitted after a pull actually merges rows, so the webview re-reads the DB. Pulled
+/// records land straight in SQLite; without this the inbox keeps showing whatever it
+/// loaded on mount, and a task captured elsewhere only appears after a restart.
+const RECORDS_MERGED: &str = "records-merged";
+
 /// The webview event carrying sync activity for the UI indicator. `state` is
 /// `syncing` | `idle` | `error`; `message` is set only on error (for a tooltip).
 #[derive(Clone, Serialize)]
@@ -68,7 +73,10 @@ fn run_sync(app: &AppHandle, sync_service: &Arc<SyncService>) {
     }
     let _ = app.emit("sync-state", SyncStateEvent { state: "syncing", message: None });
     let done = match tauri::async_runtime::block_on(sync_service.sync()) {
-        Ok(()) => SyncStateEvent { state: "idle", message: None },
+        Ok(merged) => {
+            notify_merged(app, merged);
+            SyncStateEvent { state: "idle", message: None }
+        }
         Err(err) => {
             eprintln!("[sync] cycle failed: {err}");
             SyncStateEvent { state: "error", message: Some(err.to_string()) }
@@ -86,6 +94,7 @@ fn run_pull(app: &AppHandle, sync_service: &Arc<SyncService>) -> Option<usize> {
     let _ = app.emit("sync-state", SyncStateEvent { state: "syncing", message: None });
     match tauri::async_runtime::block_on(sync_service.pull()) {
         Ok(n) => {
+            notify_merged(app, n);
             let _ = app.emit("sync-state", SyncStateEvent { state: "idle", message: None });
             Some(n)
         }
@@ -97,5 +106,13 @@ fn run_pull(app: &AppHandle, sync_service: &Arc<SyncService>) -> Option<usize> {
             );
             None
         }
+    }
+}
+
+/// Tell the webview to reload once a pull has written rows. Silent when nothing merged,
+/// so a quiet cycle doesn't churn the UI.
+fn notify_merged(app: &AppHandle, merged: usize) {
+    if merged > 0 {
+        let _ = app.emit(RECORDS_MERGED, ());
     }
 }

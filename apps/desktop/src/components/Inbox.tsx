@@ -27,18 +27,28 @@ export function Inbox() {
     void refresh();
   }, [refresh]);
 
-  // Refresh the inbox when the copy-capture popup saves a task.
+  // Refresh the inbox when the copy-capture popup saves a task, and when a sync pull
+  // writes rows straight into SQLite (a task captured on another device, or filed
+  // remotely through POST /v1/capture) — otherwise the list keeps showing what it
+  // loaded on mount until the app restarts.
   useEffect(() => {
     if (!isTauri) return;
-    let unlisten: (() => void) | undefined;
+    const unlisteners: (() => void)[] = [];
+    let active = true;
     import('@tauri-apps/api/event').then(({ listen }) => {
-      listen('task-saved', () => {
-        void refresh();
-      }).then((fn) => {
-        unlisten = fn;
-      });
+      for (const event of ['task-saved', 'records-merged']) {
+        listen(event, () => {
+          void refresh();
+        }).then((fn) => {
+          if (active) unlisteners.push(fn);
+          else fn();
+        });
+      }
     });
-    return () => unlisten?.();
+    return () => {
+      active = false;
+      for (const fn of unlisteners) fn();
+    };
   }, [refresh]);
 
   // AuthGate only renders us once authenticated; this keeps the type honest.

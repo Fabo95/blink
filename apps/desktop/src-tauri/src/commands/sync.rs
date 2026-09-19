@@ -5,12 +5,12 @@ use std::sync::Arc;
 
 use tauri::State;
 
-use crate::core::error::AppResult;
 use crate::services::sync_service::SyncService;
 
-/// Run one sync cycle (pull remote changes, then push local ones). A no-op until the
-/// user is signed in.
+/// Ask for a sync cycle now (the manual trigger behind the header's sync indicator).
+/// Signals the background loop rather than syncing inline, so the cycle still emits the
+/// `sync-state` events the indicator renders and still resets the pull backoff.
 #[tauri::command]
-pub async fn sync_now(sync_service: State<'_, Arc<SyncService>>) -> AppResult<()> {
-    sync_service.sync().await
+pub fn sync_now(sync_service: State<'_, Arc<SyncService>>) {
+    sync_service.request_sync();
 }

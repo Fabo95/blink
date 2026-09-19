@@ -1,6 +1,6 @@
 import { type BlinkDb, setRlsUser } from '@blink/db/client';
 import { type NewRecordRow, type RecordRow, records } from '@blink/db/schema';
-import { asc, gt, sql } from 'drizzle-orm';
+import { asc, eq, gt, sql } from 'drizzle-orm';
 
 interface RecordsModelServiceDeps {
   db: BlinkDb;
@@ -45,6 +45,17 @@ export class RecordsModelService {
             setWhere: sql`(${records.hlcPhysical}, ${records.hlcCounter}, ${records.hlcNodeId}) < (${row.hlcPhysical}, ${row.hlcCounter}, ${row.hlcNodeId})`,
           });
       }
+    });
+  }
+
+  /** The caller's live rows of one kind. Reads the `kind` generated column, which
+   * Postgres derives from `body->>'kind'` — the whole point of keeping the replica
+   * readable, and what lets a capture resolve a group by name server-side. Tombstones
+   * (`deleted`) are filtered in the caller, which knows each kind's body shape. */
+  async listByKind(userId: string, kind: string): Promise<RecordRow[]> {
+    return this.deps.db.transaction(async (tx) => {
+      await setRlsUser(tx, userId);
+      return tx.select().from(records).where(eq(records.kind, kind));
     });
   }
 

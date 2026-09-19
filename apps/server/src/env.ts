@@ -22,6 +22,10 @@ const schema = z.object({
   // Resend API key for outbound email (verification OTPs) — the server sends real email
   // in every environment (see clients/emailClient).
   RESEND_API_KEY: z.string().min(1),
+  // OpenAI key used by /v1/capture to parse a dictated note into the task shape (group,
+  // effort, link). Required like everything else here — a missing key fails the boot
+  // loudly rather than silently degrading captures to raw text.
+  OPENAI_API_KEY: z.string().min(1),
 });
 
 const parsed = schema.safeParse(process.env);
