@@ -38,6 +38,9 @@ const HINTS = {
   'mod+k': { keys: '⌘k', label: 'note type' },
   t: { keys: 't', label: 'type' },
   y: { keys: 'y', label: 'history' },
+  w: { keys: 'w', label: 'review' },
+  'mod+1': { keys: '⌘1-5', label: 'conviction' },
+  'mod+p': { keys: '⌘p', label: 'promote' },
   'mod+e': { keys: '⌘e', label: 'export' },
   'mod+shift+e': { keys: '⌘⇧e', label: 'export json' },
   'backspace, delete, d': { keys: '⌫', vim: 'd', label: 'delete' },
@@ -435,6 +438,22 @@ export const SHORTCUTS = {
     describe: 'Show earlier versions of the note',
     order: 32,
   },
+  // `r` is taken (rename), so review is `w`. On a focused note it reviews that note; with
+  // nothing focused it walks the due queue.
+  'note.review': {
+    keys: 'w',
+    hint: HINTS.w,
+    level: 2,
+    describe: 'Review the note: conviction, comment, keep / drop / promote',
+    order: 32,
+  },
+  'ideas.reviewSession': {
+    keys: 'w',
+    hint: HINTS.w,
+    level: 1,
+    describe: 'Review everything that is due, up to 10 notes',
+    order: 52,
+  },
   'note.delete': {
     keys: 'backspace, delete, d',
     hint: HINTS['backspace, delete, d'],
@@ -523,6 +542,75 @@ export const SHORTCUTS = {
     hint: HINTS.escape,
     level: 3,
     order: 90,
+  },
+  // The review popover. Conviction keys work while typing the comment.
+  'review.conviction1': {
+    keys: 'mod+1',
+    hint: HINTS['mod+1'],
+    level: 3,
+    describe: 'Set the conviction, 1 (not convinced) to 5 (very convinced)',
+    order: 15,
+    opts: { enableOnFormTags: true },
+  },
+  'review.conviction2': {
+    keys: 'mod+2',
+    hint: null,
+    level: 3,
+    order: 15,
+    opts: { enableOnFormTags: true },
+  },
+  'review.conviction3': {
+    keys: 'mod+3',
+    hint: null,
+    level: 3,
+    order: 15,
+    opts: { enableOnFormTags: true },
+  },
+  'review.conviction4': {
+    keys: 'mod+4',
+    hint: null,
+    level: 3,
+    order: 15,
+    opts: { enableOnFormTags: true },
+  },
+  'review.conviction5': {
+    keys: 'mod+5',
+    hint: null,
+    level: 3,
+    order: 15,
+    opts: { enableOnFormTags: true },
+  },
+  'review.keep': {
+    keys: 'mod+enter',
+    hint: HINTS['mod+enter'],
+    level: 3,
+    describe: 'Save the review and keep the note',
+    order: 20,
+    opts: { enableOnFormTags: true },
+  },
+  'review.promote': {
+    keys: 'mod+p',
+    hint: HINTS['mod+p'],
+    level: 3,
+    describe: 'Save the review and turn the note into an inbox task',
+    order: 30,
+    opts: { enableOnFormTags: true },
+  },
+  'review.drop': {
+    keys: 'mod+backspace, mod+delete',
+    hint: HINTS['mod+backspace, mod+delete'],
+    level: 3,
+    describe: 'Save the review and drop the note (it stays searchable)',
+    order: 31,
+    opts: { enableOnFormTags: true },
+  },
+  'review.close': {
+    keys: 'escape',
+    hint: HINTS.escape,
+    level: 3,
+    describe: 'Close the review (ends a session)',
+    order: 90,
+    opts: { enableOnFormTags: true },
   },
   // The history popover walks its own list while the page cursor stands down.
   'history.down': {
@@ -832,6 +920,18 @@ export const CHEATSHEET: { title: string; ids: ShortcutId[] }[] = [
   {
     title: 'Notes',
     ids: ['note.edit', 'note.type', 'note.open', 'note.history', 'note.delete', 'history.restore'],
+  },
+  {
+    title: 'Review',
+    ids: [
+      'ideas.reviewSession',
+      'note.review',
+      'review.conviction1',
+      'review.keep',
+      'review.promote',
+      'review.drop',
+      'review.close',
+    ],
   },
   { title: 'App', ids: ['app.sync', 'app.signOut'] },
   {

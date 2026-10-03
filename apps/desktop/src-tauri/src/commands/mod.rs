@@ -11,6 +11,7 @@ pub mod link;
 pub mod manual_capture;
 pub mod notes;
 pub mod repo;
+pub mod reviews;
 pub mod shortcut;
 pub mod sync;
 pub mod task_groups;

@@ -1,5 +1,6 @@
-import { ExternalLink, FolderOpen, TriangleAlert } from 'lucide-react';
+import { ArrowUpRight, Ban, ExternalLink, FolderOpen, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { ConvictionDots } from '@/components/ideas/ConvictionDots';
 import { NoteTypeIcon } from '@/components/ideas/NoteTypeIcon';
 import { Popover, PopoverAnchor } from '@/components/ui/popover';
 import type { Note } from '@/generated/Note';
@@ -98,6 +99,24 @@ export function NoteRow({
                     </span>
                   </>
                 )}
+                {note.status === 'promoted' && (
+                  <>
+                    <Separator />
+                    <span className="inline-flex items-center gap-1 text-blink-success">
+                      <ArrowUpRight className="size-3 shrink-0" />
+                      Promoted to a task
+                    </span>
+                  </>
+                )}
+                {note.status === 'dropped' && (
+                  <>
+                    <Separator />
+                    <span className="inline-flex items-center gap-1">
+                      <Ban className="size-3 shrink-0" />
+                      Dropped
+                    </span>
+                  </>
+                )}
                 {note.conflict && (
                   <>
                     <Separator />
@@ -109,9 +128,13 @@ export function NoteRow({
                 )}
               </div>
             </div>
-            <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-              {shortAge(note.createdAt)}
-            </span>
+            {/* Right column: the conviction trend reads at a glance down the list. */}
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <span className="text-[11px] tabular-nums text-muted-foreground">
+                {shortAge(note.createdAt)}
+              </span>
+              <ConvictionDots history={note.convictionHistory} />
+            </div>
           </div>
         </li>
       </PopoverAnchor>

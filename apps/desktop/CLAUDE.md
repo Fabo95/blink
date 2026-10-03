@@ -80,7 +80,9 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   Migrations so far: 1 tasks, 2 settings, 3 `link`, 4 `completed_at`, 5 `position`,
   6 `task_groups` + `tasks.task_group_id`, 7 `raw_text`, 8 sync columns, 9 group `context`,
   10 `effort`, 11 re-dirty for the readable replica, 12 `topics`, 13 `notes` + `notes_fts`
-  (FTS5, external content, kept in step by triggers), 14 `note_revisions`.
+  (FTS5, external content, kept in step by triggers), 14 `note_revisions`, 15 note review
+  (`notes.status` + `revisit_at` with a deterministic 14-day backfill, `note_reviews`,
+  `tasks.origin_note_id`).
   Repository tests run against `Db::open_in_memory()` (`#[cfg(test)]`): the real migrations
   and SQL, no keychain.
 - **Services & clients (Rust DI)**: business logic lives in `services/` as structs; each holds the
@@ -296,9 +298,22 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
     source, `⌘K` toggles it) beside the topic picker: the type is a property of the note; and
     `⌘G` opens the group picker for tasks or the topic picker for notes (chip label `file`). A
     source is never improved by AI. `⌘⇧B` stays a task by default.
+  - **Review** (`ReviewService`, `useReview`, `ReviewPopover`): ideas and thoughts come back on
+    a schedule. The rules are pure functions in `review_service.rs`: first review 14 days after
+    capture (sources never), then 5 → 7 days, 4 → 14, 3 → 30, 2 → 60, 1 → unscheduled; `nudge`
+    suggests promote after three 4+ in a row and drop after a 1 or two 2-or-lower. Reviews
+    are append-only `note_reviews` rows (their own sync kind). A review keeps (reschedules),
+    drops (status `dropped`, out of the sections, still searchable), or promotes (status
+    `promoted` + an inbox task `Validate: …` with `origin_note_id`, shown as a chip on the
+    task). Notes carry `conviction_history` + `review_nudge`, filled by the services (never
+    stored). Keys: `w` reviews the focused note, or with nothing focused starts a session over
+    the due notes in the current topic (max 10); in the popover `⌘1`–`⌘5` conviction, `⌘↵`
+    keep, `⌘p` promote, `⌘⌫` drop, `Esc` close. The Ideas tab shows the due count
+    (`useDueNotes`, re-read on capture, sync, review, and every 15 min). Due dates compare via
+    `julianday`, so timestamps with different offsets or precision still order correctly.
   - **Ideas page** (`IdeasPage` + `components/ideas/` + `useTopics`/`useNotes`/`useNoteEditor`/
     `useNoteHistory`/`useNoteSearch`): topic filter (`←→`, `n`/`r`/`⌫`, delete offers `⌘↵` keep
-    notes vs `⌘⌫` delete notes), sections by type, `s` search, row keys `e` edit, `t` type,
+    notes vs `⌘⌫` delete notes), a "Due for review" section on top, then sections by type, `s` search, row keys `e` edit, `t` type,
     `o` open, `y` history, `⌫` delete, `⌘e`/`⌘⇧e` export (Markdown/JSON, native save dialog,
     DLP re-run, confidential topics only when exported explicitly). It binds its own `c`/`v`
     since it replaces `TaskList`.

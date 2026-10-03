@@ -49,6 +49,7 @@ pub enum RecordBody {
     Topic(TopicBody),
     Note(NoteBody),
     NoteRevision(NoteRevisionBody),
+    NoteReview(NoteReviewBody),
 }
 
 /// Enum columns ride as their stored strings (`NoteType::as_str` etc.), the same as the
@@ -78,6 +79,24 @@ pub struct NoteBody {
     pub captured_at: String,
     pub created_at: String,
     pub updated_at: String,
+    pub deleted: bool,
+    /// Added with note reviews; a body without them reads as an open, unscheduled note.
+    #[serde(default = "default_note_status")]
+    pub status: String,
+    #[serde(default)]
+    pub revisit_at: Option<String>,
+}
+
+fn default_note_status() -> String {
+    "open".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NoteReviewBody {
+    pub note_id: String,
+    pub conviction: i64,
+    pub comment: Option<String>,
+    pub reviewed_at: String,
     pub deleted: bool,
 }
 
@@ -111,6 +130,9 @@ pub struct TaskBody {
     pub task_group_id: Option<String>,
     pub position: i64,
     pub deleted: bool,
+    /// Added with note reviews; older bodies (and server-synthesized captures) omit it.
+    #[serde(default)]
+    pub origin_note_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

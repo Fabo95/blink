@@ -1,4 +1,4 @@
-import { Check, ExternalLink, Tag, WandSparkles } from 'lucide-react';
+import { Check, ExternalLink, Lightbulb, Tag, WandSparkles } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverAnchor } from '@/components/ui/popover';
@@ -124,6 +124,17 @@ export function TaskRow({
                     <span className="inline-flex items-center gap-1">
                       <Tag className="size-3 shrink-0" />
                       {groupName}
+                    </span>
+                  </>
+                )}
+                {task.originNoteId && (
+                  <>
+                    <span aria-hidden className="text-muted-foreground/30">
+                      ·
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Lightbulb className="size-3 shrink-0" />
+                      From an idea
                     </span>
                   </>
                 )}

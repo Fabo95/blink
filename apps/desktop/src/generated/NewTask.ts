@@ -19,4 +19,8 @@ link: string | null,
 /**
  * The group picked in the capture panel (defaults to the inbox's active filter).
  */
-taskGroupId: string | null, source: CaptureSource, };
+taskGroupId: string | null, source: CaptureSource, 
+/**
+ * Set only when a review promotes a note into a task; capture never sends it.
+ */
+originNoteId?: string, };

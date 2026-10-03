@@ -4,6 +4,7 @@
 mod db;
 mod migrations;
 mod note_repository;
+mod note_review_repository;
 mod note_revision_repository;
 mod settings_repository;
 mod sync_state_repository;
@@ -15,6 +16,7 @@ use std::sync::Arc;
 
 pub use db::Db;
 pub use note_repository::{NotePatch, NoteRepository};
+pub use note_review_repository::NoteReviewRepository;
 pub use note_revision_repository::NoteRevisionRepository;
 pub use settings_repository::SettingsRepository;
 pub use sync_state_repository::SyncStateRepository;
@@ -30,6 +32,7 @@ pub struct Repository {
     pub topics: TopicRepository,
     pub notes: NoteRepository,
     pub note_revisions: NoteRevisionRepository,
+    pub note_reviews: NoteReviewRepository,
     pub settings: SettingsRepository,
     pub sync_state: SyncStateRepository,
 }
@@ -42,6 +45,7 @@ impl Repository {
             topics: TopicRepository::new(db.clone()),
             notes: NoteRepository::new(db.clone()),
             note_revisions: NoteRevisionRepository::new(db.clone()),
+            note_reviews: NoteReviewRepository::new(db.clone()),
             settings: SettingsRepository::new(db.clone()),
             sync_state: SyncStateRepository::new(db.clone()),
         }

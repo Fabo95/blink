@@ -5,16 +5,19 @@ import { HistoryPopover } from '@/components/ideas/HistoryPopover';
 import { NoteEditor } from '@/components/ideas/NoteEditor';
 import { NoteRow } from '@/components/ideas/NoteRow';
 import { NoteSection } from '@/components/ideas/NoteSection';
+import { ReviewPopover } from '@/components/ideas/ReviewPopover';
 import { TopicFilterBar } from '@/components/ideas/TopicFilterBar';
 import { TopicHeader } from '@/components/ideas/TopicHeader';
 import { Input } from '@/components/ui/input';
 import type { ExportFormat } from '@/generated/ExportFormat';
 import type { Note } from '@/generated/Note';
+import { useDueNotes } from '@/hooks/useDueNotes';
 import { useListCursor } from '@/hooks/useListCursor';
 import { useNoteEditor } from '@/hooks/useNoteEditor';
 import { useNoteHistory } from '@/hooks/useNoteHistory';
 import { useNoteSearch } from '@/hooks/useNoteSearch';
 import { useNotes } from '@/hooks/useNotes';
+import { useReview } from '@/hooks/useReview';
 import { useTopics } from '@/hooks/useTopics';
 import { api } from '@/lib/api';
 import { toggleHintStyle } from '@/lib/hintStyle';
@@ -25,12 +28,15 @@ import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { errorMessage } from '@/lib/utils';
 
 /**
- * The Ideas page: notes grouped by type under a topic filter, with full-text search,
- * in-row editing and history, and export. A thin orchestrator like `TaskList`: it owns the
- * cursor and the row overlays; topics, search, editing, and history live in hooks.
+ * The Ideas page: notes due for review first, then the rest grouped by type under a topic
+ * filter, with full-text search, in-row review / editing / history, and export. A thin
+ * orchestrator like `TaskList`: it owns the cursor and the row overlays; topics, search,
+ * review, editing, and history live in hooks. `onChanged` tells the shell that reviews or a
+ * promotion changed what it shows (the due badge, the inbox).
  */
-export function IdeasPage() {
+export function IdeasPage({ onChanged }: { onChanged: () => void }) {
   const { notes, refresh } = useNotes();
+  const { due, refresh: refreshDue } = useDueNotes({ version: notes });
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [deletingNote, setDeletingNote] = useState<Note | null>(null);
@@ -40,9 +46,17 @@ export function IdeasPage() {
 
   const editor = useNoteEditor({ onSaved: refresh, setError });
   const history = useNoteHistory({ onRestored: refresh, setError });
+  const review = useReview({
+    onReviewed: async (outcome) => {
+      await Promise.all([refresh(), refreshDue()]);
+      onChanged();
+      if (outcome.task) setNotice(`Added to the inbox: ${outcome.task.text}`);
+    },
+  });
 
   const isEditing = editor.note !== null;
-  const baseEnabled = !isEditing && !history.note && deletingNote === null && !helpOpen;
+  const baseEnabled =
+    !isEditing && !history.note && !review.current && deletingNote === null && !helpOpen;
   const topics = useTopics({ enabled: baseEnabled, onNotesChanged: refresh });
   const enabled = baseEnabled && !topics.busy;
   const search = useNoteSearch({ enabled, version: notes });
@@ -56,13 +70,21 @@ export function IdeasPage() {
 
   const inTopic = (note: Note) => topics.selectedId === null || note.topicId === topics.selectedId;
   const visible = (search.results ?? notes).filter(inTopic);
+  const dueVisible = due.filter(inTopic);
+  const dueIds = new Set(dueVisible.map((n) => n.id));
+  // Due notes show once, in their own section on top. Dropped notes leave the sections but
+  // stay findable through search.
+  const browsing = visible.filter((n) => !dueIds.has(n.id) && n.status !== 'dropped');
   const sections = search.results
     ? [{ key: 'results', title: 'Results', notes: visible }]
-    : NOTE_TYPES.map((type) => ({
-        key: type,
-        title: NOTE_TYPE_LABEL[type].many,
-        notes: splitNotes(visible)[type],
-      })).filter((section) => section.notes.length > 0);
+    : [
+        { key: 'due', title: 'Due for review', notes: dueVisible },
+        ...NOTE_TYPES.map((type) => ({
+          key: type,
+          title: NOTE_TYPE_LABEL[type].many,
+          notes: splitNotes(browsing)[type],
+        })),
+      ].filter((section) => section.notes.length > 0);
   const navItems = sections.flatMap((section) => section.notes);
   const topicNames = new Map(topics.topics.map((t) => [t.id, t.name]));
 
@@ -162,6 +184,16 @@ export function IdeasPage() {
       if (focused) void history.open(focused);
     },
   });
+  useShortcut('note.review', {
+    enabled: focusedEnabled,
+    callback: () => {
+      if (focused) review.open(focused);
+    },
+  });
+  useShortcut('ideas.reviewSession', {
+    enabled: enabled && focused === null && dueVisible.length > 0,
+    callback: () => review.startSession(dueVisible),
+  });
   useShortcut('note.delete', {
     enabled: focusedEnabled,
     callback: () => {
@@ -180,13 +212,20 @@ export function IdeasPage() {
   // The inbox binds these in TaskList; this page replaces it, so it binds its own.
   useShortcut('app.hintDialect', { callback: toggleHintStyle });
   useShortcut('app.help', {
-    enabled: !isEditing && deletingNote === null && !topics.busy,
+    enabled: !isEditing && !review.current && deletingNote === null && !topics.busy,
     callback: () => setHelpOpen((open) => !open),
   });
   useShortcut('browse.swallowTab', {
     enabled: !isEditing && topics.prompt === null,
     callback: () => {},
   });
+
+  // A review session moves from note to note: keep the cursor on the one under review, so
+  // its row scrolls into view and the popover has an anchor on screen.
+  const reviewingId = review.current?.id;
+  useEffect(() => {
+    if (reviewingId) setFocusedId(reviewingId);
+  }, [reviewingId, setFocusedId]);
 
   useEffect(() => {
     if (!focusedId) return;
@@ -197,12 +236,13 @@ export function IdeasPage() {
     const editing = editor.isEditing(note.id);
     const showingHistory = history.isOpen(note.id);
     const confirmingDelete = deletingNote?.id === note.id;
+    const reviewing = review.current?.id === note.id;
     return (
       <NoteRow
         key={note.id}
         note={note}
         focused={focusedId === note.id}
-        overlayOpen={editing || showingHistory || confirmingDelete}
+        overlayOpen={editing || showingHistory || confirmingDelete || reviewing}
         confirmingDelete={confirmingDelete}
         topicName={
           topics.selectedId === null && note.topicId ? topicNames.get(note.topicId) : undefined
@@ -212,9 +252,11 @@ export function IdeasPage() {
         onCloseOverlay={() => {
           if (editing) editor.cancel();
           else if (showingHistory) history.close();
+          else if (reviewing) review.close();
           else setDeletingNote(null);
         }}
       >
+        {reviewing && <ReviewPopover review={review} />}
         {editing && <NoteEditor editor={editor} error={error} topics={topics.topics} />}
         {showingHistory && <HistoryPopover note={note} history={history} />}
         {confirmingDelete && <DeleteNotePopover note={note} />}

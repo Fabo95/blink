@@ -23,6 +23,7 @@ use crate::services::editor_service::EditorService;
 use crate::services::export_service::ExportService;
 use crate::services::note_service::NoteService;
 use crate::services::policy_service::PolicyService;
+use crate::services::review_service::ReviewService;
 use crate::services::topic_service::TopicService;
 use crate::services::hook_service::HookService;
 use crate::services::terminal_service::TerminalService;
@@ -96,6 +97,7 @@ pub fn run() {
                 repository.topics.clone(),
                 repository.notes.clone(),
                 repository.note_revisions.clone(),
+                repository.note_reviews.clone(),
                 repository.settings.clone(),
                 hlc_service.clone(),
                 sync_sender.clone(),
@@ -103,12 +105,21 @@ pub fn run() {
             app.manage(NoteService::new(
                 repository.notes.clone(),
                 repository.note_revisions.clone(),
+                repository.note_reviews.clone(),
+                hlc_service.clone(),
+                sync_sender.clone(),
+            ));
+            app.manage(ReviewService::new(
+                repository.notes.clone(),
+                repository.note_reviews.clone(),
+                repository.tasks.clone(),
                 hlc_service.clone(),
                 sync_sender.clone(),
             ));
             app.manage(PolicyService::new(repository.topics.clone()));
             app.manage(ExportService::new(
                 repository.notes.clone(),
+                repository.note_reviews.clone(),
                 repository.topics.clone(),
                 SecurityService::with_defaults(),
             ));
@@ -156,6 +167,7 @@ pub fn run() {
                 repository.topics.clone(),
                 repository.notes.clone(),
                 repository.note_revisions.clone(),
+                repository.note_reviews.clone(),
                 repository.sync_state.clone(),
                 hlc_service,
                 sync_sender,
@@ -209,6 +221,9 @@ pub fn run() {
             commands::notes::note_history,
             commands::notes::restore_note_revision,
             commands::export::export_notes,
+            commands::reviews::list_due_notes,
+            commands::reviews::list_note_reviews,
+            commands::reviews::review_note,
             commands::link::open_link,
             commands::shortcut::get_capture_shortcut,
             commands::shortcut::set_capture_shortcut,

@@ -9,9 +9,10 @@ use chrono::Utc;
 use serde::Serialize;
 
 use crate::core::error::{AppError, AppResult};
-use crate::core::models::{ExportFormat, Note, NoteType, Topic};
-use crate::repository::{NoteRepository, TopicRepository};
+use crate::core::models::{ExportFormat, Note, NoteStatus, NoteType, Topic};
+use crate::repository::{NoteRepository, NoteReviewRepository, TopicRepository};
 use crate::services::policy_service::allows_bulk_export;
+use crate::services::review_service::with_reviews;
 use crate::services::security_service::SecurityService;
 
 /// A rendered export, ready to be written wherever the user picks.
@@ -22,6 +23,7 @@ pub struct Export {
 
 pub struct ExportService {
     note_repository: NoteRepository,
+    note_review_repository: NoteReviewRepository,
     topic_repository: TopicRepository,
     security_service: SecurityService,
 }
@@ -29,11 +31,13 @@ pub struct ExportService {
 impl ExportService {
     pub fn new(
         note_repository: NoteRepository,
+        note_review_repository: NoteReviewRepository,
         topic_repository: TopicRepository,
         security_service: SecurityService,
     ) -> Self {
         Self {
             note_repository,
+            note_review_repository,
             topic_repository,
             security_service,
         }
@@ -42,11 +46,15 @@ impl ExportService {
     /// Render one topic (`topic_id`) or everything exportable (`None`).
     pub fn render(&self, topic_id: Option<&str>, format: ExportFormat) -> AppResult<Export> {
         let topics = self.topic_repository.list()?;
+        let mut convictions = self.note_review_repository.convictions_by_note()?;
         let notes: Vec<Note> = self
             .note_repository
             .list()?
             .into_iter()
-            .map(|note| self.sanitized(note))
+            .map(|note| {
+                let history = convictions.remove(&note.id).unwrap_or_default();
+                self.sanitized(with_reviews(note, history))
+            })
             .collect();
         let document = build_document(&topics, notes, topic_id)?;
 
@@ -187,10 +195,20 @@ fn render_notes(out: &mut String, notes: &[Note], heading: &str) {
             let date = note.created_at.get(..10).unwrap_or(&note.created_at);
             // Continuation lines are indented so a multi-line note stays one list item.
             let text = note.text.trim().replace('\n', "\n  ");
-            match &note.link {
-                Some(link) => out.push_str(&format!("- {text} ({link}) _{date}_\n")),
-                None => out.push_str(&format!("- {text} _{date}_\n")),
-            }
+            let link = note.link.as_ref().map(|l| format!(" ({l})")).unwrap_or_default();
+            let conviction = if note.conviction_history.is_empty() {
+                String::new()
+            } else {
+                let scores: Vec<String> =
+                    note.conviction_history.iter().map(i64::to_string).collect();
+                format!(", conviction {}", scores.join(" > "))
+            };
+            let status = match note.status {
+                NoteStatus::Open => "",
+                NoteStatus::Promoted => ", promoted",
+                NoteStatus::Dropped => ", dropped",
+            };
+            out.push_str(&format!("- {text}{link} _{date}{conviction}{status}_\n"));
         }
     }
 }
@@ -241,6 +259,10 @@ mod tests {
             topic_id: topic_id.map(str::to_string),
             improved: false,
             conflict: false,
+            status: NoteStatus::Open,
+            revisit_at: None,
+            conviction_history: Vec::new(),
+            review_nudge: None,
             source: CaptureSource {
                 app_id: "manual".to_string(),
                 app_name: "Manual".to_string(),
@@ -302,6 +324,16 @@ mod tests {
         assert!(markdown.contains("## Agentic commerce\n\n> Is it real?"));
         assert!(markdown.contains("### Ideas\n\n- Agents book tables _2026-10-02_"));
         assert!(markdown.contains("- Line one\n  line two _2026-10-02_"));
+    }
+
+    #[test]
+    fn markdown_shows_conviction_history_and_status() {
+        let topics = [topic("a", "Agentic commerce", Sensitivity::Personal)];
+        let mut promoted = note("Agents book tables", NoteType::Idea, Some("a"));
+        promoted.conviction_history = vec![2, 4, 5];
+        promoted.status = NoteStatus::Promoted;
+        let markdown = render_markdown(&build_document(&topics, vec![promoted], None).unwrap());
+        assert!(markdown.contains("- Agents book tables _2026-10-02, conviction 2 > 4 > 5, promoted_"));
     }
 
     #[test]

@@ -18,7 +18,9 @@ Deviations from the plan below, decided while building:
 - Capture is a two-level choice (Task or Note, then the note's type) instead of one 4-way `⌘T` cycle: it matches the data model and keeps `⌘T` a predictable switch.
 - Revisions also get a "restore" action (`⌘↵` in the history), which the plan didn't list.
 
-Not done yet (later phases): review ritual, note links, source enrichment, egress log, briefs, embeddings, teams, server-side capture of note types (`zNoteBody` in `@blink/contract` lands with that).
+Phase 2 (review ritual) is implemented too: schedule and nudges as pure Rust functions, append-only synced reviews, keep / drop / promote (promote creates a linked inbox task), review sessions over the due queue (max 10), a "Due for review" section, conviction history on rows and in exports, and the due count on the Ideas tab. Deviations: no separate "triage" pass (existing notes are backfilled to 14 days after capture, so old notes simply become due), and the weekly digest notification is postponed until there's a settings toggle for it.
+
+Not done yet (later phases): note links, source enrichment, egress log, briefs, embeddings, teams, server-side capture of note types (`zNoteBody` in `@blink/contract` lands with that).
 
 ## Goal
 

@@ -122,6 +122,8 @@ pub struct Task {
     pub created_at: String,
     pub updated_at: String,
     pub completed_at: Option<String>,
+    /// The idea this task was promoted from, if any.
+    pub origin_note_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -140,6 +142,10 @@ pub struct NewTask {
     /// The group picked in the capture panel (defaults to the inbox's active filter).
     pub task_group_id: Option<String>,
     pub source: CaptureSource,
+    /// Set only when a review promotes a note into a task; capture never sends it.
+    #[serde(default)]
+    #[ts(optional)]
+    pub origin_note_id: Option<String>,
 }
 
 /// A user-defined task group (e.g. "Work", "Sport") — a task belongs to at most one.
@@ -193,6 +199,36 @@ impl NoteType {
             "thought" => Self::Thought,
             "source" => Self::Source,
             _ => Self::Idea,
+        }
+    }
+}
+
+/// Where a note stands after review. Dropped notes stay searchable but leave the sections;
+/// promoted ones became a task and keep being reviewed.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub enum NoteStatus {
+    #[default]
+    Open,
+    Promoted,
+    Dropped,
+}
+
+impl NoteStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Open => "open",
+            Self::Promoted => "promoted",
+            Self::Dropped => "dropped",
+        }
+    }
+
+    pub fn from_stored(value: &str) -> Self {
+        match value {
+            "promoted" => Self::Promoted,
+            "dropped" => Self::Dropped,
+            _ => Self::Open,
         }
     }
 }
@@ -301,6 +337,16 @@ pub struct Note {
     /// A sync pull overwrote an unsynced local edit; the lost text is kept as a conflict
     /// revision. Device-local, cleared once the user opens the note's history.
     pub conflict: bool,
+    pub status: NoteStatus,
+    /// When the note comes back for review; `None` = not scheduled (sources, or a note
+    /// rated 1).
+    pub revisit_at: Option<String>,
+    /// Every conviction (1 to 5) the note was given, oldest first.
+    #[ts(type = "Array<number>")]
+    pub conviction_history: Vec<i64>,
+    /// A hint derived from the history (promote or drop), computed in the core so the rule
+    /// lives in one place.
+    pub review_nudge: Option<ReviewNudge>,
     pub source: CaptureSource,
     pub created_at: String,
     pub updated_at: String,
@@ -357,6 +403,54 @@ pub struct NoteRevision {
     pub text: String,
     pub reason: RevisionReason,
     pub created_at: String,
+}
+
+/// One dated judgement of a note. Append-only and per person: a review is never edited.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct NoteReview {
+    pub id: String,
+    pub note_id: String,
+    /// 1 (not convinced) to 5 (very convinced). Serialized as a JSON number; ts-rs would
+    /// otherwise type an `i64` as `bigint`.
+    #[ts(type = "number")]
+    pub conviction: i64,
+    pub comment: Option<String>,
+    pub reviewed_at: String,
+}
+
+/// What a review does with the note besides recording the conviction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub enum ReviewDecision {
+    /// Keep the note and schedule its next review from the conviction.
+    Keep,
+    /// Stop reviewing it; it stays searchable.
+    Drop,
+    /// Turn it into a validation task in the inbox; it keeps being reviewed.
+    Promote,
+}
+
+/// A hint the review popover shows from the note's conviction history.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub enum ReviewNudge {
+    /// Rated 4 or higher three times in a row: time to act on it.
+    Promote,
+    /// Rated 1, or 2 or lower twice in a row: probably not worth keeping.
+    Drop,
+}
+
+/// The result of a review: the updated note, and the task when it was promoted.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewOutcome {
+    pub note: Note,
+    pub task: Option<Task>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

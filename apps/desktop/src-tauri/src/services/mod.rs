@@ -16,6 +16,7 @@ pub mod hook_service;
 pub mod note_service;
 pub mod policy_service;
 pub mod repo_service;
+pub mod review_service;
 pub mod security_service;
 pub mod session_token_service;
 pub mod shortcut_service;

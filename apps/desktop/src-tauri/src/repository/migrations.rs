@@ -173,5 +173,30 @@ pub(super) fn migrations() -> Migrations<'static> {
             );
             CREATE INDEX IF NOT EXISTS note_revisions_note_idx ON note_revisions(note_id);",
         ),
+        // Note reviews. Existing ideas and thoughts get their first review 14 days after
+        // capture (sources aren't reviewed on their own); rows already past that date are
+        // simply due. The backfill is deterministic, so every device computes the same
+        // schedule without a re-push. Reviews are append-only rows, like revisions, so they sync without
+        // last-write-wins dropping one. `tasks.origin_note_id` links a promoted idea's task.
+        M::up(
+            "ALTER TABLE notes ADD COLUMN status TEXT NOT NULL DEFAULT 'open';
+            ALTER TABLE notes ADD COLUMN revisit_at TEXT;
+            UPDATE notes SET revisit_at = strftime('%Y-%m-%dT%H:%M:%SZ', created_at, '+14 days')
+                WHERE note_type IN ('idea', 'thought');
+            CREATE TABLE IF NOT EXISTS note_reviews (
+                id           TEXT PRIMARY KEY,
+                note_id      TEXT NOT NULL,
+                conviction   INTEGER NOT NULL,
+                comment      TEXT,
+                reviewed_at  TEXT NOT NULL,
+                hlc_physical INTEGER NOT NULL DEFAULT 0,
+                hlc_counter  INTEGER NOT NULL DEFAULT 0,
+                hlc_node_id  TEXT    NOT NULL DEFAULT '',
+                dirty        INTEGER NOT NULL DEFAULT 1,
+                deleted      INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS note_reviews_note_idx ON note_reviews(note_id);
+            ALTER TABLE tasks ADD COLUMN origin_note_id TEXT;",
+        ),
     ])
 }

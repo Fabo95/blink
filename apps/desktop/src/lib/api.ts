@@ -10,9 +10,14 @@ import type { NewTask } from '@/generated/NewTask';
 import type { NewTaskGroup } from '@/generated/NewTaskGroup';
 import type { NewTopic } from '@/generated/NewTopic';
 import type { Note } from '@/generated/Note';
+import type { NoteReview } from '@/generated/NoteReview';
 import type { NoteRevision } from '@/generated/NoteRevision';
+import type { NoteStatus } from '@/generated/NoteStatus';
 import type { NoteType } from '@/generated/NoteType';
 import type { PruneCandidate } from '@/generated/PruneCandidate';
+import type { ReviewDecision } from '@/generated/ReviewDecision';
+import type { ReviewNudge } from '@/generated/ReviewNudge';
+import type { ReviewOutcome } from '@/generated/ReviewOutcome';
 import type { Sensitivity } from '@/generated/Sensitivity';
 import type { Task } from '@/generated/Task';
 import type { TaskEffort } from '@/generated/TaskEffort';
@@ -161,6 +166,18 @@ export const api = {
   noteHistory: (id: string) => invoke<NoteRevision[]>('note_history', { id }),
   restoreNoteRevision: (noteId: string, revisionId: string) =>
     invoke<Note>('restore_note_revision', { noteId, revisionId }),
+  /** Ideas and thoughts due for review now, most overdue first. */
+  listDueNotes: () => invoke<Note[]>('list_due_notes'),
+  /** Every review a note was given, oldest first. */
+  listNoteReviews: (noteId: string) => invoke<NoteReview[]>('list_note_reviews', { noteId }),
+  /** Record a review (conviction 1 to 5) and apply its decision: keep and reschedule, drop,
+   *  or promote into an inbox task. */
+  reviewNote: (
+    noteId: string,
+    conviction: number,
+    comment: string | null,
+    decision: ReviewDecision,
+  ) => invoke<ReviewOutcome>('review_note', { noteId, conviction, comment, decision }),
   /** Export one topic (or everything exportable with `null`) to a file picked in the save
    *  dialog. Resolves to the written path, or `null` if the user cancelled. */
   exportNotes: (topicId: string | null, format: ExportFormat) =>
@@ -294,6 +311,7 @@ function seedMockStore(): Task[] {
     createdAt: hoursAgo(completedHoursAgo + 4),
     updatedAt: hoursAgo(completedHoursAgo),
     completedAt: hoursAgo(completedHoursAgo),
+    originNoteId: null,
   });
   const active = (
     text: string,
@@ -315,6 +333,7 @@ function seedMockStore(): Task[] {
     createdAt: hoursAgo(2),
     updatedAt: hoursAgo(2),
     completedAt: null,
+    originNoteId: null,
   });
 
   const slack = source('Slack', '#engineering');
@@ -407,6 +426,33 @@ function seedMockTopics(): Topic[] {
 const mockTopics: Topic[] = seedMockTopics();
 let mockActiveTopic: string | null = null;
 const mockNoteRevisions: NoteRevision[] = [];
+const mockNoteReviews: NoteReview[] = [];
+const DAY_MS = 86_400_000;
+
+// Mirrors the core's review rules (`review_service.rs`): first review after 14 days for
+// ideas and thoughts, then sooner the more convinced you are.
+function mockFirstRevisit(noteType: NoteType, from: number): string | null {
+  return noteType === 'source' ? null : new Date(from + 14 * DAY_MS).toISOString();
+}
+
+function mockNextRevisit(conviction: number, from: number): string | null {
+  const days = ({ 5: 7, 4: 14, 3: 30, 2: 60 } as Record<number, number>)[conviction];
+  return days === undefined ? null : new Date(from + days * DAY_MS).toISOString();
+}
+
+function mockNudge(history: number[], status: NoteStatus): ReviewNudge | null {
+  const last = history[history.length - 1];
+  if (last === undefined) return null;
+  const tail = (n: number) => (history.length >= n ? history.slice(-n) : null);
+  if (status !== 'promoted' && tail(3)?.every((c) => c >= 4)) return 'promote';
+  if (last <= 1 || tail(2)?.every((c) => c <= 2)) return 'drop';
+  return null;
+}
+
+function mockWithReviews(note: Note): Note {
+  const history = mockNoteReviews.filter((r) => r.noteId === note.id).map((r) => r.conviction);
+  return { ...note, convictionHistory: history, reviewNudge: mockNudge(history, note.status) };
+}
 
 function seedMockNotes(): Note[] {
   const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString();
@@ -427,6 +473,10 @@ function seedMockNotes(): Note[] {
     topicId,
     improved: false,
     conflict: false,
+    status: 'open',
+    revisitAt: mockFirstRevisit(noteType, Date.now() - age * DAY_MS),
+    convictionHistory: [],
+    reviewNudge: null,
     source: { appId: appName.toLowerCase(), appName, windowTitle: '', capturedAt: daysAgo(age) },
     createdAt: daysAgo(age),
     updatedAt: daysAgo(age),
@@ -454,9 +504,41 @@ function seedMockNotes(): Note[] {
       createdAt: daysAgo(6),
     },
   );
+  // Two notes due: one with a mixed history, one rated 4+ three times (promote nudge). One
+  // dropped note, which only shows up in search.
+  const feed = note(
+    'idea',
+    'Agent-readable availability feed for restaurants',
+    commerce ?? null,
+    35,
+  );
+  const bottleneck = note(
+    'thought',
+    'Review is the new bottleneck, not writing code',
+    review ?? null,
+    40,
+  );
+  const dropped = note('idea', 'A restaurant chatbot for reservations', commerce ?? null, 50);
+  dropped.status = 'dropped';
+  dropped.revisitAt = null;
+  const reviewed = (noteId: string, convictions: number[], firstDaysAgo: number) => {
+    for (const [i, conviction] of convictions.entries()) {
+      mockNoteReviews.push({
+        id: crypto.randomUUID(),
+        noteId,
+        conviction,
+        comment: null,
+        reviewedAt: daysAgo(firstDaysAgo - i * 7),
+      });
+    }
+  };
+  reviewed(feed.id, [3, 4], 20);
+  reviewed(bottleneck.id, [4, 4, 5], 25);
+  reviewed(dropped.id, [2, 1], 30);
   return [
-    note('idea', 'Agent-readable availability feed for restaurants', commerce ?? null, 35),
+    feed,
     conflicted,
+    dropped,
     note('thought', 'Who is liable when an agent books the wrong table?', commerce ?? null, 7),
     note(
       'source',
@@ -466,7 +548,7 @@ function seedMockNotes(): Note[] {
       'https://stripe.com/blog/agentic-commerce',
       'Chrome',
     ),
-    note('thought', 'Review is the new bottleneck, not writing code', review ?? null, 21),
+    bottleneck,
     note('idea', 'Spin the vertical into its own company', board ?? null, 9),
     note('thought', 'Keep a pain log for two weeks', null, 2),
   ];
@@ -573,6 +655,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
         createdAt: now,
         updatedAt: now,
         completedAt: null,
+        originNoteId: input.originNoteId ?? null,
       };
       mockStore.unshift(task);
       return task as T;
@@ -760,7 +843,69 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       mockActiveTopic = typeof args?.topicId === 'string' ? args.topicId : null;
       return undefined as T;
     case 'list_notes':
-      return [...mockNotes] as T;
+      return mockNotes.map(mockWithReviews) as T;
+    case 'list_due_notes': {
+      const now = Date.now();
+      return mockNotes
+        .filter(
+          (n) =>
+            n.status !== 'dropped' &&
+            n.noteType !== 'source' &&
+            n.revisitAt !== null &&
+            Date.parse(n.revisitAt) <= now,
+        )
+        .sort((a, b) => Date.parse(a.revisitAt ?? '') - Date.parse(b.revisitAt ?? ''))
+        .map(mockWithReviews) as T;
+    }
+    case 'list_note_reviews':
+      return mockNoteReviews.filter((r) => r.noteId === args?.noteId) as T;
+    case 'review_note': {
+      const note = mockNotes.find((n) => n.id === args?.noteId);
+      if (!note) throw new Error('note not found');
+      const conviction = Number(args?.conviction);
+      if (!(conviction >= 1 && conviction <= 5)) {
+        throw new Error('conviction must be between 1 and 5');
+      }
+      const now = Date.now();
+      const comment = typeof args?.comment === 'string' ? args.comment.trim() : '';
+      mockNoteReviews.push({
+        id: crypto.randomUUID(),
+        noteId: note.id,
+        conviction,
+        comment: comment || null,
+        reviewedAt: new Date(now).toISOString(),
+      });
+      const next = mockNextRevisit(conviction, now);
+      let task: Task | null = null;
+      if (args?.decision === 'drop') {
+        note.status = 'dropped';
+        note.revisitAt = null;
+      } else if (args?.decision === 'promote') {
+        note.status = 'promoted';
+        note.revisitAt = next;
+        task = await mockInvoke<Task>('save_task', {
+          task: {
+            text: `Validate: ${note.text.split('\n')[0]}`,
+            rawText: note.text,
+            improved: false,
+            link: note.link,
+            taskGroupId: null,
+            source: {
+              appId: 'app.blink.ideas',
+              appName: 'Ideas',
+              windowTitle: '',
+              capturedAt: new Date(now).toISOString(),
+            },
+            originNoteId: note.id,
+          } satisfies NewTask,
+        });
+      } else {
+        if (note.status === 'dropped') note.status = 'open';
+        note.revisitAt = next;
+      }
+      note.updatedAt = new Date(now).toISOString();
+      return { note: mockWithReviews(note), task } as T;
+    }
     case 'search_notes': {
       // Mirrors the FTS query: every word must prefix-match a word of the text, raw text,
       // or link.
@@ -769,12 +914,14 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
         .split(/[^\p{L}\p{N}]+/u)
         .filter(Boolean);
       if (words.length === 0) return [] as T;
-      return mockNotes.filter((n) => {
-        const haystack = `${n.text} ${n.rawText} ${n.link ?? ''}`
-          .toLowerCase()
-          .split(/[^\p{L}\p{N}]+/u);
-        return words.every((w) => haystack.some((h) => h.startsWith(w)));
-      }) as T;
+      return mockNotes
+        .filter((n) => {
+          const haystack = `${n.text} ${n.rawText} ${n.link ?? ''}`
+            .toLowerCase()
+            .split(/[^\p{L}\p{N}]+/u);
+          return words.every((w) => haystack.some((h) => h.startsWith(w)));
+        })
+        .map(mockWithReviews) as T;
     }
     case 'save_note': {
       const input = args?.note as NewNote;
@@ -788,6 +935,10 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
         topicId: input.topicId,
         improved: input.improved,
         conflict: false,
+        status: 'open',
+        revisitAt: mockFirstRevisit(input.noteType, Date.now()),
+        convictionHistory: [],
+        reviewNudge: null,
         source: input.source,
         createdAt: now,
         updatedAt: now,
@@ -811,13 +962,16 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       const noteType = args?.noteType;
       if (noteType === 'idea' || noteType === 'thought' || noteType === 'source') {
         note.noteType = noteType;
+        if (note.revisitAt === null && note.status === 'open') {
+          note.revisitAt = mockFirstRevisit(noteType, Date.now());
+        }
       }
       if (typeof args?.link === 'string') note.link = args.link.trim() || null;
       if (typeof args?.topicId === 'string') note.topicId = args.topicId.trim() || null;
       if (typeof args?.improved === 'boolean') note.improved = args.improved;
       if (typeof args?.source === 'string') note.source = { ...note.source, appName: args.source };
       note.updatedAt = new Date().toISOString();
-      return note as T;
+      return mockWithReviews(note) as T;
     }
     case 'delete_note': {
       const idx = mockNotes.findIndex((n) => n.id === args?.id);

@@ -6,4 +6,8 @@ export type Task = { id: string, text: string,
 /**
  * The post-sanitization, pre-edit captured text — frozen at capture, never updated.
  */
-rawText: string, status: string, effort: TaskEffort, improved: boolean, link: string | null, taskGroupId: string | null, source: CaptureSource, createdAt: string, updatedAt: string, completedAt: string | null, };
+rawText: string, status: string, effort: TaskEffort, improved: boolean, link: string | null, taskGroupId: string | null, source: CaptureSource, createdAt: string, updatedAt: string, completedAt: string | null, 
+/**
+ * The idea this task was promoted from, if any.
+ */
+originNoteId: string | null, };

@@ -8,7 +8,8 @@ use crate::core::error::AppResult;
 use crate::core::models::{NewTopic, Topic};
 use crate::core::sync_channel::SyncSignalSender;
 use crate::repository::{
-    NoteRepository, NoteRevisionRepository, SettingsRepository, TopicRepository,
+    NoteRepository, NoteReviewRepository, NoteRevisionRepository, SettingsRepository,
+    TopicRepository,
 };
 use crate::services::hlc_service::HlcService;
 
@@ -24,6 +25,7 @@ pub struct TopicService {
     // and must be stamped for sync, so the topic service reaches both repositories.
     note_repository: NoteRepository,
     note_revision_repository: NoteRevisionRepository,
+    note_review_repository: NoteReviewRepository,
     settings_repository: SettingsRepository,
     hlc_service: Arc<HlcService>,
     sync_signal: SyncSignalSender,
@@ -34,6 +36,7 @@ impl TopicService {
         topic_repository: TopicRepository,
         note_repository: NoteRepository,
         note_revision_repository: NoteRevisionRepository,
+        note_review_repository: NoteReviewRepository,
         settings_repository: SettingsRepository,
         hlc_service: Arc<HlcService>,
         sync_signal: SyncSignalSender,
@@ -42,6 +45,7 @@ impl TopicService {
             topic_repository,
             note_repository,
             note_revision_repository,
+            note_review_repository,
             settings_repository,
             hlc_service,
             sync_signal,
@@ -64,20 +68,23 @@ impl TopicService {
         Ok(topic)
     }
 
-    /// Delete a topic. `delete_notes` tombstones its notes and their revisions; otherwise
-    /// the notes move back to unfiled. One clock stamp covers every touched row (they're
-    /// distinct records, so a shared stamp is fine), like `TaskGroupService::delete`.
+    /// Delete a topic. `delete_notes` tombstones its notes with their revisions and
+    /// reviews; otherwise the notes move back to unfiled. One clock stamp covers every
+    /// touched row (they're distinct records, so a shared stamp is fine), like
+    /// `TaskGroupService::delete`.
     pub fn delete(&self, id: &str, delete_notes: bool) -> AppResult<()> {
         self.topic_repository.delete(id)?;
-        let (note_ids, revision_ids) = if delete_notes {
+        let (note_ids, revision_ids, review_ids) = if delete_notes {
             let note_ids = self.note_repository.delete_in_topic(id)?;
             let mut revision_ids = Vec::new();
+            let mut review_ids = Vec::new();
             for note_id in &note_ids {
                 revision_ids.extend(self.note_revision_repository.delete_for_note(note_id)?);
+                review_ids.extend(self.note_review_repository.delete_for_note(note_id)?);
             }
-            (note_ids, revision_ids)
+            (note_ids, revision_ids, review_ids)
         } else {
-            (self.note_repository.unfile_topic(id)?, Vec::new())
+            (self.note_repository.unfile_topic(id)?, Vec::new(), Vec::new())
         };
 
         let hlc = self.hlc_service.next()?;
@@ -90,6 +97,14 @@ impl TopicService {
         for revision_id in &revision_ids {
             self.note_revision_repository.record_change(
                 revision_id,
+                hlc.physical,
+                hlc.counter,
+                &hlc.node_id,
+            )?;
+        }
+        for review_id in &review_ids {
+            self.note_review_repository.record_change(
+                review_id,
                 hlc.physical,
                 hlc.counter,
                 &hlc.node_id,

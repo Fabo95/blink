@@ -8,6 +8,7 @@ import { SettingsPage } from '@/components/SettingsPage';
 import { TaskList } from '@/components/TaskList';
 import { WorktreesPage } from '@/components/WorktreesPage';
 import type { Task } from '@/generated/Task';
+import { useDueNotes } from '@/hooks/useDueNotes';
 import { useSession } from '@/hooks/useSession';
 import { useWorktreeAttention } from '@/hooks/useWorktreeAttention';
 import { api, isTauri } from '@/lib/api';
@@ -18,6 +19,7 @@ import { Hints } from '@/lib/shortcuts/Hints';
 export function Inbox() {
   const { user, signOut } = useSession();
   const attention = useWorktreeAttention();
+  const { due, refresh: refreshDue } = useDueNotes();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [page, setPage] = useState<Page>('inbox');
 
@@ -62,7 +64,7 @@ export function Inbox() {
       <PageNav
         page={page}
         onSelect={setPage}
-        badges={{ worktrees: attention.needsInputCount }}
+        badges={{ ideas: due.length, worktrees: attention.needsInputCount }}
       />
       <main className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-6">
         {page === 'settings' ? (
@@ -72,7 +74,13 @@ export function Inbox() {
         ) : page === 'home' ? (
           <HomePage />
         ) : page === 'ideas' ? (
-          <IdeasPage />
+          <IdeasPage
+            onChanged={() => {
+              // A review changes what's due; a promotion adds an inbox task.
+              void refreshDue();
+              void refresh();
+            }}
+          />
         ) : (
           <TaskList tasks={tasks} onChanged={refresh} />
         )}

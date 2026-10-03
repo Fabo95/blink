@@ -73,16 +73,17 @@ impl TaskRepository {
             created_at: now.clone(),
             updated_at: now,
             completed_at: None,
+            origin_note_id: new.origin_note_id,
         };
         let params = to_params_named(TaskRow::from(&task)).map_err(serde_err)?;
         let conn = self.db.lock()?;
         conn.execute(
             "INSERT INTO tasks (id, text, raw_text, status, effort, app_id, app_name, \
              window_title, captured_at, created_at, updated_at, improved, link, completed_at, \
-             task_group_id) \
+             task_group_id, origin_note_id) \
              VALUES (:id, :text, :raw_text, :status, :effort, :app_id, :app_name, \
              :window_title, :captured_at, :created_at, :updated_at, :improved, :link, \
-             :completed_at, :task_group_id)",
+             :completed_at, :task_group_id, :origin_note_id)",
             params.to_slice().as_slice(),
         )
         .map_err(store_err)?;
@@ -253,6 +254,7 @@ impl TaskRepository {
                         task_group_id: row.get("task_group_id")?,
                         position: row.get("position")?,
                         deleted: row.get("deleted")?,
+                        origin_note_id: row.get("origin_note_id")?,
                     }),
                 })
             })
@@ -267,9 +269,10 @@ impl TaskRepository {
         conn.execute(
             "INSERT INTO tasks (id, text, raw_text, status, app_id, app_name, window_title, \
              captured_at, created_at, updated_at, improved, link, completed_at, task_group_id, \
-             position, deleted, hlc_physical, hlc_counter, hlc_node_id, effort, dirty) \
+             position, deleted, hlc_physical, hlc_counter, hlc_node_id, effort, origin_note_id, \
+             dirty) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, \
-             ?18, ?19, ?20, 0) \
+             ?18, ?19, ?20, ?21, 0) \
              ON CONFLICT(id) DO UPDATE SET \
              text = excluded.text, raw_text = excluded.raw_text, status = excluded.status, \
              app_id = excluded.app_id, app_name = excluded.app_name, \
@@ -279,14 +282,16 @@ impl TaskRepository {
              completed_at = excluded.completed_at, task_group_id = excluded.task_group_id, \
              position = excluded.position, deleted = excluded.deleted, \
              hlc_physical = excluded.hlc_physical, hlc_counter = excluded.hlc_counter, \
-             hlc_node_id = excluded.hlc_node_id, effort = excluded.effort, dirty = 0 \
+             hlc_node_id = excluded.hlc_node_id, effort = excluded.effort, \
+             origin_note_id = excluded.origin_note_id, dirty = 0 \
              WHERE (tasks.hlc_physical, tasks.hlc_counter, tasks.hlc_node_id) \
              < (excluded.hlc_physical, excluded.hlc_counter, excluded.hlc_node_id)",
             params![
                 id, body.text, body.raw_text, body.status, body.app_id, body.app_name,
                 body.window_title, body.captured_at, body.created_at, body.updated_at,
                 body.improved, body.link, body.completed_at, body.task_group_id, body.position,
-                body.deleted, clock.physical, clock.counter, clock.node_id, body.effort.as_str()
+                body.deleted, clock.physical, clock.counter, clock.node_id, body.effort.as_str(),
+                body.origin_note_id
             ],
         )
         .map_err(store_err)?;
@@ -347,6 +352,7 @@ struct TaskRow {
     link: Option<String>,
     completed_at: Option<String>,
     task_group_id: Option<String>,
+    origin_note_id: Option<String>,
 }
 
 impl From<&Task> for TaskRow {
@@ -367,6 +373,7 @@ impl From<&Task> for TaskRow {
             link: task.link.clone(),
             completed_at: task.completed_at.clone(),
             task_group_id: task.task_group_id.clone(),
+            origin_note_id: task.origin_note_id.clone(),
         }
     }
 }
@@ -391,6 +398,7 @@ impl From<TaskRow> for Task {
             created_at: row.created_at,
             updated_at: row.updated_at,
             completed_at: row.completed_at,
+            origin_note_id: row.origin_note_id,
         }
     }
 }
