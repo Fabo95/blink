@@ -1,4 +1,4 @@
-//! Note-review persistence: the [`NoteReviewRepository`]. Reviews are append-only rows,
+//! Note-review persistence: the [`NoteReviewsRepository`]. Reviews are append-only rows,
 //! like revisions: never updated, only tombstoned with their note, so two devices rating the
 //! same note can't overwrite each other's judgement.
 
@@ -15,14 +15,15 @@ use crate::core::error::AppResult;
 use crate::core::models::NoteReview;
 use crate::core::wire::{Clock, LocalChange, NoteReviewBody, RecordBody};
 
-use super::db::{serde_err, store_err, Db};
+use crate::database::{serde_err, store_err, Db};
+use crate::core::synced_repository::SyncedRepository;
 
 #[derive(Clone)]
-pub struct NoteReviewRepository {
+pub struct NoteReviewsRepository {
     db: Arc<Db>,
 }
 
-impl NoteReviewRepository {
+impl NoteReviewsRepository {
     pub(super) fn new(db: Arc<Db>) -> Self {
         Self { db }
     }
@@ -114,50 +115,6 @@ impl NoteReviewRepository {
         Ok(ids)
     }
 
-    pub fn record_change(
-        &self,
-        id: &str,
-        physical: i64,
-        counter: i64,
-        node_id: &str,
-    ) -> AppResult<()> {
-        let conn = self.db.lock()?;
-        conn.execute(
-            "UPDATE note_reviews SET hlc_physical = ?1, hlc_counter = ?2, hlc_node_id = ?3, \
-             dirty = 1 WHERE id = ?4",
-            params![physical, counter, node_id, id],
-        )
-        .map_err(store_err)?;
-        Ok(())
-    }
-
-    pub fn list_dirty(&self) -> AppResult<Vec<LocalChange>> {
-        let conn = self.db.lock()?;
-        let mut stmt = conn
-            .prepare("SELECT * FROM note_reviews WHERE dirty = 1")
-            .map_err(store_err)?;
-        let rows = stmt
-            .query_map([], |row| {
-                Ok(LocalChange {
-                    id: row.get("id")?,
-                    clock: Clock {
-                        physical: row.get("hlc_physical")?,
-                        counter: row.get("hlc_counter")?,
-                        node_id: row.get("hlc_node_id")?,
-                    },
-                    body: RecordBody::NoteReview(NoteReviewBody {
-                        note_id: row.get("note_id")?,
-                        conviction: row.get("conviction")?,
-                        comment: row.get("comment")?,
-                        reviewed_at: row.get("reviewed_at")?,
-                        deleted: row.get("deleted")?,
-                    }),
-                })
-            })
-            .map_err(store_err)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(store_err)
-    }
-
     pub fn merge(&self, id: &str, clock: &Clock, body: &NoteReviewBody) -> AppResult<()> {
         let conn = self.db.lock()?;
         conn.execute(
@@ -187,8 +144,37 @@ impl NoteReviewRepository {
         .map_err(store_err)?;
         Ok(())
     }
+}
 
-    pub fn clear_dirty(&self, changes: &[LocalChange]) -> AppResult<()> {
+impl SyncedRepository for NoteReviewsRepository {
+    fn list_dirty(&self) -> AppResult<Vec<LocalChange>> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare("SELECT * FROM note_reviews WHERE dirty = 1")
+            .map_err(store_err)?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(LocalChange {
+                    id: row.get("id")?,
+                    clock: Clock {
+                        physical: row.get("hlc_physical")?,
+                        counter: row.get("hlc_counter")?,
+                        node_id: row.get("hlc_node_id")?,
+                    },
+                    body: RecordBody::NoteReview(NoteReviewBody {
+                        note_id: row.get("note_id")?,
+                        conviction: row.get("conviction")?,
+                        comment: row.get("comment")?,
+                        reviewed_at: row.get("reviewed_at")?,
+                        deleted: row.get("deleted")?,
+                    }),
+                })
+            })
+            .map_err(store_err)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(store_err)
+    }
+
+    fn clear_dirty(&self, changes: &[LocalChange]) -> AppResult<()> {
         let conn = self.db.lock()?;
         for change in changes {
             conn.execute(
@@ -203,6 +189,17 @@ impl NoteReviewRepository {
             )
             .map_err(store_err)?;
         }
+        Ok(())
+    }
+
+    fn record_change(&self, id: &str, physical: i64, counter: i64, node_id: &str) -> AppResult<()> {
+        let conn = self.db.lock()?;
+        conn.execute(
+            "UPDATE note_reviews SET hlc_physical = ?1, hlc_counter = ?2, hlc_node_id = ?3, \
+             dirty = 1 WHERE id = ?4",
+            params![physical, counter, node_id, id],
+        )
+        .map_err(store_err)?;
         Ok(())
     }
 }

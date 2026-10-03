@@ -1,4 +1,4 @@
-//! The device-local background job queue: the [`JobRepository`]. One row per pending
+//! The device-local background job queue: the [`JobsRepository`]. One row per pending
 //! piece of background work (today: enriching a source). Never synced: every device works
 //! its own queue, and the results sync through the note itself.
 
@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::core::error::AppResult;
 
-use super::db::{store_err, Db};
+use crate::database::{store_err, Db};
 
 /// A queued job, due at `next_run_at`.
 #[derive(Debug, Clone)]
@@ -20,11 +20,11 @@ pub struct Job {
 }
 
 #[derive(Clone)]
-pub struct JobRepository {
+pub struct JobsRepository {
     db: Arc<Db>,
 }
 
-impl JobRepository {
+impl JobsRepository {
     pub(super) fn new(db: Arc<Db>) -> Self {
         Self { db }
     }
@@ -97,7 +97,7 @@ mod tests {
 
     #[test]
     fn enqueue_resets_an_existing_job_instead_of_duplicating_it() {
-        let jobs = JobRepository::new(Arc::new(Db::open_in_memory().unwrap()));
+        let jobs = JobsRepository::new(Arc::new(Db::open_in_memory().unwrap()));
         jobs.enqueue("enrich", "n1", "2026-01-01T00:00:00Z")
             .unwrap();
         let first = jobs.due("enrich", "2026-01-02T00:00:00Z", 10).unwrap();

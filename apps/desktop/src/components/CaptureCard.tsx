@@ -33,8 +33,7 @@ export function CaptureCard() {
       <CardContent className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">Copy</span> — grab the selection,
-            sanitized on-device.
+            <span className="font-medium text-foreground">Copy</span> — grab the selection.
           </p>
           <ShortcutRecorder method="copy" value={copyShortcut} onChange={setCopyShortcut} />
         </div>

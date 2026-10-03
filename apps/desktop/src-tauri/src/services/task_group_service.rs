@@ -1,5 +1,5 @@
 //! Task-group business logic. [`TaskGroupService`] fronts the
-//! [`TaskGroupRepository`] and also owns the inbox's active group filter (a
+//! [`TaskGroupsRepository`] and also owns the inbox's active group filter (a
 //! `settings` entry), so deleting a group can clear a stale filter in one place.
 
 use std::sync::Arc;
@@ -7,7 +7,7 @@ use std::sync::Arc;
 use crate::core::error::AppResult;
 use crate::core::models::{NewTaskGroup, TaskGroup};
 use crate::core::sync_channel::SyncSignalSender;
-use crate::repository::{SettingsRepository, TaskGroupRepository, TaskRepository};
+use crate::repository::{SettingsRepository, TaskGroupsRepository, TasksRepository};
 use crate::services::hlc_service::HlcService;
 
 pub use crate::repository::TaskGroupPatch;
@@ -17,48 +17,48 @@ pub use crate::repository::TaskGroupPatch;
 const ACTIVE_TASK_GROUP_KEY: &str = "active_task_group";
 
 pub struct TaskGroupService {
-    task_group_repository: TaskGroupRepository,
+    task_groups_repository: TaskGroupsRepository,
     settings_repository: SettingsRepository,
     // Deleting a group un-groups its tasks; those task rows change and must be stamped
     // for sync, so the group service reaches the task repo too.
-    task_repository: TaskRepository,
+    tasks_repository: TasksRepository,
     hlc_service: Arc<HlcService>,
     sync_signal: SyncSignalSender,
 }
 
 impl TaskGroupService {
     pub fn new(
-        task_group_repository: TaskGroupRepository,
+        task_groups_repository: TaskGroupsRepository,
         settings_repository: SettingsRepository,
-        task_repository: TaskRepository,
+        tasks_repository: TasksRepository,
         hlc_service: Arc<HlcService>,
         sync_signal: SyncSignalSender,
     ) -> Self {
         Self {
-            task_group_repository,
+            task_groups_repository,
             settings_repository,
-            task_repository,
+            tasks_repository,
             hlc_service,
             sync_signal,
         }
     }
 
     pub fn list(&self) -> AppResult<Vec<TaskGroup>> {
-        self.task_group_repository.list()
+        self.task_groups_repository.list()
     }
 
     pub fn get(&self, id: &str) -> AppResult<Option<TaskGroup>> {
-        self.task_group_repository.get(id)
+        self.task_groups_repository.get(id)
     }
 
     pub fn create(&self, new: NewTaskGroup) -> AppResult<TaskGroup> {
-        let group = self.task_group_repository.create(new)?;
+        let group = self.task_groups_repository.create(new)?;
         self.mark_dirty(&group.id)?;
         Ok(group)
     }
 
     pub fn update(&self, id: &str, patch: TaskGroupPatch) -> AppResult<TaskGroup> {
-        let group = self.task_group_repository.update(id, patch)?;
+        let group = self.task_groups_repository.update(id, patch)?;
         self.mark_dirty(id)?;
         Ok(group)
     }
@@ -66,24 +66,20 @@ impl TaskGroupService {
     /// Record a group as locally changed: mint a clock stamp and write it onto the row,
     /// so the sync loop finds and pushes the edit. Called after each mutation.
     fn mark_dirty(&self, id: &str) -> AppResult<()> {
-        let hlc = self.hlc_service.next()?;
-        self.task_group_repository.record_change(id, hlc.physical, hlc.counter, &hlc.node_id)?;
+        self.hlc_service.stamp(&self.task_groups_repository, [id])?;
         self.sync_signal.send();
         Ok(())
     }
 
     /// Delete a group — tombstone it (so the deletion syncs), un-group its tasks, and
-    /// clear a stale active-filter pointing at it. One clock stamp covers the group
-    /// tombstone and every un-grouped task (they're distinct records, so a shared
-    /// stamp is fine); each carries `dirty = 1` for the sync loop.
+    /// clear a stale active-filter pointing at it. The tombstone and every un-grouped task
+    /// are stamped for the sync loop.
     pub fn delete(&self, id: &str) -> AppResult<()> {
-        let ungrouped = self.task_group_repository.delete(id)?;
+        let ungrouped = self.tasks_repository.ungroup(id)?;
+        self.task_groups_repository.delete(id)?;
 
-        let hlc = self.hlc_service.next()?;
-        self.task_group_repository.record_change(id, hlc.physical, hlc.counter, &hlc.node_id)?;
-        for task_id in &ungrouped {
-            self.task_repository.record_change(task_id, hlc.physical, hlc.counter, &hlc.node_id)?;
-        }
+        self.hlc_service.stamp(&self.task_groups_repository, [id])?;
+        self.hlc_service.stamp(&self.tasks_repository, &ungrouped)?;
 
         if self.settings_repository.get(ACTIVE_TASK_GROUP_KEY)?.as_deref() == Some(id) {
             self.settings_repository.remove(ACTIVE_TASK_GROUP_KEY)?;

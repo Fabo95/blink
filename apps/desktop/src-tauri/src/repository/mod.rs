@@ -1,47 +1,47 @@
-//! Persistence layer — the encrypted database ([`Db`]) and the [`Repository`]
-//! facade, which shares the connection across one entity repository per table.
+//! Persistence: one repository per table, each named after its table and touching only that
+//! table (`tasks` → [`TasksRepository`]). Work that spans tables is composed in a service.
+//! The [`Repository`] facade opens them all on the shared database connection.
 
-mod db;
-mod egress_repository;
-mod job_repository;
-mod migrations;
-mod note_link_repository;
-mod note_repository;
-mod note_review_repository;
-mod note_revision_repository;
+mod egress_events_repository;
+mod jobs_repository;
+mod note_links_repository;
+mod note_reviews_repository;
+mod note_revisions_repository;
+mod notes_repository;
 mod settings_repository;
 mod sync_state_repository;
-mod task_group_repository;
-mod task_repository;
-mod topic_repository;
+mod task_groups_repository;
+mod tasks_repository;
+mod topics_repository;
 
 use std::sync::Arc;
 
-pub use db::Db;
-pub use egress_repository::EgressRepository;
-pub use job_repository::{Job, JobRepository};
-pub use note_link_repository::NoteLinkRepository;
-pub use note_repository::{NotePatch, NoteRepository};
-pub use note_review_repository::NoteReviewRepository;
-pub use note_revision_repository::NoteRevisionRepository;
+use crate::database::Db;
+
+pub use egress_events_repository::EgressEventsRepository;
+pub use jobs_repository::{Job, JobsRepository};
+pub use note_links_repository::NoteLinksRepository;
+pub use note_reviews_repository::NoteReviewsRepository;
+pub use note_revisions_repository::NoteRevisionsRepository;
+pub use notes_repository::{NotePatch, NotesRepository};
 pub use settings_repository::SettingsRepository;
 pub use sync_state_repository::SyncStateRepository;
-pub use task_group_repository::{TaskGroupPatch, TaskGroupRepository};
-pub use task_repository::{TaskPatch, TaskRepository};
-pub use topic_repository::{TopicPatch, TopicRepository};
+pub use task_groups_repository::{TaskGroupPatch, TaskGroupsRepository};
+pub use tasks_repository::{TaskPatch, TasksRepository};
+pub use topics_repository::{TopicPatch, TopicsRepository};
 
-/// The data-access facade: hands the shared [`Db`] to an entity repository per
-/// table. Adding a table = add a field here + its `*Repository`.
+/// The data-access facade: one field per table, named after it, each holding that table's
+/// repository on the shared [`Db`]. Adding a table = a field here + its `*Repository`.
 pub struct Repository {
-    pub tasks: TaskRepository,
-    pub task_groups: TaskGroupRepository,
-    pub topics: TopicRepository,
-    pub notes: NoteRepository,
-    pub note_revisions: NoteRevisionRepository,
-    pub note_reviews: NoteReviewRepository,
-    pub note_links: NoteLinkRepository,
-    pub jobs: JobRepository,
-    pub egress: EgressRepository,
+    pub tasks: TasksRepository,
+    pub task_groups: TaskGroupsRepository,
+    pub topics: TopicsRepository,
+    pub notes: NotesRepository,
+    pub note_revisions: NoteRevisionsRepository,
+    pub note_reviews: NoteReviewsRepository,
+    pub note_links: NoteLinksRepository,
+    pub jobs: JobsRepository,
+    pub egress_events: EgressEventsRepository,
     pub settings: SettingsRepository,
     pub sync_state: SyncStateRepository,
 }
@@ -49,15 +49,15 @@ pub struct Repository {
 impl Repository {
     pub fn new(db: Arc<Db>) -> Self {
         Self {
-            tasks: TaskRepository::new(db.clone()),
-            task_groups: TaskGroupRepository::new(db.clone()),
-            topics: TopicRepository::new(db.clone()),
-            notes: NoteRepository::new(db.clone()),
-            note_revisions: NoteRevisionRepository::new(db.clone()),
-            note_reviews: NoteReviewRepository::new(db.clone()),
-            note_links: NoteLinkRepository::new(db.clone()),
-            jobs: JobRepository::new(db.clone()),
-            egress: EgressRepository::new(db.clone()),
+            tasks: TasksRepository::new(db.clone()),
+            task_groups: TaskGroupsRepository::new(db.clone()),
+            topics: TopicsRepository::new(db.clone()),
+            notes: NotesRepository::new(db.clone()),
+            note_revisions: NoteRevisionsRepository::new(db.clone()),
+            note_reviews: NoteReviewsRepository::new(db.clone()),
+            note_links: NoteLinksRepository::new(db.clone()),
+            jobs: JobsRepository::new(db.clone()),
+            egress_events: EgressEventsRepository::new(db.clone()),
             settings: SettingsRepository::new(db.clone()),
             sync_state: SyncStateRepository::new(db.clone()),
         }

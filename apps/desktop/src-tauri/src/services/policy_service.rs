@@ -5,15 +5,15 @@
 
 use crate::core::error::{AppError, AppResult};
 use crate::core::models::Sensitivity;
-use crate::repository::TopicRepository;
+use crate::repository::TopicsRepository;
 
 pub struct PolicyService {
-    topic_repository: TopicRepository,
+    topics_repository: TopicsRepository,
 }
 
 impl PolicyService {
-    pub fn new(topic_repository: TopicRepository) -> Self {
-        Self { topic_repository }
+    pub fn new(topics_repository: TopicsRepository) -> Self {
+        Self { topics_repository }
     }
 
     /// The sensitivity governing a note filed under `topic_id`. Unfiled notes are personal.
@@ -24,7 +24,7 @@ impl PolicyService {
             return Ok(Sensitivity::Personal);
         };
         Ok(self
-            .topic_repository
+            .topics_repository
             .get(topic_id)?
             .map_or(Sensitivity::Confidential, |topic| topic.sensitivity))
     }

@@ -8,7 +8,7 @@ use rusqlite::OptionalExtension;
 
 use crate::core::error::AppResult;
 
-use super::db::{store_err, Db};
+use crate::database::{store_err, Db};
 
 #[derive(Clone)]
 pub struct SettingsRepository {

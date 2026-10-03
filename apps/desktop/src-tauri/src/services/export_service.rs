@@ -1,7 +1,6 @@
 //! Export of notes to Markdown (for reading) or JSON (complete, for portability). One
 //! topic exports when asked for explicitly, whatever its sensitivity; "everything" leaves
-//! confidential topics out. Every exported text runs through the DLP filter again, since an
-//! export is content leaving Blink's encrypted store.
+//! confidential topics out.
 
 use std::path::Path;
 
@@ -10,10 +9,9 @@ use serde::Serialize;
 
 use crate::core::error::{AppError, AppResult};
 use crate::core::models::{ExportFormat, Note, NoteStatus, NoteType, Topic};
-use crate::repository::{NoteLinkRepository, NoteRepository, NoteReviewRepository, TopicRepository};
+use crate::repository::{NoteLinksRepository, NotesRepository, NoteReviewsRepository, TopicsRepository};
 use crate::services::policy_service::allows_bulk_export;
 use crate::services::note_service::decorate;
-use crate::services::security_service::SecurityService;
 
 /// A rendered export, ready to be written wherever the user picks.
 pub struct Export {
@@ -22,41 +20,35 @@ pub struct Export {
 }
 
 pub struct ExportService {
-    note_repository: NoteRepository,
-    note_review_repository: NoteReviewRepository,
-    note_link_repository: NoteLinkRepository,
-    topic_repository: TopicRepository,
-    security_service: SecurityService,
+    notes_repository: NotesRepository,
+    note_reviews_repository: NoteReviewsRepository,
+    note_links_repository: NoteLinksRepository,
+    topics_repository: TopicsRepository,
 }
 
 impl ExportService {
     pub fn new(
-        note_repository: NoteRepository,
-        note_review_repository: NoteReviewRepository,
-        note_link_repository: NoteLinkRepository,
-        topic_repository: TopicRepository,
-        security_service: SecurityService,
+        notes_repository: NotesRepository,
+        note_reviews_repository: NoteReviewsRepository,
+        note_links_repository: NoteLinksRepository,
+        topics_repository: TopicsRepository,
     ) -> Self {
         Self {
-            note_repository,
-            note_review_repository,
-            note_link_repository,
-            topic_repository,
-            security_service,
+            notes_repository,
+            note_reviews_repository,
+            note_links_repository,
+            topics_repository,
         }
     }
 
     /// Render one topic (`topic_id`) or everything exportable (`None`).
     pub fn render(&self, topic_id: Option<&str>, format: ExportFormat) -> AppResult<Export> {
-        let topics = self.topic_repository.list()?;
+        let topics = self.topics_repository.list()?;
         let notes: Vec<Note> = decorate(
-            self.note_repository.list()?,
-            self.note_review_repository.convictions_by_note()?,
-            &self.note_link_repository.evidence_by_note()?,
-        )
-        .into_iter()
-        .map(|note| self.sanitized(note))
-        .collect();
+            self.notes_repository.list()?,
+            self.note_reviews_repository.convictions_by_note()?,
+            &self.note_links_repository.evidence_by_note()?,
+        );
         let document = build_document(&topics, notes, topic_id)?;
 
         let scope = match topic_id {
@@ -82,15 +74,6 @@ impl ExportService {
 
     pub fn write(&self, path: &Path, content: &str) -> AppResult<()> {
         std::fs::write(path, content).map_err(|e| AppError::Export(e.to_string()))
-    }
-
-    fn sanitized(&self, mut note: Note) -> Note {
-        let clean = |text: &str| self.security_service.sanitize(text).clean;
-        note.text = clean(&note.text);
-        note.raw_text = clean(&note.raw_text);
-        note.excerpt = note.excerpt.as_deref().map(clean);
-        note.summary = note.summary.as_deref().map(clean);
-        note
     }
 }
 

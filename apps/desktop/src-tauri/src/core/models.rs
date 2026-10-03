@@ -47,27 +47,15 @@ pub struct CaptureSource {
     pub captured_at: String,
 }
 
-/// A sanitized snippet awaiting review — the DLP filter has already run.
+/// A captured snippet awaiting review in the copy-capture panel.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../src/generated/")]
 #[serde(rename_all = "camelCase")]
 pub struct CaptureDraft {
     pub text: String,
-    pub original_length: usize,
-    pub redaction_count: usize,
     pub source: CaptureSource,
     /// The source page URL when captured from a browser — pre-fills the link field.
     pub link: Option<String>,
-}
-
-/// Result of running the local security filter over a text.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/generated/")]
-#[serde(rename_all = "camelCase")]
-pub struct SanitizeResult {
-    pub clean: String,
-    pub redaction_count: usize,
-    pub matched: Vec<String>,
 }
 
 /// How long a task is expected to take. `Quick` is the ≤5-minute bucket: the inbox
@@ -111,7 +99,7 @@ impl TaskEffort {
 pub struct Task {
     pub id: String,
     pub text: String,
-    /// The post-sanitization, pre-edit captured text — frozen at capture, never updated.
+    /// The pre-edit captured text — frozen at capture, never updated.
     pub raw_text: String,
     pub status: String,
     pub effort: TaskEffort,
@@ -329,7 +317,7 @@ pub struct Note {
     pub id: String,
     pub note_type: NoteType,
     pub text: String,
-    /// The post-sanitization, pre-edit captured text, frozen at capture and never updated.
+    /// The pre-edit captured text, frozen at capture and never updated.
     pub raw_text: String,
     pub link: Option<String>,
     pub topic_id: Option<String>,
@@ -347,7 +335,7 @@ pub struct Note {
     /// A hint derived from the history (promote or drop), computed in the core so the rule
     /// lives in one place.
     pub review_nudge: Option<ReviewNudge>,
-    /// Sources only: the fetched page's title, a short DLP-filtered excerpt, and an AI
+    /// Sources only: the fetched page's title, a short excerpt, and an AI
     /// summary (never for confidential topics or private hosts).
     pub title: Option<String>,
     pub excerpt: Option<String>,

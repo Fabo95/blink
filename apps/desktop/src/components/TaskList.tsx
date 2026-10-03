@@ -14,20 +14,19 @@ import { useTaskEditor } from '@/hooks/useTaskEditor';
 import { useTaskGroups } from '@/hooks/useTaskGroups';
 import { api } from '@/lib/api';
 import { splitTasks } from '@/lib/completed';
-import { toggleHintStyle } from '@/lib/hintStyle';
-import { ShortcutHelp } from '@/lib/shortcuts/ShortcutHelp';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { errorMessage } from '@/lib/utils';
 
 interface TaskListProps {
   tasks: Task[];
   onChanged: () => void;
+  /** The shell's cheat-sheet is open: the list's keys stand down. */
+  helpOpen: boolean;
 }
 
-export function TaskList({ tasks, onChanged }: TaskListProps) {
+export function TaskList({ tasks, onChanged, helpOpen }: TaskListProps) {
   const [error, setError] = useState('');
   const [deletingTask, setDeletingTask] = useState<Task | null>(null);
-  const [helpOpen, setHelpOpen] = useState(false);
   // The `p` prompt action for a single row: `loading` while generating, `copied` for a
   // brief confirmation. The copied state auto-clears via the ref'd timeout below.
   const [promptState, setPromptState] = useState<{
@@ -230,15 +229,6 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
     callback: () => setArchiveOpen(false),
   });
 
-  // `v` flips every hint chip between the standard keys and their vim synonyms — always
-  // on, surfaced by the footer's own toggle chip.
-  useShortcut('app.hintDialect', { callback: toggleHintStyle });
-  // `c` toggles the cheat-sheet. Enabled independent of `helpOpen` so it also closes it;
-  // gated off during the editor/delete overlays so `c` types normally in their fields.
-  useShortcut('app.help', {
-    enabled: !isEditing && deletingTask === null,
-    callback: () => setHelpOpen((o) => !o),
-  });
   // The list is driven by the cursor, not DOM focus — while browsing, Tab would just
   // throw a stray focus ring around, so swallow it (preventDefault is the whole action).
   // Stand down while a two-field group prompt (new / edit) is open, so its own ⇥ can move
@@ -342,8 +332,6 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
           )}
         </>
       )}
-
-      <ShortcutHelp open={helpOpen} onOpenChange={setHelpOpen} />
     </>
   );
 }

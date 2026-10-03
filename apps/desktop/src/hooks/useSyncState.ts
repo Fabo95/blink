@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { isTauri } from '@/lib/api';
+import { useState } from 'react';
+import { useTauriEvent } from '@/hooks/useTauriEvent';
 
 export type SyncState = { state: 'idle' | 'syncing' | 'error'; message: string | null };
 
@@ -13,21 +13,7 @@ const IDLE: SyncState = { state: 'idle', message: null };
 export function useSyncState(): SyncState {
   const [sync, setSync] = useState<SyncState>(IDLE);
 
-  useEffect(() => {
-    if (!isTauri) return;
-    let active = true;
-    let unlisten: (() => void) | undefined;
-    void import('@tauri-apps/api/event').then(({ listen }) =>
-      listen<SyncState>('sync-state', (event) => setSync(event.payload)).then((un) => {
-        if (active) unlisten = un;
-        else un();
-      }),
-    );
-    return () => {
-      active = false;
-      unlisten?.();
-    };
-  }, []);
+  useTauriEvent<SyncState>('sync-state', setSync);
 
   return sync;
 }

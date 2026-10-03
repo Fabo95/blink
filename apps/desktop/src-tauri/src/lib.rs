@@ -1,6 +1,7 @@
 mod clients;
 mod commands;
 mod core;
+mod database;
 mod platform;
 mod repository;
 mod services;
@@ -15,7 +16,8 @@ use crate::clients::server_client::ServerClient;
 use crate::clients::tmux_cli::TmuxCli;
 use crate::core::state::{PendingCapture, PendingSource};
 use crate::core::sync_channel;
-use crate::repository::{Db, Repository};
+use crate::database::Db;
+use crate::repository::Repository;
 use crate::services::ai_key_service::AiKeyService;
 use crate::services::ai_service::AiService;
 use crate::services::attention_service::AttentionService;
@@ -34,7 +36,6 @@ use crate::services::terminal_service::TerminalService;
 use crate::services::auth_service::AuthService;
 use crate::services::capture_service::CaptureService;
 use crate::services::hlc_service::HlcService;
-use crate::services::security_service::SecurityService;
 use crate::services::session_token_service::SessionTokenService;
 use crate::services::shortcut_service::ShortcutService;
 use crate::services::sync_service::SyncService;
@@ -58,7 +59,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
-        .manage(CaptureService::new(SecurityService::with_defaults()))
+        .manage(CaptureService::new())
         .manage(AiService::new(AiKeyService::new()))
         .manage(PendingSource::default())
         .manage(PendingCapture::default())
@@ -122,7 +123,7 @@ pub fn run() {
                 hlc_service.clone(),
                 sync_sender.clone(),
             ));
-            app.manage(EgressService::new(repository.egress.clone()));
+            app.manage(EgressService::new(repository.egress_events.clone()));
             // Its own instances of the stateless helpers (AI key reads go to the keychain
             // per call; policy and egress share the same repositories).
             app.manage(Arc::new(EnrichmentService::new(
@@ -131,8 +132,7 @@ pub fn run() {
                 PolicyService::new(repository.topics.clone()),
                 WebClient::new(),
                 AiService::new(AiKeyService::new()),
-                SecurityService::with_defaults(),
-                EgressService::new(repository.egress.clone()),
+                EgressService::new(repository.egress_events.clone()),
                 hlc_service.clone(),
                 sync_sender.clone(),
             )));
@@ -150,7 +150,6 @@ pub fn run() {
                 repository.note_reviews.clone(),
                 repository.note_links.clone(),
                 repository.topics.clone(),
-                SecurityService::with_defaults(),
             ));
             app.manage(ShortcutService::new(repository.settings.clone()));
             let repo_service = RepoService::new(GitCli::new(), repository.settings.clone());
@@ -199,6 +198,7 @@ pub fn run() {
                 repository.note_reviews.clone(),
                 repository.note_links.clone(),
                 repository.sync_state.clone(),
+                repository.jobs.clone(),
                 hlc_service,
                 sync_sender,
             ));

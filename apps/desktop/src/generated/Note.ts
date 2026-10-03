@@ -11,7 +11,7 @@ import type { ReviewNudge } from "./ReviewNudge";
  */
 export type Note = { id: string, noteType: NoteType, text: string, 
 /**
- * The post-sanitization, pre-edit captured text, frozen at capture and never updated.
+ * The pre-edit captured text, frozen at capture and never updated.
  */
 rawText: string, link: string | null, topicId: string | null, improved: boolean, 
 /**
@@ -34,7 +34,7 @@ convictionHistory: Array<number>,
  */
 reviewNudge: ReviewNudge | null, 
 /**
- * Sources only: the fetched page's title, a short DLP-filtered excerpt, and an AI
+ * Sources only: the fetched page's title, a short excerpt, and an AI
  * summary (never for confidential topics or private hosts).
  */
 title: string | null, excerpt: string | null, summary: string | null, enrichment: Enrichment, 

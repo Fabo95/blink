@@ -4,25 +4,9 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
 import type { TaskGroupsView } from '@/hooks/useTaskGroups';
+import { wrapFocus } from '@/lib/focus';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { cn } from '@/lib/utils';
-
-// Native Tab moves between the edit prompt's fields (`data-group-field`); intercept only
-// at the ends to wrap, so focus stays inside the popover — Radix Popover doesn't trap it.
-// Mirrors the task editor's `wrapEditorFields`.
-function wrapGroupFields(e: KeyboardEvent) {
-  const fields = Array.from(document.querySelectorAll<HTMLElement>('[data-group-field]'));
-  const first = fields[0];
-  const last = fields[fields.length - 1];
-  if (fields.length < 2 || first === undefined || last === undefined) return;
-  if (!e.shiftKey && e.target === last) {
-    e.preventDefault();
-    first.focus();
-  } else if (e.shiftKey && e.target === first) {
-    e.preventDefault();
-    last.focus();
-  }
-}
 
 /**
  * The group filter above the inbox: an All pill plus one per group. Keyboard-only
@@ -40,7 +24,7 @@ export function GroupFilterBar({ view }: { view: TaskGroupsView }) {
   // so ⇥ wraps between them.
   useShortcut('groupPrompt.field', {
     enabled: view.prompt !== null,
-    callback: wrapGroupFields,
+    callback: (e) => wrapFocus(e, '[data-group-field]'),
   });
   useShortcut('groupPrompt.submit', {
     enabled: view.prompt !== null,

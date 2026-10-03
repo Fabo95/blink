@@ -3,6 +3,7 @@ import type { Note } from '@/generated/Note';
 import type { NoteType } from '@/generated/NoteType';
 import { useAiStatus } from '@/hooks/useAiStatus';
 import { api } from '@/lib/api';
+import { wrapFocus } from '@/lib/focus';
 import { normalizeLink } from '@/lib/link';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { errorMessage } from '@/lib/utils';
@@ -32,22 +33,6 @@ export interface NoteEditor {
 interface Options {
   onSaved: () => void;
   setError: (message: string) => void;
-}
-
-// Native Tab moves between the editor's fields; intercept only at the ends to wrap, so
-// focus stays inside the popover (Radix Popover doesn't trap it). Mirrors useTaskEditor.
-function wrapNoteFields(e: KeyboardEvent) {
-  const fields = Array.from(document.querySelectorAll<HTMLElement>('[data-note-field]'));
-  const first = fields[0];
-  const last = fields[fields.length - 1];
-  if (fields.length < 2 || first === undefined || last === undefined) return;
-  if (!e.shiftKey && e.target === last) {
-    e.preventDefault();
-    first.focus();
-  } else if (e.shiftKey && e.target === first) {
-    e.preventDefault();
-    last.focus();
-  }
 }
 
 /**
@@ -140,7 +125,10 @@ export function useNoteEditor({ onSaved, setError }: Options): NoteEditor {
     }
   };
 
-  useShortcut('noteEditor.field', { enabled: note !== null, callback: wrapNoteFields });
+  useShortcut('noteEditor.field', {
+    enabled: note !== null,
+    callback: (e) => wrapFocus(e, '[data-note-field]'),
+  });
   useShortcut('noteEditor.save', { enabled: note !== null, callback: () => void save() });
   useShortcut('noteEditor.cancel', {
     enabled: note !== null,

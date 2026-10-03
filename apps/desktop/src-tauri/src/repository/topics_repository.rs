@@ -1,4 +1,4 @@
-//! Topic persistence: the [`TopicRepository`] over the shared [`Db`](super::Db). Topics are
+//! Topic persistence: the [`TopicsRepository`] over the shared [`Db`](crate::database::Db). Topics are
 //! listed in creation order. Names are unique among live topics, checked here rather than
 //! by a UNIQUE constraint so a sync merge of two same-named topics can't fail the pull.
 
@@ -14,7 +14,8 @@ use crate::core::error::{AppError, AppResult};
 use crate::core::models::{NewTopic, Sensitivity, Topic, TopicStatus};
 use crate::core::wire::{Clock, LocalChange, RecordBody, TopicBody};
 
-use super::db::{serde_err, store_err, Db};
+use crate::database::{serde_err, store_err, Db};
+use crate::core::synced_repository::SyncedRepository;
 
 /// A patch over a topic's mutable fields. `None` leaves a field untouched; an empty
 /// `question` clears it (stored NULL), the same convention as `TaskGroupPatch::context`.
@@ -27,11 +28,11 @@ pub struct TopicPatch {
 }
 
 #[derive(Clone)]
-pub struct TopicRepository {
+pub struct TopicsRepository {
     db: Arc<Db>,
 }
 
-impl TopicRepository {
+impl TopicsRepository {
     pub(super) fn new(db: Arc<Db>) -> Self {
         Self { db }
     }
@@ -133,52 +134,6 @@ impl TopicRepository {
         Ok(())
     }
 
-    pub fn record_change(
-        &self,
-        id: &str,
-        physical: i64,
-        counter: i64,
-        node_id: &str,
-    ) -> AppResult<()> {
-        let conn = self.db.lock()?;
-        conn.execute(
-            "UPDATE topics SET hlc_physical = ?1, hlc_counter = ?2, hlc_node_id = ?3, \
-             dirty = 1 WHERE id = ?4",
-            params![physical, counter, node_id, id],
-        )
-        .map_err(store_err)?;
-        Ok(())
-    }
-
-    pub fn list_dirty(&self) -> AppResult<Vec<LocalChange>> {
-        let conn = self.db.lock()?;
-        let mut stmt = conn
-            .prepare("SELECT * FROM topics WHERE dirty = 1")
-            .map_err(store_err)?;
-        let rows = stmt
-            .query_map([], |row| {
-                Ok(LocalChange {
-                    id: row.get("id")?,
-                    clock: Clock {
-                        physical: row.get("hlc_physical")?,
-                        counter: row.get("hlc_counter")?,
-                        node_id: row.get("hlc_node_id")?,
-                    },
-                    body: RecordBody::Topic(TopicBody {
-                        name: row.get("name")?,
-                        question: row.get("question")?,
-                        status: row.get("status")?,
-                        sensitivity: row.get("sensitivity")?,
-                        created_at: row.get("created_at")?,
-                        updated_at: row.get("updated_at")?,
-                        deleted: row.get("deleted")?,
-                    }),
-                })
-            })
-            .map_err(store_err)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(store_err)
-    }
-
     /// Merge a pulled topic: insert, or overwrite only if the incoming clock is newer (LWW).
     pub fn merge(&self, id: &str, clock: &Clock, body: &TopicBody) -> AppResult<()> {
         let conn = self.db.lock()?;
@@ -211,8 +166,39 @@ impl TopicRepository {
         .map_err(store_err)?;
         Ok(())
     }
+}
 
-    pub fn clear_dirty(&self, changes: &[LocalChange]) -> AppResult<()> {
+impl SyncedRepository for TopicsRepository {
+    fn list_dirty(&self) -> AppResult<Vec<LocalChange>> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare("SELECT * FROM topics WHERE dirty = 1")
+            .map_err(store_err)?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(LocalChange {
+                    id: row.get("id")?,
+                    clock: Clock {
+                        physical: row.get("hlc_physical")?,
+                        counter: row.get("hlc_counter")?,
+                        node_id: row.get("hlc_node_id")?,
+                    },
+                    body: RecordBody::Topic(TopicBody {
+                        name: row.get("name")?,
+                        question: row.get("question")?,
+                        status: row.get("status")?,
+                        sensitivity: row.get("sensitivity")?,
+                        created_at: row.get("created_at")?,
+                        updated_at: row.get("updated_at")?,
+                        deleted: row.get("deleted")?,
+                    }),
+                })
+            })
+            .map_err(store_err)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(store_err)
+    }
+
+    fn clear_dirty(&self, changes: &[LocalChange]) -> AppResult<()> {
         let conn = self.db.lock()?;
         for change in changes {
             conn.execute(
@@ -227,6 +213,17 @@ impl TopicRepository {
             )
             .map_err(store_err)?;
         }
+        Ok(())
+    }
+
+    fn record_change(&self, id: &str, physical: i64, counter: i64, node_id: &str) -> AppResult<()> {
+        let conn = self.db.lock()?;
+        conn.execute(
+            "UPDATE topics SET hlc_physical = ?1, hlc_counter = ?2, hlc_node_id = ?3, \
+             dirty = 1 WHERE id = ?4",
+            params![physical, counter, node_id, id],
+        )
+        .map_err(store_err)?;
         Ok(())
     }
 }

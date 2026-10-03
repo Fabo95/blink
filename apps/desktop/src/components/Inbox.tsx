@@ -10,10 +10,13 @@ import { WorktreesPage } from '@/components/WorktreesPage';
 import type { Task } from '@/generated/Task';
 import { useDueNotes } from '@/hooks/useDueNotes';
 import { useSession } from '@/hooks/useSession';
+import { useTauriEvent } from '@/hooks/useTauriEvent';
 import { useWorktreeAttention } from '@/hooks/useWorktreeAttention';
-import { api, isTauri } from '@/lib/api';
-import { useHintStyle } from '@/lib/hintStyle';
+import { api } from '@/lib/api';
+import { toggleHintStyle, useHintStyle } from '@/lib/hintStyle';
 import { Hints } from '@/lib/shortcuts/Hints';
+import { ShortcutHelp } from '@/lib/shortcuts/ShortcutHelp';
+import { useShortcut } from '@/lib/shortcuts/useShortcut';
 
 /** The signed-in app: header, page nav, and the active page. Rendered only inside `<AuthGate>`. */
 export function Inbox() {
@@ -22,6 +25,7 @@ export function Inbox() {
   const { due, refresh: refreshDue } = useDueNotes();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [page, setPage] = useState<Page>('inbox');
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     setTasks(await api.listTasks());
@@ -35,25 +39,13 @@ export function Inbox() {
   // writes rows straight into SQLite (a task captured on another device, or filed
   // remotely through POST /v1/capture) — otherwise the list keeps showing what it
   // loaded on mount until the app restarts.
-  useEffect(() => {
-    if (!isTauri) return;
-    const unlisteners: (() => void)[] = [];
-    let active = true;
-    import('@tauri-apps/api/event').then(({ listen }) => {
-      for (const event of ['task-saved', 'records-merged']) {
-        listen(event, () => {
-          void refresh();
-        }).then((fn) => {
-          if (active) unlisteners.push(fn);
-          else fn();
-        });
-      }
-    });
-    return () => {
-      active = false;
-      for (const fn of unlisteners) fn();
-    };
-  }, [refresh]);
+  useTauriEvent(['task-saved', 'records-merged'], () => void refresh());
+
+  // App-wide keys, bound once here for every page: `c` toggles the cheat-sheet (enabled
+  // while it's open too, so it also closes it) and `v` flips the hint chips between the
+  // standard keys and their vim synonyms. Text fields never trigger them.
+  useShortcut('app.help', { callback: () => setHelpOpen((open) => !open) });
+  useShortcut('app.hintDialect', { callback: toggleHintStyle });
 
   // AuthGate only renders us once authenticated; this keeps the type honest.
   if (!user) return null;
@@ -75,6 +67,7 @@ export function Inbox() {
           <HomePage />
         ) : page === 'ideas' ? (
           <IdeasPage
+            helpOpen={helpOpen}
             onChanged={() => {
               // A review changes what's due; a promotion adds an inbox task.
               void refreshDue();
@@ -82,7 +75,7 @@ export function Inbox() {
             }}
           />
         ) : (
-          <TaskList tasks={tasks} onChanged={refresh} />
+          <TaskList tasks={tasks} onChanged={refresh} helpOpen={helpOpen} />
         )}
       </main>
       {/* One statusline: the most specific shortcuts for where you are, plus the always-on
@@ -94,6 +87,7 @@ export function Inbox() {
           <HintStyleToggle />
         </div>
       </footer>
+      <ShortcutHelp open={helpOpen} onOpenChange={setHelpOpen} />
     </div>
   );
 }

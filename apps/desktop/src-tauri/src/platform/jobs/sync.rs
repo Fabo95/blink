@@ -38,18 +38,18 @@ struct SyncStateEvent {
 }
 
 /// Start the sync loop. Fire-and-forget for the app's lifetime.
-pub(super) fn start(app: AppHandle, sync_service: Arc<SyncService>, signalReceiver: SyncSignalReceiver) {
+pub(super) fn start(app: AppHandle, sync_service: Arc<SyncService>, signal_receiver: SyncSignalReceiver) {
     thread::spawn(move || {
         // An initial cycle so a fresh launch pulls (and pushes anything already dirty).
         run_sync(&app, &sync_service);
 
         let mut pull_in = MIN_PULL;
         loop {
-            match signalReceiver.recv_timeout(pull_in) {
+            match signal_receiver.recv_timeout(pull_in) {
                 // A local change (or setup/unlock) — coalesce the burst, then full-sync.
                 Ok(()) => {
                     thread::sleep(DEBOUNCE);
-                    while signalReceiver.try_recv().is_ok() {}
+                    while signal_receiver.try_recv().is_ok() {}
                     run_sync(&app, &sync_service);
                     pull_in = MIN_PULL;
                 }

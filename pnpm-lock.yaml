@@ -20,9 +20,6 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@blink/ai':
-        specifier: workspace:*
-        version: link:../../packages/ai
       '@blink/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -195,12 +192,6 @@ importers:
         specifier: ^8.1.5
         version: 8.1.5(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0)
 
-  packages/ai:
-    devDependencies:
-      typescript:
-        specifier: ^7.0.2
-        version: 7.0.2
-
   packages/contract:
     dependencies:
       zod:
@@ -232,16 +223,6 @@ importers:
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
-      typescript:
-        specifier: ^7.0.2
-        version: 7.0.2
-
-  packages/sync:
-    dependencies:
-      '@blink/contract':
-        specifier: workspace:*
-        version: link:../contract
-    devDependencies:
       typescript:
         specifier: ^7.0.2
         version: 7.0.2

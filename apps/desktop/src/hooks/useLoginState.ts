@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { errorMessage } from '@/lib/errorMessage';
+import { errorMessage } from '@/lib/utils';
 
 export type LoginStep = 'credentials' | 'verify' | 'forgotPassword' | 'resetPassword';
 export type LoginMode = 'signin' | 'signup';
@@ -68,7 +68,7 @@ export function useLoginState(): LoginState {
     try {
       await action();
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, 'Something went wrong. Please try again.'));
     } finally {
       setBusy(false);
     }

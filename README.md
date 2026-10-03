@@ -4,7 +4,7 @@
 
 Blink turns whatever you just highlighted — a Slack message, a code comment, an email — into a
 task without leaving the app you're in. Press `⌘⇧B`: the Rust core records where you were,
-lifts the selection, redacts secrets on-device, and drops you into a small review panel to
+lifts the selection, and drops you into a small review panel to
 polish (optionally with AI) and save. Everything lands in a locally encrypted database;
 nothing leaves your machine unless you opt in.
 
@@ -18,8 +18,6 @@ it, and a keyboard-only UI with zero buttons.
   frontmost app and window title (and the page URL in browsers), snapshots your clipboard,
   simulates `⌘C`, polls until the selection lands, then **restores your clipboard** — capture
   never clobbers what you had copied. `⌘⇧M` opens a blank panel for manual capture.
-- **On-device DLP** — a security filter redacts API keys, passwords, and private keys *before*
-  the text is even rendered, so secrets never reach the database or any AI call.
 - **Encrypted at rest** — SQLite via **SQLCipher** (AES-256); the key lives in the macOS
   keychain, never on disk.
 - **Keyboard-first, no buttons — literally** — every action in the app is a shortcut, surfaced
@@ -41,7 +39,6 @@ it, and a keyboard-only UI with zero buttons.
 [Highlight text] → ⌘⇧B
    → Rust core records the frontmost app/window (+ browser URL),
      snapshots the clipboard, simulates ⌘C, restores the clipboard after
-   → on-device DLP filter redacts secrets
    → review panel: edit · ⌘I improve with AI · ⌘G pick group · ⌘↵ save
    → SQLCipher store (AES-256, key in the macOS keychain)
    → HLC/LWW sync → self-hosted Postgres replica
@@ -52,7 +49,7 @@ it, and a keyboard-only UI with zero buttons.
 | Layer | Tech | Where |
 | --- | --- | --- |
 | Desktop app | Tauri v2 (Rust core) + React 19 + Vite + Tailwind v4 + shadcn/ui | `apps/desktop` |
-| Local store | SQLite via SQLCipher (AES-256), key in the OS keychain | `apps/desktop/src-tauri/src/repository` |
+| Local store | SQLite via SQLCipher (AES-256), key in the OS keychain | `apps/desktop/src-tauri/src/database` + `repository` |
 | Sync/auth server | Fastify 5 + zod 4 + awilix DI + Better Auth (email OTP via Resend) | `apps/server` |
 | Database | Postgres 17, Drizzle ORM, hand-written RLS/role migrations | `packages/db` |
 | Wire contract | zod schemas, single source of truth client↔server (+ OpenAPI) | `packages/contract` |
@@ -118,14 +115,13 @@ blink/
 │   │       ├── commands/   #     thin #[tauri::command] IPC endpoints
 │   │       ├── services/   #     business logic (DI structs; never import tauri)
 │   │       ├── clients/    #     transport: sync server, OpenAI
-│   │       ├── repository/ #     SQLCipher persistence + migrations
+│   │       ├── database/   #     SQLCipher database + migrations
+│   │       ├── repository/ #     one repository per table, named after it
 │   │       └── platform/   #     OS glue: frontmost-app detection, ⌘C simulation, hotkeys
 │   └── server/             # Fastify API: routes → services (awilix DI) → Drizzle
 ├── packages/
 │   ├── contract/           # zod wire schemas — client↔server single source of truth
 │   ├── db/                 # Drizzle schema + RLS/role migrations + withUser() client
-│   ├── sync/               # legacy TS sync stubs — superseded by the Rust core
-│   ├── ai/                 # title heuristics
 │   └── core/               # shared brand/theme tokens
 └── docker-compose.yml      # Postgres + migrate + API for local self-hosting
 ```
@@ -134,7 +130,7 @@ Monorepo: pnpm workspaces + Turborepo, Biome for lint/format, TypeScript 7.
 
 ## Roadmap
 
-1. **Phase 1 — Local-first MVP** *(current)*: capture (`⌘⇧B`/`⌘⇧M`), DLP filter, encrypted
+1. **Phase 1 — Local-first MVP** *(current)*: capture (`⌘⇧B`/`⌘⇧M`), encrypted
    local store, AI improve, keyboard-driven inbox with groups and archive, account
    sign-in/verification against the self-hosted server.
 2. **Phase 2 — Sync** *(done)*: multi-device sync over the self-hosted server, with hybrid

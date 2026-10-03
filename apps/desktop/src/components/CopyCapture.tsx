@@ -3,7 +3,7 @@ import { api } from '@/lib/api';
 
 /**
  * Copy capture: the global hotkey records the frontmost app as the source, copies the
- * selection, and sanitizes it. The panel opens pre-filled with that draft.
+ * selection. The panel opens pre-filled with that draft.
  */
 const copyKind: CaptureKind = {
   title: 'Copy capture',
@@ -16,7 +16,6 @@ const copyKind: CaptureKind = {
       text: draft.text,
       rawText: draft.text,
       source: draft.source,
-      redactionCount: draft.redactionCount,
       link: draft.link ?? undefined,
     };
   },

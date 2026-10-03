@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import type { Sensitivity } from '@/generated/Sensitivity';
 import type { Topic } from '@/generated/Topic';
 import type { TopicStatus } from '@/generated/TopicStatus';
-import { api, isTauri } from '@/lib/api';
+import { useTauriEvent } from '@/hooks/useTauriEvent';
+import { api } from '@/lib/api';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { errorMessage } from '@/lib/utils';
 
@@ -70,23 +71,7 @@ export function useTopics({ enabled, onNotesChanged }: Options): TopicsView {
 
   // A pull can create topics too (another device), so re-read rather than trust the
   // mount-time load.
-  useEffect(() => {
-    if (!isTauri) return;
-    let unlisten: (() => void) | undefined;
-    let active = true;
-    void import('@tauri-apps/api/event').then(({ listen }) =>
-      listen('records-merged', () => {
-        void api.listTopics().then(setTopics);
-      }).then((fn) => {
-        if (active) unlisten = fn;
-        else fn();
-      }),
-    );
-    return () => {
-      active = false;
-      unlisten?.();
-    };
-  }, []);
+  useTauriEvent('records-merged', () => void refresh());
 
   const select = (id: string | null) => {
     setSelectedId(id);

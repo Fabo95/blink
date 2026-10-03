@@ -14,7 +14,7 @@ use crate::core::models::{
     ReviewOutcome,
 };
 use crate::core::sync_channel::SyncSignalSender;
-use crate::repository::{NoteLinkRepository, NoteRepository, NoteReviewRepository, TaskRepository};
+use crate::repository::{NoteLinksRepository, NotesRepository, NoteReviewsRepository, TasksRepository};
 use crate::services::hlc_service::HlcService;
 use crate::services::note_service::decorate;
 
@@ -22,31 +22,31 @@ use crate::services::note_service::decorate;
 const FIRST_REVISIT_DAYS: i64 = 14;
 
 pub struct ReviewService {
-    note_repository: NoteRepository,
-    note_review_repository: NoteReviewRepository,
+    notes_repository: NotesRepository,
+    note_reviews_repository: NoteReviewsRepository,
     // Read-only: due notes show their evidence like every other list.
-    note_link_repository: NoteLinkRepository,
+    note_links_repository: NoteLinksRepository,
     // Promoting a note creates a task, so the review service reaches the task repository
     // (like TaskGroupService reaching tasks when it un-groups them).
-    task_repository: TaskRepository,
+    tasks_repository: TasksRepository,
     hlc_service: Arc<HlcService>,
     sync_signal: SyncSignalSender,
 }
 
 impl ReviewService {
     pub fn new(
-        note_repository: NoteRepository,
-        note_review_repository: NoteReviewRepository,
-        note_link_repository: NoteLinkRepository,
-        task_repository: TaskRepository,
+        notes_repository: NotesRepository,
+        note_reviews_repository: NoteReviewsRepository,
+        note_links_repository: NoteLinksRepository,
+        tasks_repository: TasksRepository,
         hlc_service: Arc<HlcService>,
         sync_signal: SyncSignalSender,
     ) -> Self {
         Self {
-            note_repository,
-            note_review_repository,
-            note_link_repository,
-            task_repository,
+            notes_repository,
+            note_reviews_repository,
+            note_links_repository,
+            tasks_repository,
             hlc_service,
             sync_signal,
         }
@@ -54,16 +54,16 @@ impl ReviewService {
 
     /// Notes due for review now, most overdue first, with their conviction history.
     pub fn due(&self) -> AppResult<Vec<Note>> {
-        let due = self.note_repository.list_due(&Utc::now().to_rfc3339())?;
+        let due = self.notes_repository.list_due(&Utc::now().to_rfc3339())?;
         Ok(decorate(
             due,
-            self.note_review_repository.convictions_by_note()?,
-            &self.note_link_repository.evidence_by_note()?,
+            self.note_reviews_repository.convictions_by_note()?,
+            &self.note_links_repository.evidence_by_note()?,
         ))
     }
 
     pub fn reviews(&self, note_id: &str) -> AppResult<Vec<NoteReview>> {
-        self.note_review_repository.list_for_note(note_id)
+        self.note_reviews_repository.list_for_note(note_id)
     }
 
     /// Record a review and apply its decision: schedule the next review from the conviction,
@@ -80,19 +80,14 @@ impl ReviewService {
                 "conviction must be between 1 and 5".to_string(),
             ));
         }
-        let note = self.note_repository.get(note_id)?;
+        let note = self.notes_repository.get(note_id)?;
         let comment = comment.map(str::trim).filter(|c| !c.is_empty());
 
         let review = self
-            .note_review_repository
+            .note_reviews_repository
             .insert(note_id, conviction, comment)?;
-        let hlc = self.hlc_service.next()?;
-        self.note_review_repository.record_change(
-            &review.id,
-            hlc.physical,
-            hlc.counter,
-            &hlc.node_id,
-        )?;
+        self.hlc_service
+            .stamp(&self.note_reviews_repository, [&review.id])?;
 
         let now = Utc::now();
         let next = next_revisit(conviction, now).map(|at| at.to_rfc3339());
@@ -102,22 +97,14 @@ impl ReviewService {
             ReviewDecision::Promote => (NoteStatus::Promoted, next),
         };
         let updated =
-            self.note_repository
+            self.notes_repository
                 .set_review_state(note_id, status, revisit_at.as_deref())?;
-        let hlc = self.hlc_service.next()?;
-        self.note_repository
-            .record_change(note_id, hlc.physical, hlc.counter, &hlc.node_id)?;
+        self.hlc_service.stamp(&self.notes_repository, [note_id])?;
 
         let task = match decision {
             ReviewDecision::Promote => {
-                let task = self.task_repository.insert(promoted_task(&note, now))?;
-                let hlc = self.hlc_service.next()?;
-                self.task_repository.record_change(
-                    &task.id,
-                    hlc.physical,
-                    hlc.counter,
-                    &hlc.node_id,
-                )?;
+                let task = self.tasks_repository.insert(promoted_task(&note, now))?;
+                self.hlc_service.stamp(&self.tasks_repository, [&task.id])?;
                 Some(task)
             }
             _ => None,
@@ -126,8 +113,8 @@ impl ReviewService {
         self.sync_signal.send();
         let note = decorate(
             vec![updated],
-            self.note_review_repository.convictions_by_note()?,
-            &self.note_link_repository.evidence_by_note()?,
+            self.note_reviews_repository.convictions_by_note()?,
+            &self.note_links_repository.evidence_by_note()?,
         )
         .remove(0);
         Ok(ReviewOutcome { note, task })

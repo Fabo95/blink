@@ -1,4 +1,4 @@
-//! Note persistence: the [`NoteRepository`] over the shared [`Db`](super::Db), including the
+//! Note persistence: the [`NotesRepository`] over the shared [`Db`](crate::database::Db), including the
 //! FTS5 search and the sync merge that detects a pulled edit overwriting an unsynced local
 //! one.
 
@@ -16,7 +16,8 @@ use crate::core::models::{
 };
 use crate::core::wire::{Clock, LocalChange, NoteBody, RecordBody};
 
-use super::db::{serde_err, store_err, Db};
+use crate::database::{serde_err, store_err, Db};
+use crate::core::synced_repository::SyncedRepository;
 
 /// Search results are capped: the page shows a short ranked list, not an archive.
 const SEARCH_LIMIT: i64 = 200;
@@ -34,11 +35,11 @@ pub struct NotePatch {
 }
 
 #[derive(Clone)]
-pub struct NoteRepository {
+pub struct NotesRepository {
     db: Arc<Db>,
 }
 
-impl NoteRepository {
+impl NotesRepository {
     pub(super) fn new(db: Arc<Db>) -> Self {
         Self { db }
     }
@@ -280,64 +281,6 @@ impl NoteRepository {
         Ok(())
     }
 
-    pub fn record_change(
-        &self,
-        id: &str,
-        physical: i64,
-        counter: i64,
-        node_id: &str,
-    ) -> AppResult<()> {
-        let conn = self.db.lock()?;
-        conn.execute(
-            "UPDATE notes SET hlc_physical = ?1, hlc_counter = ?2, hlc_node_id = ?3, dirty = 1 \
-             WHERE id = ?4",
-            params![physical, counter, node_id, id],
-        )
-        .map_err(store_err)?;
-        Ok(())
-    }
-
-    pub fn list_dirty(&self) -> AppResult<Vec<LocalChange>> {
-        let conn = self.db.lock()?;
-        let mut stmt = conn
-            .prepare("SELECT * FROM notes WHERE dirty = 1")
-            .map_err(store_err)?;
-        let rows = stmt
-            .query_map([], |row| {
-                Ok(LocalChange {
-                    id: row.get("id")?,
-                    clock: Clock {
-                        physical: row.get("hlc_physical")?,
-                        counter: row.get("hlc_counter")?,
-                        node_id: row.get("hlc_node_id")?,
-                    },
-                    body: RecordBody::Note(NoteBody {
-                        note_type: row.get("note_type")?,
-                        text: row.get("text")?,
-                        raw_text: row.get("raw_text")?,
-                        link: row.get("link")?,
-                        topic_id: row.get("topic_id")?,
-                        improved: row.get("improved")?,
-                        app_id: row.get("app_id")?,
-                        app_name: row.get("app_name")?,
-                        window_title: row.get("window_title")?,
-                        captured_at: row.get("captured_at")?,
-                        created_at: row.get("created_at")?,
-                        updated_at: row.get("updated_at")?,
-                        deleted: row.get("deleted")?,
-                        status: row.get("status")?,
-                        revisit_at: row.get("revisit_at")?,
-                        title: row.get("title")?,
-                        excerpt: row.get("excerpt")?,
-                        summary: row.get("summary")?,
-                        enrichment: row.get("enrichment")?,
-                    }),
-                })
-            })
-            .map_err(store_err)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(store_err)
-    }
-
     /// Merge a pulled note (LWW). Returns the local text the merge overwrote when that text
     /// was an unsynced edit (the row was dirty) and differs from the incoming text, so the
     /// caller can keep it as a conflict revision. Such a row is also flagged `conflict`.
@@ -426,8 +369,51 @@ impl NoteRepository {
         }
         Ok(lost_text)
     }
+}
 
-    pub fn clear_dirty(&self, changes: &[LocalChange]) -> AppResult<()> {
+impl SyncedRepository for NotesRepository {
+    fn list_dirty(&self) -> AppResult<Vec<LocalChange>> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare("SELECT * FROM notes WHERE dirty = 1")
+            .map_err(store_err)?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(LocalChange {
+                    id: row.get("id")?,
+                    clock: Clock {
+                        physical: row.get("hlc_physical")?,
+                        counter: row.get("hlc_counter")?,
+                        node_id: row.get("hlc_node_id")?,
+                    },
+                    body: RecordBody::Note(NoteBody {
+                        note_type: row.get("note_type")?,
+                        text: row.get("text")?,
+                        raw_text: row.get("raw_text")?,
+                        link: row.get("link")?,
+                        topic_id: row.get("topic_id")?,
+                        improved: row.get("improved")?,
+                        app_id: row.get("app_id")?,
+                        app_name: row.get("app_name")?,
+                        window_title: row.get("window_title")?,
+                        captured_at: row.get("captured_at")?,
+                        created_at: row.get("created_at")?,
+                        updated_at: row.get("updated_at")?,
+                        deleted: row.get("deleted")?,
+                        status: row.get("status")?,
+                        revisit_at: row.get("revisit_at")?,
+                        title: row.get("title")?,
+                        excerpt: row.get("excerpt")?,
+                        summary: row.get("summary")?,
+                        enrichment: row.get("enrichment")?,
+                    }),
+                })
+            })
+            .map_err(store_err)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(store_err)
+    }
+
+    fn clear_dirty(&self, changes: &[LocalChange]) -> AppResult<()> {
         let conn = self.db.lock()?;
         for change in changes {
             conn.execute(
@@ -442,6 +428,17 @@ impl NoteRepository {
             )
             .map_err(store_err)?;
         }
+        Ok(())
+    }
+
+    fn record_change(&self, id: &str, physical: i64, counter: i64, node_id: &str) -> AppResult<()> {
+        let conn = self.db.lock()?;
+        conn.execute(
+            "UPDATE notes SET hlc_physical = ?1, hlc_counter = ?2, hlc_node_id = ?3, \
+             dirty = 1 WHERE id = ?4",
+            params![physical, counter, node_id, id],
+        )
+        .map_err(store_err)?;
         Ok(())
     }
 }
@@ -576,8 +573,8 @@ impl From<NoteRow> for Note {
 mod tests {
     use super::*;
 
-    fn repository() -> NoteRepository {
-        NoteRepository::new(Arc::new(Db::open_in_memory().unwrap()))
+    fn repository() -> NotesRepository {
+        NotesRepository::new(Arc::new(Db::open_in_memory().unwrap()))
     }
 
     fn new_note(text: &str, topic_id: Option<&str>) -> NewNote {
@@ -621,7 +618,7 @@ mod tests {
         }
     }
 
-    impl NoteRepository {
+    impl NotesRepository {
         fn insert_now(&self, new: NewNote) -> AppResult<Note> {
             self.insert(new, None)
         }
@@ -749,18 +746,46 @@ mod tests {
     #[test]
     fn list_due_returns_open_ideas_and_thoughts_past_their_date() {
         let notes = repository();
-        let due = notes.insert(new_note("due idea", None), Some("2026-01-01T00:00:00Z".into())).unwrap();
-        notes.insert(new_note("later idea", None), Some("2999-01-01T00:00:00Z".into())).unwrap();
+        let due = notes
+            .insert(
+                new_note("due idea", None),
+                Some("2026-01-01T00:00:00Z".into()),
+            )
+            .unwrap();
+        notes
+            .insert(
+                new_note("later idea", None),
+                Some("2999-01-01T00:00:00Z".into()),
+            )
+            .unwrap();
         notes.insert(new_note("unscheduled", None), None).unwrap();
-        let dropped = notes.insert(new_note("dropped", None), Some("2026-01-01T00:00:00Z".into())).unwrap();
-        notes.set_review_state(&dropped.id, NoteStatus::Dropped, Some("2026-01-01T00:00:00Z")).unwrap();
+        let dropped = notes
+            .insert(
+                new_note("dropped", None),
+                Some("2026-01-01T00:00:00Z".into()),
+            )
+            .unwrap();
+        notes
+            .set_review_state(
+                &dropped.id,
+                NoteStatus::Dropped,
+                Some("2026-01-01T00:00:00Z"),
+            )
+            .unwrap();
         let mut source = new_note("a source", None);
         source.note_type = NoteType::Source;
-        notes.insert(source, Some("2026-01-01T00:00:00Z".into())).unwrap();
+        notes
+            .insert(source, Some("2026-01-01T00:00:00Z".into()))
+            .unwrap();
 
         // An RFC 3339 "now" with an offset and nanoseconds, like chrono writes.
-        let found = notes.list_due("2026-06-01T10:00:00.123456789+00:00").unwrap();
-        assert_eq!(found.iter().map(|n| n.id.as_str()).collect::<Vec<_>>(), [due.id.as_str()]);
+        let found = notes
+            .list_due("2026-06-01T10:00:00.123456789+00:00")
+            .unwrap();
+        assert_eq!(
+            found.iter().map(|n| n.id.as_str()).collect::<Vec<_>>(),
+            [due.id.as_str()]
+        );
     }
 
     #[test]
@@ -798,7 +823,9 @@ mod tests {
         assert_eq!(notes.search("agentic commerce").unwrap().len(), 1);
 
         // Marking it pending again keeps what the earlier fetch found.
-        notes.set_enrichment(&note.id, Enrichment::Pending, None, None, None).unwrap();
+        notes
+            .set_enrichment(&note.id, Enrichment::Pending, None, None, None)
+            .unwrap();
         let kept = notes.get(&note.id).unwrap();
         assert_eq!(kept.title.as_deref(), Some("Agentic commerce"));
         assert_eq!(kept.enrichment, Enrichment::Pending);

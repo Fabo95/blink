@@ -4,8 +4,8 @@ use crate::core::models::CaptureDraft;
 use crate::core::state::{PendingCapture, PendingSource};
 use crate::services::capture_service::CaptureService;
 
-/// Step 1–3 of copy-capture: take the snapshotted selection, run the DLP filter, return a
-/// review-ready draft. Nothing is persisted or transmitted here. The text was already
+/// Copy-capture: take the snapshotted selection and return a review-ready draft. Nothing is
+/// persisted or transmitted here. The text was already
 /// lifted off the clipboard by the hotkey handler (which restored the user's clipboard),
 /// so this reads the stash rather than the live clipboard.
 #[tauri::command]

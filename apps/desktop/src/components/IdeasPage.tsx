@@ -22,10 +22,8 @@ import { useNotes } from '@/hooks/useNotes';
 import { useReview } from '@/hooks/useReview';
 import { useTopics } from '@/hooks/useTopics';
 import { api } from '@/lib/api';
-import { toggleHintStyle } from '@/lib/hintStyle';
 import { cycleNext, NOTE_TYPE_LABEL, NOTE_TYPES, splitNotes } from '@/lib/notes';
 import { display } from '@/lib/shortcut';
-import { ShortcutHelp } from '@/lib/shortcuts/ShortcutHelp';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { errorMessage } from '@/lib/utils';
 
@@ -36,13 +34,19 @@ import { errorMessage } from '@/lib/utils';
  * review, editing, and history live in hooks. `onChanged` tells the shell that reviews or a
  * promotion changed what it shows (the due badge, the inbox).
  */
-export function IdeasPage({ onChanged }: { onChanged: () => void }) {
+export function IdeasPage({
+  onChanged,
+  helpOpen,
+}: {
+  onChanged: () => void;
+  /** The shell's cheat-sheet is open: the page's keys stand down. */
+  helpOpen: boolean;
+}) {
   const { notes, refresh } = useNotes();
   const { due, refresh: refreshDue } = useDueNotes({ version: notes });
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [deletingNote, setDeletingNote] = useState<Note | null>(null);
-  const [helpOpen, setHelpOpen] = useState(false);
   const [ideaShortcut, setIdeaShortcut] = useState('');
   const report = (e: unknown, fallback: string) => setError(errorMessage(e, fallback));
 
@@ -245,12 +249,6 @@ export function IdeasPage({ onChanged }: { onChanged: () => void }) {
     callback: () => setDeletingNote(null),
   });
 
-  // The inbox binds these in TaskList; this page replaces it, so it binds its own.
-  useShortcut('app.hintDialect', { callback: toggleHintStyle });
-  useShortcut('app.help', {
-    enabled: !isEditing && !review.current && !picker.note && deletingNote === null && !topics.busy,
-    callback: () => setHelpOpen((open) => !open),
-  });
   useShortcut('browse.swallowTab', {
     enabled: !isEditing && topics.prompt === null,
     callback: () => {},
@@ -352,8 +350,6 @@ export function IdeasPage({ onChanged }: { onChanged: () => void }) {
           </NoteSection>
         ))
       )}
-
-      <ShortcutHelp open={helpOpen} onOpenChange={setHelpOpen} />
     </>
   );
 }

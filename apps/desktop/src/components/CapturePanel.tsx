@@ -1,16 +1,6 @@
-import {
-  Check,
-  ChevronDown,
-  FolderOpen,
-  Link2,
-  Lock,
-  ShieldCheck,
-  Tag,
-  WandSparkles,
-} from 'lucide-react';
+import { Check, ChevronDown, FolderOpen, Link2, Lock, Tag, WandSparkles } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { NoteTypeIcon } from '@/components/ideas/NoteTypeIcon';
-import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +15,7 @@ import type { NoteType } from '@/generated/NoteType';
 import type { TaskGroup } from '@/generated/TaskGroup';
 import type { Topic } from '@/generated/Topic';
 import { useAiStatus } from '@/hooks/useAiStatus';
+import { useTauriEvent } from '@/hooks/useTauriEvent';
 import { api, isTauri } from '@/lib/api';
 import { normalizeLink } from '@/lib/link';
 import {
@@ -42,7 +33,6 @@ import { errorMessage } from '@/lib/utils';
 export interface CaptureContent {
   text: string;
   source: CaptureSource;
-  redactionCount: number;
   /** Pre-filled link (e.g. the source page URL for a browser copy-capture). */
   link?: string;
   /** Frozen raw text (copy capture); absent = freeze at the first improve. */
@@ -60,7 +50,7 @@ export interface CaptureKind {
   load: () => Promise<CaptureContent>;
   /** Close the panel and return focus to the previous app. */
   dismiss: () => Promise<void>;
-  /** Show the origin line + redaction badge (copy) vs a bare field (manual). */
+  /** Show the origin line (copy) vs a bare field (manual). */
   showSource?: boolean;
   /** What a fresh capture becomes; `⌘T` cycles from here. Defaults to a task. */
   defaultType?: CaptureType;
@@ -78,11 +68,10 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
   const [lastNoteType, setLastNoteType] = useState<NoteType>('idea');
   const [text, setText] = useState('');
   // The immutable captured text. `null` = not yet frozen: a manual capture freezes it at
-  // the first improve, a copy capture arrives already frozen (the sanitized prefill).
+  // the first improve, a copy capture arrives already frozen (the prefill).
   const [rawText, setRawText] = useState<string | null>(null);
   const [link, setLink] = useState('');
   const [source, setSource] = useState<CaptureSource | null>(null);
-  const [redactions, setRedactions] = useState(0);
   const [groups, setGroups] = useState<TaskGroup[]>([]);
   const [taskGroupId, setTaskGroupId] = useState<string | null>(null);
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -113,7 +102,6 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
     setRawText(content.rawText ?? null);
     setLink(content.link ?? '');
     setSource(content.source);
-    setRedactions(content.redactionCount);
     setGroups(loadedGroups);
     setTaskGroupId(loadedGroups.some((g) => g.id === activeGroup) ? activeGroup : null);
     setTopics(loadedTopics);
@@ -127,7 +115,6 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
     setText('');
     setRawText(null);
     setLink('');
-    setRedactions(0);
     setTaskGroupId(null);
     setTopicId(null);
     setGroupMenuOpen(false);
@@ -200,17 +187,8 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
   // (Re)load on mount and whenever the hotkey re-opens the panel.
   useEffect(() => {
     void load();
-    if (!isTauri) return;
-    let unlisten: (() => void) | undefined;
-    import('@tauri-apps/api/event').then(({ listen }) => {
-      listen(kind.openEvent, () => {
-        void load();
-      }).then((fn) => {
-        unlisten = fn;
-      });
-    });
-    return () => unlisten?.();
-  }, [load, kind.openEvent]);
+  }, [load]);
+  useTauriEvent(kind.openEvent, () => void load());
 
   const isNote = captureType !== 'task';
   const selectedTopic = topics.find((t) => t.id === topicId) ?? null;
@@ -275,12 +253,6 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
           <span className="section-bar text-xs font-semibold uppercase tracking-wide text-primary">
             {kind.title}
           </span>
-          {kind.showSource && redactions > 0 && (
-            <Badge variant="destructive" className="gap-1">
-              <ShieldCheck className="size-3" />
-              {redactions} redacted
-            </Badge>
-          )}
         </div>
 
         {/* Display only: ⌘T is hinted in the statusline, so the chips are hidden from

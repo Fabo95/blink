@@ -1,8 +1,8 @@
 # Blink
 
 Enterprise-ready, local-first task ingestion. Capture rough text (clipboard via the copy-capture
-hotkey), sanitize it on-device, optionally clean it up with AI, and store it as tasks in a
-local encrypted database — synced to a self-hosted server. macOS-first
+hotkey), optionally clean it up with AI, and store it as tasks in a local encrypted
+database — synced to a self-hosted server. macOS-first
 desktop app, dark-violet theme.
 
 **Per-app guides** (auto-loaded when working in that subtree; read them before touching an app):
@@ -35,12 +35,11 @@ packages/
   contract/         zod wire schemas — single source of truth, client↔server. Built to dist.
   core/             Shared brand/theme constants (exports src, no build).
   db/               Drizzle schema + postgres client + SQL migrations. Built to dist.
-  sync/             Sync client stubs (HLC, LWW) — not yet wired.
-  ai/               `suggestTitle` heuristic (currently unused by the app).
 ```
 
-- **`@blink/db`** is where the server's schema lives: `tasks` (owner_id, status, `*_cipher`
-  JSONB payloads, HLC clock fields) + `organizations` + the Better Auth tables. `withUser()`
+- **`@blink/db`** is where the server's schema lives: `records` (owner_id, the client row as a
+  readable `body` JSONB, `kind`/`status` generated columns, HLC clock fields, `seq` pull cursor)
+  + `organizations` + the Better Auth tables. `withUser()`
   sets `app.current_user_id` so RLS scopes queries. Migrations mix Drizzle-generated SQL with
   **hand-written role/grant/policy migrations** (`0001_rls_policies.sql` creates the non-owner
   `blink_api` role + RLS; `0003_auth_grants.sql` grants it the Better Auth tables) — Drizzle

@@ -56,6 +56,38 @@ export const zTaskBody = z.object({
 });
 export type TaskBody = z.infer<typeof zTaskBody>;
 
+/** What a note is. Mirrors the Rust `NoteType` stored spellings. */
+export const zNoteType = z.enum(['idea', 'thought', 'source']);
+export type NoteType = z.infer<typeof zNoteType>;
+
+/** A note row as it rides in {@link zRecordBody}. The server needs this shape to file a
+ * remote capture as a note (idea / thought / source). Mirrors `core::wire::NoteBody` field
+ * for field, snake_case like `zTaskBody`. Review and enrichment fields are included so a
+ * synthesized note starts in the same state a desktop capture would. */
+export const zNoteBody = z.object({
+  kind: z.literal('note'),
+  note_type: zNoteType,
+  text: z.string(),
+  raw_text: z.string(),
+  link: z.string().nullable(),
+  topic_id: z.string().nullable(),
+  improved: z.boolean(),
+  app_id: z.string(),
+  app_name: z.string(),
+  window_title: z.string(),
+  captured_at: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted: z.boolean(),
+  status: z.enum(['open', 'promoted', 'dropped']),
+  revisit_at: z.string().nullable(),
+  title: z.string().nullable(),
+  excerpt: z.string().nullable(),
+  summary: z.string().nullable(),
+  enrichment: z.enum(['none', 'pending', 'done', 'failed', 'skipped']),
+});
+export type NoteBody = z.infer<typeof zNoteBody>;
+
 /** The unit the client pushes. `id` is the client-owned UUID, stable across devices,
  * and the LWW conflict key. */
 export const zSyncPacket = z.object({
@@ -73,11 +105,11 @@ export const zSyncRecord = zSyncPacket.extend({
 });
 export type SyncRecord = z.infer<typeof zSyncRecord>;
 
-/** What an outside agent posts to `/v1/capture` to file a task — deliberately just the
- * spoken note and where it came from. Everything else a task row needs (group, effort,
- * link, status, ordering) the server derives: the caller is a dictation button, not
- * something that knows about UUIDs. Add a field here when a caller genuinely can't say
- * it out loud, not before. */
+/** What an outside agent posts to `/v1/capture` to file a task or a note, deliberately just
+ * the spoken note and where it came from. Everything else (task or note type, group or
+ * topic, effort, link, ordering) the server derives: the caller is a dictation button, not
+ * something that knows about UUIDs. Add a field here when a caller genuinely can't say it
+ * out loud, not before. */
 export const zCaptureInput = z.object({
   text: z.string().min(1).max(10_000),
   /** Shown in the inbox as the capture's origin (e.g. "Siri", "Gemini"). */

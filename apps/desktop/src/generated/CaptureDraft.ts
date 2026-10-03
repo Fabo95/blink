@@ -2,9 +2,9 @@
 import type { CaptureSource } from "./CaptureSource";
 
 /**
- * A sanitized snippet awaiting review — the DLP filter has already run.
+ * A captured snippet awaiting review in the copy-capture panel.
  */
-export type CaptureDraft = { text: string, originalLength: number, redactionCount: number, source: CaptureSource, 
+export type CaptureDraft = { text: string, source: CaptureSource, 
 /**
  * The source page URL when captured from a browser — pre-fills the link field.
  */

@@ -1,5 +1,5 @@
-//! Task persistence — the [`TaskRepository`] and its SQLCipher-backed queries over
-//! the shared [`Db`](super::Db). Methods return
+//! Task persistence — the [`TasksRepository`] and its SQLCipher-backed queries over
+//! the shared [`Db`](crate::database::Db). Methods return
 //! [`AppResult`](crate::core::error::AppResult) because a real database can fail.
 
 use std::sync::Arc;
@@ -14,7 +14,8 @@ use crate::core::error::{AppError, AppResult};
 use crate::core::models::{CaptureSource, NewTask, Task, TaskEffort};
 use crate::core::wire::{Clock, LocalChange, RecordBody, TaskBody};
 
-use super::db::{serde_err, store_err, Db};
+use crate::database::{serde_err, store_err, Db};
+use crate::core::synced_repository::SyncedRepository;
 
 /// A partial task edit — every `Some` field is written, `None` leaves it untouched.
 /// An empty `link` or `task_group_id` clears the stored value; `source_name` sets the
@@ -35,11 +36,11 @@ pub struct TaskPatch {
 /// The task repository — task-specific queries over the shared [`Db`]. Constructed
 /// by [`super::Repository`], which hands every repository the same connection.
 #[derive(Clone)]
-pub struct TaskRepository {
+pub struct TasksRepository {
     db: Arc<Db>,
 }
 
-impl TaskRepository {
+impl TasksRepository {
     pub(super) fn new(db: Arc<Db>) -> Self {
         Self { db }
     }
@@ -128,25 +129,25 @@ impl TaskRepository {
         Ok(())
     }
 
-    /// Record that a task changed locally: write its Hybrid Logical Clock version
-    /// (`physical`/`counter`/`node_id`) + `dirty = 1`, so the sync loop finds and pushes
-    /// the change. The task service calls this (with a fresh clock stamp) after each
-    /// mutation.
-    pub fn record_change(
-        &self,
-        id: &str,
-        physical: i64,
-        counter: i64,
-        node_id: &str,
-    ) -> AppResult<()> {
+    /// Move every task of a group back to no group. Returns the affected ids so the service
+    /// can stamp them (their `task_group_id` changed and must sync too).
+    pub fn ungroup(&self, task_group_id: &str) -> AppResult<Vec<String>> {
         let conn = self.db.lock()?;
+        let ids = {
+            let mut stmt = conn
+                .prepare("SELECT id FROM tasks WHERE task_group_id = ?1")
+                .map_err(store_err)?;
+            let rows = stmt
+                .query_map([task_group_id], |row| row.get::<_, String>(0))
+                .map_err(store_err)?;
+            rows.collect::<Result<Vec<String>, _>>().map_err(store_err)?
+        };
         conn.execute(
-            "UPDATE tasks SET hlc_physical = ?1, hlc_counter = ?2, hlc_node_id = ?3, dirty = 1 \
-             WHERE id = ?4",
-            params![physical, counter, node_id, id],
+            "UPDATE tasks SET task_group_id = NULL WHERE task_group_id = ?1",
+            [task_group_id],
         )
         .map_err(store_err)?;
-        Ok(())
+        Ok(ids)
     }
 
     /// Apply a [`TaskPatch`], writing each `Some` field. Returns the updated task (or a
@@ -223,45 +224,6 @@ impl TaskRepository {
         fetch_one(&conn, id)
     }
 
-    /// Every task with unsynced local changes (tombstones included), as [`LocalChange`]s
-    /// the sync service encrypts and pushes.
-    pub fn list_dirty(&self) -> AppResult<Vec<LocalChange>> {
-        let conn = self.db.lock()?;
-        let mut stmt = conn.prepare("SELECT * FROM tasks WHERE dirty = 1").map_err(store_err)?;
-        let rows = stmt
-            .query_map([], |row| {
-                Ok(LocalChange {
-                    id: row.get("id")?,
-                    clock: Clock {
-                        physical: row.get("hlc_physical")?,
-                        counter: row.get("hlc_counter")?,
-                        node_id: row.get("hlc_node_id")?,
-                    },
-                    body: RecordBody::Task(TaskBody {
-                        text: row.get("text")?,
-                        raw_text: row.get("raw_text")?,
-                        status: row.get("status")?,
-                        effort: TaskEffort::from_stored(&row.get::<_, String>("effort")?),
-                        app_id: row.get("app_id")?,
-                        app_name: row.get("app_name")?,
-                        window_title: row.get("window_title")?,
-                        captured_at: row.get("captured_at")?,
-                        created_at: row.get("created_at")?,
-                        updated_at: row.get("updated_at")?,
-                        improved: row.get("improved")?,
-                        link: row.get("link")?,
-                        completed_at: row.get("completed_at")?,
-                        task_group_id: row.get("task_group_id")?,
-                        position: row.get("position")?,
-                        deleted: row.get("deleted")?,
-                        origin_note_id: row.get("origin_note_id")?,
-                    }),
-                })
-            })
-            .map_err(store_err)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(store_err)
-    }
-
     /// Merge a pulled task: insert, or overwrite only if the incoming clock is newer
     /// (last-write-wins). Stored `dirty = 0` — it came from the server, nothing to push.
     pub fn merge(&self, id: &str, clock: &Clock, body: &TaskBody) -> AppResult<()> {
@@ -298,9 +260,49 @@ impl TaskRepository {
         Ok(())
     }
 
-    /// Clear the dirty flag on rows that were just pushed — but only if the row's clock
-    /// still matches what was pushed, so a local edit made mid-push isn't lost.
-    pub fn clear_dirty(&self, changes: &[LocalChange]) -> AppResult<()> {
+}
+
+impl SyncedRepository for TasksRepository {
+    fn list_dirty(&self) -> AppResult<Vec<LocalChange>> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare("SELECT * FROM tasks WHERE dirty = 1")
+            .map_err(store_err)?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(LocalChange {
+                    id: row.get("id")?,
+                    clock: Clock {
+                        physical: row.get("hlc_physical")?,
+                        counter: row.get("hlc_counter")?,
+                        node_id: row.get("hlc_node_id")?,
+                    },
+                    body: RecordBody::Task(TaskBody {
+                        text: row.get("text")?,
+                        raw_text: row.get("raw_text")?,
+                        status: row.get("status")?,
+                        effort: TaskEffort::from_stored(&row.get::<_, String>("effort")?),
+                        app_id: row.get("app_id")?,
+                        app_name: row.get("app_name")?,
+                        window_title: row.get("window_title")?,
+                        captured_at: row.get("captured_at")?,
+                        created_at: row.get("created_at")?,
+                        updated_at: row.get("updated_at")?,
+                        improved: row.get("improved")?,
+                        link: row.get("link")?,
+                        completed_at: row.get("completed_at")?,
+                        task_group_id: row.get("task_group_id")?,
+                        position: row.get("position")?,
+                        deleted: row.get("deleted")?,
+                        origin_note_id: row.get("origin_note_id")?,
+                    }),
+                })
+            })
+            .map_err(store_err)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(store_err)
+    }
+
+    fn clear_dirty(&self, changes: &[LocalChange]) -> AppResult<()> {
         let conn = self.db.lock()?;
         for change in changes {
             conn.execute(
@@ -315,6 +317,23 @@ impl TaskRepository {
             )
             .map_err(store_err)?;
         }
+        Ok(())
+    }
+
+    fn record_change(
+        &self,
+        id: &str,
+        physical: i64,
+        counter: i64,
+        node_id: &str,
+    ) -> AppResult<()> {
+        let conn = self.db.lock()?;
+        conn.execute(
+            "UPDATE tasks SET hlc_physical = ?1, hlc_counter = ?2, hlc_node_id = ?3, \
+             dirty = 1 WHERE id = ?4",
+            params![physical, counter, node_id, id],
+        )
+        .map_err(store_err)?;
         Ok(())
     }
 }

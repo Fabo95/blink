@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/kbd';
 import { api, type CaptureMethod } from '@/lib/api';
 import { display, toShortcut } from '@/lib/shortcut';
-import { cn } from '@/lib/utils';
+import { cn, errorMessage } from '@/lib/utils';
 
 interface ShortcutRecorderProps {
   method: CaptureMethod;
@@ -32,15 +32,7 @@ export function ShortcutRecorder({ method, value, onChange }: ShortcutRecorderPr
         onChange(recorded);
         setError('');
       } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : typeof err === 'string'
-              ? err
-              : err && typeof err === 'object' && 'message' in err
-                ? String((err as { message: unknown }).message)
-                : 'Could not set shortcut',
-        );
+        setError(errorMessage(err, 'Could not set shortcut'));
       }
     };
     window.addEventListener('keydown', onKey, true);

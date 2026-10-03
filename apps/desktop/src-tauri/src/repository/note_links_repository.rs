@@ -1,4 +1,4 @@
-//! Note-link persistence: the [`NoteLinkRepository`]. Links are append-only rows like
+//! Note-link persistence: the [`NoteLinksRepository`]. Links are append-only rows like
 //! reviews and revisions: removing one tombstones it, so concurrent edits on two devices
 //! never overwrite each other.
 
@@ -15,14 +15,15 @@ use crate::core::error::AppResult;
 use crate::core::models::{Evidence, NoteLink, NoteRelation};
 use crate::core::wire::{Clock, LocalChange, NoteLinkBody, RecordBody};
 
-use super::db::{serde_err, store_err, Db};
+use crate::database::{serde_err, store_err, Db};
+use crate::core::synced_repository::SyncedRepository;
 
 #[derive(Clone)]
-pub struct NoteLinkRepository {
+pub struct NoteLinksRepository {
     db: Arc<Db>,
 }
 
-impl NoteLinkRepository {
+impl NoteLinksRepository {
     pub(super) fn new(db: Arc<Db>) -> Self {
         Self { db }
     }
@@ -145,50 +146,6 @@ impl NoteLinkRepository {
         Ok(ids)
     }
 
-    pub fn record_change(
-        &self,
-        id: &str,
-        physical: i64,
-        counter: i64,
-        node_id: &str,
-    ) -> AppResult<()> {
-        let conn = self.db.lock()?;
-        conn.execute(
-            "UPDATE note_links SET hlc_physical = ?1, hlc_counter = ?2, hlc_node_id = ?3, \
-             dirty = 1 WHERE id = ?4",
-            params![physical, counter, node_id, id],
-        )
-        .map_err(store_err)?;
-        Ok(())
-    }
-
-    pub fn list_dirty(&self) -> AppResult<Vec<LocalChange>> {
-        let conn = self.db.lock()?;
-        let mut stmt = conn
-            .prepare("SELECT * FROM note_links WHERE dirty = 1")
-            .map_err(store_err)?;
-        let rows = stmt
-            .query_map([], |row| {
-                Ok(LocalChange {
-                    id: row.get("id")?,
-                    clock: Clock {
-                        physical: row.get("hlc_physical")?,
-                        counter: row.get("hlc_counter")?,
-                        node_id: row.get("hlc_node_id")?,
-                    },
-                    body: RecordBody::NoteLink(NoteLinkBody {
-                        from_note_id: row.get("from_note_id")?,
-                        to_note_id: row.get("to_note_id")?,
-                        relation: row.get("relation")?,
-                        created_at: row.get("created_at")?,
-                        deleted: row.get("deleted")?,
-                    }),
-                })
-            })
-            .map_err(store_err)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(store_err)
-    }
-
     pub fn merge(&self, id: &str, clock: &Clock, body: &NoteLinkBody) -> AppResult<()> {
         let conn = self.db.lock()?;
         conn.execute(
@@ -217,8 +174,37 @@ impl NoteLinkRepository {
         .map_err(store_err)?;
         Ok(())
     }
+}
 
-    pub fn clear_dirty(&self, changes: &[LocalChange]) -> AppResult<()> {
+impl SyncedRepository for NoteLinksRepository {
+    fn list_dirty(&self) -> AppResult<Vec<LocalChange>> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare("SELECT * FROM note_links WHERE dirty = 1")
+            .map_err(store_err)?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(LocalChange {
+                    id: row.get("id")?,
+                    clock: Clock {
+                        physical: row.get("hlc_physical")?,
+                        counter: row.get("hlc_counter")?,
+                        node_id: row.get("hlc_node_id")?,
+                    },
+                    body: RecordBody::NoteLink(NoteLinkBody {
+                        from_note_id: row.get("from_note_id")?,
+                        to_note_id: row.get("to_note_id")?,
+                        relation: row.get("relation")?,
+                        created_at: row.get("created_at")?,
+                        deleted: row.get("deleted")?,
+                    }),
+                })
+            })
+            .map_err(store_err)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(store_err)
+    }
+
+    fn clear_dirty(&self, changes: &[LocalChange]) -> AppResult<()> {
         let conn = self.db.lock()?;
         for change in changes {
             conn.execute(
@@ -233,6 +219,17 @@ impl NoteLinkRepository {
             )
             .map_err(store_err)?;
         }
+        Ok(())
+    }
+
+    fn record_change(&self, id: &str, physical: i64, counter: i64, node_id: &str) -> AppResult<()> {
+        let conn = self.db.lock()?;
+        conn.execute(
+            "UPDATE note_links SET hlc_physical = ?1, hlc_counter = ?2, hlc_node_id = ?3, \
+             dirty = 1 WHERE id = ?4",
+            params![physical, counter, node_id, id],
+        )
+        .map_err(store_err)?;
         Ok(())
     }
 }
@@ -262,8 +259,8 @@ impl From<NoteLinkRow> for NoteLink {
 mod tests {
     use super::*;
 
-    fn repository() -> NoteLinkRepository {
-        NoteLinkRepository::new(Arc::new(Db::open_in_memory().unwrap()))
+    fn repository() -> NoteLinksRepository {
+        NoteLinksRepository::new(Arc::new(Db::open_in_memory().unwrap()))
     }
 
     #[test]

@@ -5,7 +5,7 @@
 Phase 1 (foundation) is implemented, uncommitted on `master`:
 
 - Notes, topics, and revisions in the Rust core, synced as their own record kinds; sync conflicts kept as revisions.
-- `PolicyService` sensitivity gate (AI and full export), FTS5 search, Markdown/JSON export with a DLP re-run.
+- `PolicyService` sensitivity gate (AI and full export), FTS5 search, Markdown/JSON export.
 - `⌘⇧I` idea capture; every capture panel switches Task / Note with `⌘T`, a note's type is picked from a dropdown (`⌘K`) beside the topic; topic picker under `⌘G`.
 - Ideas page with topic filter, topic header, sections, search, in-row editor, history, delete, export.
 - Rust tests: policy, export selection and Markdown, FTS query builder, and SQL-level repository tests (search, conflict merge, unfile) on an in-memory DB.
@@ -16,11 +16,12 @@ Deviations from the plan below, decided while building:
 - No "Saved to ..." line after capture yet. It only becomes useful with related notes (Phase 4); until then the panel closes instantly, like task capture.
 - Export goes through the native save dialog; JSON is the complete, re-importable format, Markdown is for reading.
 - Capture is a two-level choice (Task or Note, then the note's type) instead of one 4-way `⌘T` cycle: it matches the data model and keeps `⌘T` a predictable switch.
+- The DLP filter (`SecurityService`) was removed entirely (2026-10-03): captures, exports, excerpts, and AI calls are no longer secret-redacted. Sensitivity labels and the egress log remain the privacy controls.
 - Revisions also get a "restore" action (`⌘↵` in the history), which the plan didn't list.
 
 Phase 2 (review ritual) is implemented too: schedule and nudges as pure Rust functions, append-only synced reviews, keep / drop / promote (promote creates a linked inbox task), review sessions over the due queue (max 10), a "Due for review" section, conviction history on rows and in exports, and the due count on the Ideas tab. Deviations: no separate "triage" pass (existing notes are backfilled to 14 days after capture, so old notes simply become due), and the weekly digest notification is postponed until there's a settings toggle for it.
 
-Phase 3 (evidence) is implemented except remote capture of note types: typed note links with derived evidence counts, background source enrichment (fetch, DLP-filtered excerpt, AI summary; never for confidential topics, no AI for private hosts), and the device-local egress log on Home. Remote capture of ideas/sources via `/v1/capture` is a separate server step.
+Phase 3 (evidence) is implemented except remote capture of note types: typed note links with derived evidence counts, background source enrichment (fetch, excerpt, AI summary; never for confidential topics, no AI for private hosts), and the device-local egress log on Home. Remote capture now files ideas, thoughts, and sources too (`/v1/capture`, the spoken "Create task / idea / thought / source" command decides the kind, the model extracts topic or group; notes naming a confidential topic never reach the model; needs a server deploy).
 
 Not done yet (later phases): source enrichment, egress log, briefs, embeddings, teams, server-side capture of note types (`zNoteBody` in `@blink/contract` lands with that).
 
@@ -356,7 +357,7 @@ Everything is built inside the existing structure and conventions (root `CLAUDE.
 ### Rules this feature follows
 
 - **Rust layering:** `commands/` are thin and only call services. `services/` hold logic, never import `tauri`, and reach the DB only through a `*Repository`. `clients/` are thin transport returning `reqwest::Result<Response>`. `platform/` is the only layer touching the runtime (windows, notifications, clipboard, background jobs). `core/` holds shared types.
-- **DI by field name:** a service holds its dependencies as fields named after the type (`note_repository: NoteRepository`, `policy_service: PolicyService`). Built in `lib.rs` (the composition root, DB-backed ones in `setup`) and `.manage()`d.
+- **DI by field name:** a service holds its dependencies as fields named after the type (`notes_repository: NotesRepository`, `policy_service: PolicyService`). Built in `lib.rs` (the composition root, DB-backed ones in `setup`) and `.manage()`d.
 - **One file per service/client/repository**, named after it. `mod.rs` stays a thin index.
 - **Types cross boundaries from one source:** Rust structs in `core/models.rs` generate `src/generated/*.ts` via `gen:types` (never hand-edited). Wire shapes live in `@blink/contract` as zod.
 - **Rust owns all server communication.** The webview never calls the server.
@@ -373,7 +374,7 @@ Everything is built inside the existing structure and conventions (root `CLAUDE.
 | `core/wire.rs` | `RecordBody::{Topic, Note, NoteReview, NoteLink, NoteRevision}` + their `*Body` structs (snake_case, `#[serde(default)]` on later-added fields) | `TaskBody`, `GroupBody` |
 | `core/error.rs` | `AppError::Policy(String)` (blocked by sensitivity or org policy), `AppError::Fetch(String)` | existing variants |
 | `repository/migrations.rs` | Next migrations: `topics`, `notes` (+ FTS5 table and triggers), `note_reviews`, `note_links`, `note_revisions`, `jobs`, `egress_events`, `tasks.origin_note_id`. One concern per migration, appended after the current last one | migration 6 (`task_groups`) |
-| `repository/` | `topic_repository.rs`, `note_repository.rs`, `note_review_repository.rs`, `note_link_repository.rs`, `note_revision_repository.rs`, `job_repository.rs`, `egress_repository.rs`, each with a flat `*Row` + `From` impls, `merge(id, clock, body)` for synced ones, and `record_change` for HLC stamping; new fields on the `Repository` facade | `task_repository.rs`, `task_group_repository.rs` |
+| `repository/` | `topics_repository.rs`, `notes_repository.rs`, `note_reviews_repository.rs`, `note_links_repository.rs`, `note_revisions_repository.rs`, `jobs_repository.rs`, `egress_events_repository.rs`, each with a flat `*Row` + `From` impls, `merge(id, clock, body)` for synced ones, and `record_change` for HLC stamping; new fields on the `Repository` facade | `tasks_repository.rs`, `task_groups_repository.rs` |
 | `services/` | `topic_service.rs`, `note_service.rs` (CRUD, revisions on edit, promote), `review_service.rs` (scheduler as a pure function + due queue), `enrichment_service.rs` (fetch, DLP, summarize, embed), `policy_service.rs` (sensitivity + org policy gate), `export_service.rs`, `egress_service.rs` | `task_service.rs`, `task_group_service.rs` |
 | `services/ai_service.rs` | New methods `summarize`, `embed`, `brief`, all built on the existing private `complete`; each takes the note's sensitivity and asks `policy_service` first | `improve`, `generate_prompt` |
 | `services/sync_service.rs` | New arms in `push` packet building and the `pull` merge `match`, calling each repository's `merge` | `Task` / `Group` arms |

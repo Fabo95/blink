@@ -3,6 +3,7 @@ import type { Task } from '@/generated/Task';
 import type { TaskEffort } from '@/generated/TaskEffort';
 import { useAiStatus } from '@/hooks/useAiStatus';
 import { api } from '@/lib/api';
+import { wrapFocus } from '@/lib/focus';
 import { normalizeLink } from '@/lib/link';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { errorMessage } from '@/lib/utils';
@@ -35,22 +36,6 @@ export interface TaskEditor {
 interface Options {
   onSaved: () => void;
   setError: (message: string) => void;
-}
-
-// Native Tab moves between the editor's fields (`data-editor-field`); intercept only at
-// the ends to wrap, so focus stays inside the popover — Radix Popover doesn't trap it.
-function wrapEditorFields(e: KeyboardEvent) {
-  const fields = Array.from(document.querySelectorAll<HTMLElement>('[data-editor-field]'));
-  const first = fields[0];
-  const last = fields[fields.length - 1];
-  if (fields.length < 2 || first === undefined || last === undefined) return;
-  if (!e.shiftKey && e.target === last) {
-    e.preventDefault();
-    first.focus();
-  } else if (e.shiftKey && e.target === first) {
-    e.preventDefault();
-    last.focus();
-  }
 }
 
 /**
@@ -148,7 +133,10 @@ export function useTaskEditor({ onSaved, setError }: Options): TaskEditor {
     }
   };
 
-  useShortcut('editor.field', { enabled: task !== null, callback: wrapEditorFields });
+  useShortcut('editor.field', {
+    enabled: task !== null,
+    callback: (e) => wrapFocus(e, '[data-editor-field]'),
+  });
   useShortcut('editor.improve', {
     enabled: task !== null && !improved && aiEnabled,
     callback: () => void improve(),

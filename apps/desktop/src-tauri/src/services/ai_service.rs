@@ -88,7 +88,7 @@ impl AiService {
         self.complete(SYSTEM_PROMPT.to_string(), text).await
     }
 
-    /// Summarize a fetched page (title + DLP-filtered excerpt) in a few sentences.
+    /// Summarize a fetched page (title + excerpt) in a few sentences.
     pub async fn summarize(&self, title: Option<&str>, excerpt: &str) -> AppResult<String> {
         let user = format!(
             "<page>\nTitle: {}\n\n{}\n</page>",

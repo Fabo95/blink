@@ -1,5 +1,5 @@
-//! Task-group persistence — the [`TaskGroupRepository`] and its queries over the
-//! shared [`Db`](super::Db). Groups are listed in creation order; deleting one
+//! Task-group persistence — the [`TaskGroupsRepository`] and its queries over the
+//! shared [`Db`](crate::database::Db). Groups are listed in creation order; deleting one
 //! un-groups its tasks rather than deleting them.
 
 use std::sync::Arc;
@@ -14,7 +14,8 @@ use crate::core::error::{AppError, AppResult};
 use crate::core::models::{NewTaskGroup, TaskGroup};
 use crate::core::wire::{Clock, GroupBody, LocalChange, RecordBody};
 
-use super::db::{serde_err, store_err, Db};
+use crate::database::{serde_err, store_err, Db};
+use crate::core::synced_repository::SyncedRepository;
 
 /// A patch over a group's mutable fields. `None` leaves a field untouched; for `context`
 /// an empty string clears it (stored NULL) — the same convention as [`TaskPatch`].
@@ -27,11 +28,11 @@ pub struct TaskGroupPatch {
 }
 
 #[derive(Clone)]
-pub struct TaskGroupRepository {
+pub struct TaskGroupsRepository {
     db: Arc<Db>,
 }
 
-impl TaskGroupRepository {
+impl TaskGroupsRepository {
     pub(super) fn new(db: Arc<Db>) -> Self {
         Self { db }
     }
@@ -114,77 +115,14 @@ impl TaskGroupRepository {
         fetch_one(&conn, id)
     }
 
-    /// Record that a group changed locally: write its Hybrid Logical Clock version
-    /// (`physical`/`counter`/`node_id`) + `dirty = 1`, so the sync loop finds and pushes
-    /// the change. The group service calls this (with a fresh clock stamp) after each
-    /// mutation.
-    pub fn record_change(
-        &self,
-        id: &str,
-        physical: i64,
-        counter: i64,
-        node_id: &str,
-    ) -> AppResult<()> {
+    /// Soft-delete a group (tombstone, so the deletion syncs). The group's unique `name` is
+    /// freed (set to its `id`) so the same name can be reused. Its tasks are un-grouped by
+    /// the service, through the task repository.
+    pub fn delete(&self, id: &str) -> AppResult<()> {
         let conn = self.db.lock()?;
-        conn.execute(
-            "UPDATE task_groups SET hlc_physical = ?1, hlc_counter = ?2, hlc_node_id = ?3, \
-             dirty = 1 WHERE id = ?4",
-            params![physical, counter, node_id, id],
-        )
-        .map_err(store_err)?;
-        Ok(())
-    }
-
-    /// Soft-delete a group (tombstone, so the deletion syncs) and un-group its tasks.
-    /// Returns the ids of the un-grouped tasks so the service can stamp them (their
-    /// `task_group_id` changed and must sync too). The group's unique `name` is freed
-    /// (set to its `id`) so the same name can be reused.
-    pub fn delete(&self, id: &str) -> AppResult<Vec<String>> {
-        let conn = self.db.lock()?;
-        let affected = {
-            let mut stmt = conn
-                .prepare("SELECT id FROM tasks WHERE task_group_id = ?1")
-                .map_err(store_err)?;
-            let rows = stmt
-                .query_map([id], |row| row.get::<_, String>(0))
-                .map_err(store_err)?;
-            rows.collect::<Result<Vec<String>, _>>().map_err(store_err)?
-        };
-        conn.execute(
-            "UPDATE tasks SET task_group_id = NULL WHERE task_group_id = ?1",
-            [id],
-        )
-        .map_err(store_err)?;
         conn.execute("UPDATE task_groups SET deleted = 1, name = id WHERE id = ?1", [id])
             .map_err(store_err)?;
-        Ok(affected)
-    }
-
-    /// Every group with unsynced local changes (tombstones included), for the push.
-    pub fn list_dirty(&self) -> AppResult<Vec<LocalChange>> {
-        let conn = self.db.lock()?;
-        let mut stmt =
-            conn.prepare("SELECT * FROM task_groups WHERE dirty = 1").map_err(store_err)?;
-        let rows = stmt
-            .query_map([], |row| {
-                Ok(LocalChange {
-                    id: row.get("id")?,
-                    clock: Clock {
-                        physical: row.get("hlc_physical")?,
-                        counter: row.get("hlc_counter")?,
-                        node_id: row.get("hlc_node_id")?,
-                    },
-                    body: RecordBody::Group(GroupBody {
-                        name: row.get("name")?,
-                        context: row.get("context")?,
-                        created_at: row.get("created_at")?,
-                        updated_at: row.get("updated_at")?,
-                        deleted: row.get("deleted")?,
-                    }),
-                })
-            })
-            .map_err(store_err)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(store_err)
+        Ok(())
     }
 
     /// Merge a pulled group: insert, or overwrite only if the incoming clock is newer
@@ -221,9 +159,37 @@ impl TaskGroupRepository {
         }
     }
 
-    /// Clear the dirty flag on rows that were just pushed — only if the clock still
-    /// matches, so a local edit made mid-push isn't lost.
-    pub fn clear_dirty(&self, changes: &[LocalChange]) -> AppResult<()> {
+}
+
+impl SyncedRepository for TaskGroupsRepository {
+    fn list_dirty(&self) -> AppResult<Vec<LocalChange>> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare("SELECT * FROM task_groups WHERE dirty = 1")
+            .map_err(store_err)?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(LocalChange {
+                    id: row.get("id")?,
+                    clock: Clock {
+                        physical: row.get("hlc_physical")?,
+                        counter: row.get("hlc_counter")?,
+                        node_id: row.get("hlc_node_id")?,
+                    },
+                    body: RecordBody::Group(GroupBody {
+                        name: row.get("name")?,
+                        context: row.get("context")?,
+                        created_at: row.get("created_at")?,
+                        updated_at: row.get("updated_at")?,
+                        deleted: row.get("deleted")?,
+                    }),
+                })
+            })
+            .map_err(store_err)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(store_err)
+    }
+
+    fn clear_dirty(&self, changes: &[LocalChange]) -> AppResult<()> {
         let conn = self.db.lock()?;
         for change in changes {
             conn.execute(
@@ -238,6 +204,23 @@ impl TaskGroupRepository {
             )
             .map_err(store_err)?;
         }
+        Ok(())
+    }
+
+    fn record_change(
+        &self,
+        id: &str,
+        physical: i64,
+        counter: i64,
+        node_id: &str,
+    ) -> AppResult<()> {
+        let conn = self.db.lock()?;
+        conn.execute(
+            "UPDATE task_groups SET hlc_physical = ?1, hlc_counter = ?2, hlc_node_id = ?3, \
+             dirty = 1 WHERE id = ?4",
+            params![physical, counter, node_id, id],
+        )
+        .map_err(store_err)?;
         Ok(())
     }
 }

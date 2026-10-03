@@ -56,16 +56,21 @@ env.ts              zod-validated env — no defaults, all required
   `userId`, and RLS (`FORCE ROW LEVEL SECURITY` on `records`) scopes rows to that
   user — each model-service method opens a transaction and runs
   `set_config('app.current_user_id', userId, true)`, which the policies read.
-- **Capture parsing**: `/v1/capture` runs the note through OpenAI (`gpt-4o-mini`, matching the
-  desktop's `ai_service.rs`) with Structured Outputs in `strict` mode, so a dictated "add this to
-  my errands group, it's quick" lands as text + group + effort instead of literal text. The
-  prompt is deliberately **extractive, not inferential**: a field is filled only when the note
-  says it, so "buy milk" gets no effort label and topic similarity never picks a group. Groups
-  come from `recordsModelService.listByKind(userId, 'group')` — a read off the `kind` generated
-  column — and are handed to the model as a closed list, so it can only pick a real one. The
-  reply is zod-validated (`zParsedTask`), not trusted. **Any failure files the note verbatim
-  rather than failing the capture**. The request body is only `{ text, via }`: the caller is a
-  dictation button, so group/effort/link are all derived rather than passed.
+- **Capture parsing**: a capture opens with a spoken command, "Create task / idea / thought /
+  source …" (`spokenCommand` in `utils/functions/captureRules.ts`, tolerant of "a", "an", "new"
+  and punctuation). The command decides the kind deterministically; without one the capture is
+  filed as a task, so a misheard command never loses a dictation. The rest goes through OpenAI
+  (`gpt-4o-mini`, matching the desktop's `ai_service.rs`) with Structured Outputs in `strict`
+  mode, which only cleans the text and extracts fields: group + effort for a task, topic for a
+  note, a literal link for both. The prompt is **extractive, not inferential**: a field is filled
+  only when the capture says it; groups and topics come from `recordsModelService.listByKind`
+  as closed lists. The reply is zod-validated (`zParsedCapture`), not trusted. **Any failure
+  files the capture verbatim** in the commanded kind. **Confidential topics**: a capture that
+  mentions one by name is never sent to the model (a note is filed verbatim into that topic),
+  and confidential topics are never offered to the model; a topic whose sensitivity can't be
+  read counts as confidential. A remote source with a link is written with
+  `enrichment: 'pending'`; the desktop queues the fetch when it pulls it. The request body is
+  only `{ text, via }`.
 - **`OpenAiClient` hardening** (it's on a user-facing latency path, so the defaults matter):
   up to 3 attempts with exponential backoff + full jitter, retrying only 408/409/429/5xx and
   genuine network errors — a 400/401/403 fails immediately rather than burning latency on a

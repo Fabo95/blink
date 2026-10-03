@@ -103,6 +103,25 @@ The request body is just `{ text, via }` — deliberately. Everything else is de
 caller is a dictation button: it can't know a group UUID, and anything you'd want to state
 explicitly you can simply say out loud.
 
+### Start with a command
+
+Every capture opens with what it is:
+
+| Say | Files a |
+|---|---|
+| "Create task buy a new keyboard, it's a quick one" | **task** (effort quick) |
+| "Create idea restaurants need agent-readable availability, for agentic commerce" | **idea** in the topic Agentic commerce, back for review in 14 days |
+| "Create thought review is the new bottleneck" | **thought** |
+| "Create source https://stripe.com/blog/agentic-commerce delegated payment tokens" | **source**; the desktop fetches and summarizes the page after the next sync |
+
+- "Create a task", "create an idea", "create a new source", and a colon or comma after the
+  command all work. The command is stripped; the full dictation is kept as the raw text.
+- **No command → task.** A misheard "Create" never loses the dictation; it lands in the inbox.
+- The command decides the kind; OpenAI only cleans the text and picks group / effort (tasks) or
+  topic (notes), from your real ones (closed list).
+- **Confidential topics**: if the capture mentions one by name, it is **not** sent to OpenAI. It is
+  filed verbatim (a note into that topic). Confidential topics are also never offered to the model.
+
 ## What the server fills in
 
 `CaptureService.capture` builds a whole `TaskBody` so the desktop needs no special case:

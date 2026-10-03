@@ -1,4 +1,4 @@
-//! The device-local egress log: the [`EgressRepository`]. One row per thing that left the
+//! The device-local egress log: the [`EgressEventsRepository`]. One row per thing that left the
 //! device (an AI call, a page fetch): kind, destination host, size. Never the content, and
 //! never synced: it answers "what left this Mac".
 
@@ -13,14 +13,14 @@ use uuid::Uuid;
 use crate::core::error::AppResult;
 use crate::core::models::{EgressEvent, EgressKind};
 
-use super::db::{serde_err, store_err, Db};
+use crate::database::{serde_err, store_err, Db};
 
 #[derive(Clone)]
-pub struct EgressRepository {
+pub struct EgressEventsRepository {
     db: Arc<Db>,
 }
 
-impl EgressRepository {
+impl EgressEventsRepository {
     pub(super) fn new(db: Arc<Db>) -> Self {
         Self { db }
     }

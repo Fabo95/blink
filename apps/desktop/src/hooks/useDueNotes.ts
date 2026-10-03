@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Note } from '@/generated/Note';
-import { api, isTauri } from '@/lib/api';
+import { useTauriEvent } from '@/hooks/useTauriEvent';
+import { api } from '@/lib/api';
 
 /** Notes become due by the clock alone, so re-check now and then even when nothing changed. */
 const RECHECK_MS = 15 * 60 * 1000;
@@ -21,26 +22,11 @@ export function useDueNotes({ version }: { version?: unknown } = {}) {
     void refresh();
   }, [refresh, version]);
 
+  useTauriEvent(['note-saved', 'records-merged'], () => void refresh());
+
   useEffect(() => {
     const timer = setInterval(() => void refresh(), RECHECK_MS);
-    if (!isTauri) return () => clearInterval(timer);
-    const unlisteners: (() => void)[] = [];
-    let active = true;
-    void import('@tauri-apps/api/event').then(({ listen }) => {
-      for (const event of ['note-saved', 'records-merged']) {
-        void listen(event, () => {
-          void refresh();
-        }).then((fn) => {
-          if (active) unlisteners.push(fn);
-          else fn();
-        });
-      }
-    });
-    return () => {
-      clearInterval(timer);
-      active = false;
-      for (const fn of unlisteners) fn();
-    };
+    return () => clearInterval(timer);
   }, [refresh]);
 
   return { due, refresh };

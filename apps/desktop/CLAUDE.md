@@ -20,13 +20,14 @@ services/           business logic as structs, one file per service named after 
                     (auth_service.rs → AuthService); each holds its client(s)/repo(s) via DI and
                     is managed as Tauri state — AuthService (server auth + cached profile),
                     AiService (improve; reads the key from AiKeyService), AiKeyService (keychain
-                    BYO OpenAI key), SecurityService (DLP filter), SessionTokenService
+                    BYO OpenAI key), SessionTokenService
                     (keychain bearer token), TaskService + TaskGroupService (task/group CRUD),
                     CaptureService (capture drafts), ShortcutService (hotkey policy)
-repository/         persistence facade: Repository owns the shared Db (SQLCipher) and exposes
-                    entity repos — TaskRepository, TaskGroupRepository, SettingsRepository.
-                    Plus db.rs (open + keychain key + error helpers), migrations.rs
-                    (rusqlite_migration schema, 6 migrations)
+database/           the shared Db (SQLCipher: open + keychain key + error helpers) and
+                    migrations.rs (rusqlite_migration schema). Used only by repositories.
+repository/         only repositories: one per table, named after it and touching only it
+                    (tasks → TasksRepository in tasks_repository.rs, egress_events →
+                    EgressEventsRepository), plus the Repository facade that opens them all
 platform/           OS glue. os/ = native primitives behind one interface, impl picked by
                     target (os/macos/ = frontmost detection + ⌘C input + open_url; os/fallback.rs
                     for other OSes); shortcut.rs (capture-hotkey OS mechanics — the policy lives
@@ -74,8 +75,9 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   `Arc<Db>` to each entity repository. Entity repos are `Clone` (clones share the
   connection); `lib.rs` clones them into the services that need them — `Repository` itself
   is just the opener, not managed state, and only services ever call a repository. Add a
-  table = a migration in `migrations.rs` + a `*Repository` file + a field on `Repository`
-  + a service that fronts it. Row↔struct mapping uses `serde_rusqlite`
+  table = a migration in `database/migrations.rs` + a `<table>_repository.rs` file with a
+  `<Table>Repository` + a field named after the table on `Repository` + a service that
+  fronts it. Row↔struct mapping uses `serde_rusqlite`
   (`SELECT *` maps by column name); a flat `TaskRow` mirrors the nested `Task` for storage.
   Migrations so far: 1 tasks, 2 settings, 3 `link`, 4 `completed_at`, 5 `position`,
   6 `task_groups` + `tasks.task_group_id`, 7 `raw_text`, 8 sync columns, 9 group `context`,
@@ -89,7 +91,7 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
 - **Services & clients (Rust DI)**: business logic lives in `services/` as structs; each holds the
   `clients/`, repositories, and other services it needs as fields named after the type —
   `AuthService { server_client, session_token_service, settings_repository }`, `TaskService {
-  task_repository }`. They're built in `lib.rs` (the composition root; DB-backed ones in `setup`,
+  tasks_repository }`. They're built in `lib.rs` (the composition root; DB-backed ones in `setup`,
   after the `Db` opens) and `.manage()`d, then resolved in commands via `State<XService>`.
   Clients are thin transport — one struct per external system, returning
   `reqwest::Result<Response>`; the service checks status, parses, and maps errors to `AppError`.
@@ -129,7 +131,7 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
     snapshots the clipboard, simulates ⌘C, then **polls** the clipboard until the selection
     lands (instead of a fixed sleep) and **restores the user's clipboard** — capture never
     clobbers what they had copied. The lifted text is stashed in `PendingCapture`; the panel's
-    `read_copy_capture` reads that stash (not the live clipboard), sanitizes, and pre-fills.
+    `read_copy_capture` reads that stash (not the live clipboard) and pre-fills.
   - **Manual** (`⌘⇧M`, `manual-capture` window): no clipboard/source — a blank panel to type
     into; saved with a synthetic `manual` source.
   - Adding a method = a `CaptureMethod` variant (+ its `start`/window/`setting_key`/default) +
@@ -211,8 +213,9 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
     a reference of every shortcut grouped by the three types the user thinks in — **Sections /
     Task groups / Tasks / Editing** (`CHEATSHEET` in `shortcuts.ts`), each row's chip from its
     `hint` and its sentence from `describe`. It shows *all* keys (not just enabled ones); the
-    always-on bar shows the relevant subset. While it's open, browse/task shortcuts gate off
-    (`helpOpen` in `TaskList`'s `baseEnabled`).
+    always-on bar shows the relevant subset. `c` and `v` are app-wide, bound once in the shell
+    (`Inbox`), which owns `helpOpen` and passes it to the pages; while it's open their
+    browse/task shortcuts gate off (`helpOpen` in each page's `baseEnabled`).
   - **Overlays are in-row popovers, not modals** — the editor and the delete-confirm both anchor
     to the task row through one Radix `Popover` (`TaskRow`), so they sit beside the task and
     leave the statusline visible; their `⌘↵`/`Esc` are ordinary shortcuts shown in the
@@ -224,7 +227,7 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
     `useListCursor` (cursor + movement; the per-row shortcuts live in `TaskList`, which has
     the task data their hints need). Pure helpers in `lib/completed.ts`.
 - **Task groups**: tasks optionally belong to one group (`tasks.task_group_id`, FK
-  `ON DELETE SET NULL`; migration 6). `TaskGroupRepository` owns CRUD (names unique + non-empty;
+  `ON DELETE SET NULL`; migration 6). `TaskGroupsRepository` owns CRUD (names unique + non-empty;
   `delete` explicitly un-groups its tasks); commands are `list/create/rename/delete_task_group`
   + `get/set_active_task_group` (the active filter persists in `settings` under
   `active_task_group`, so capture windows can read it).
@@ -242,7 +245,7 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   - `TaskRow` shows a group chip (Tag icon) only while the All filter is active.
 - **Inbox order** is manual and persisted: a `position` column (migration 5, seeded from `rowid`)
   sorts `list` (`ORDER BY position DESC`, higher = top); new tasks land on top (`MAX+1`). `⌥↑`/`⌥↓`
-  on the focused Inbox row calls `reorder_task(first, second)` → `TaskRepository::swap_positions`
+  on the focused Inbox row calls `reorder_task(first, second)` → `TasksRepository::swap_positions`
   (swaps the two rows' positions). Only active tasks reorder; Completed/Archive keep their natural
   order. `position` is storage-only — it's not on the `Task` model, so `TaskRow` omits it and
   `SELECT *` just ignores it.
@@ -283,14 +286,14 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
     names are unique among live topics by an app-level check, not a UNIQUE constraint (the
     `task_groups` UNIQUE trap). All three sync as their own `RecordBody` kinds; push orders
     topics, notes, revisions.
-  - **Sync conflicts**: `NoteRepository::merge` returns the local text a pull overwrote when that
+  - **Sync conflicts**: `NotesRepository::merge` returns the local text a pull overwrote when that
     text was an unsynced edit; `SyncService` keeps it as a `conflict` revision (stamped, so it
     pushes) and the note gets the device-local `conflict` flag. `y` (history) clears the flag;
     `⌘↵` there restores a version through `NoteService::update`, so restoring is never lossy.
   - **Sensitivity gate**: `PolicyService` is the one place that decides whether note content may
     reach AI (`improve_note_text`) or a full export. `confidential` blocks both; an unresolvable
     topic id fails closed. The UI also hides `⌘i`, but the core is the enforcement point.
-  - **Search**: `NoteRepository::search` builds an FTS5 query from alphanumeric words only
+  - **Search**: `NotesRepository::search` builds an FTS5 query from alphanumeric words only
     (quoted prefix terms), so user input can't produce FTS syntax errors. Raw text is indexed
     too, so a note is still found by its original wording after an edit.
   - **Capture**: `CaptureMethod::Idea` (`⌘⇧I`, `idea-capture` window) opens the shared panel
@@ -319,10 +322,12 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   - **Source enrichment** (`EnrichmentService`, `platform/jobs/enrichment.rs`, `WebClient`): a
     source with a link is queued in the device-local `jobs` table; the loop (every 10 s) fetches
     the page (10 s timeout, 2 MB cap, system proxy), extracts title + text with regexes (pure,
-    tested), stores a DLP-filtered 2,000-char excerpt, and asks the AI for a 3-5 sentence
+    tested), stores a 2,000-char excerpt, and asks the AI for a 3-5 sentence
     summary with the page fenced as untrusted data. Never fetched for confidential topics
     (`skipped`, re-checked at run time); never summarized for private/local hosts. Failures
-    back off (1 min, 5 min, 30 min, 2 h) and end as `failed`; `g` retries.
+    back off (1 min, 5 min, 30 min, 2 h) and end as `failed`; `g` retries. A pulled source
+    still `pending` (remote capture, or another device's capture) is queued by `SyncService`;
+    a job whose note is already `done` (finished elsewhere) is dropped.
   - **Egress log** (`EgressService`, `EgressCard` on Home): every AI call (`improve_text`,
     `improve_note_text`, `generate_task_prompt`, summaries) and page fetch writes kind,
     destination host, and character count, never content. Device-local, never synced.
@@ -330,8 +335,7 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
     `useNoteHistory`/`useNoteSearch`): topic filter (`←→`, `n`/`r`/`⌫`, delete offers `⌘↵` keep
     notes vs `⌘⌫` delete notes), a "Due for review" section on top, then sections by type, `s` search, row keys `e` edit, `t` type,
     `o` open, `y` history, `⌫` delete, `⌘e`/`⌘⇧e` export (Markdown/JSON, native save dialog,
-    DLP re-run, confidential topics only when exported explicitly). It binds its own `c`/`v`
-    since it replaces `TaskList`.
+    confidential topics only when exported explicitly).
 
 ## Conventions
 
@@ -345,11 +349,20 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
 - **A service reaches persistence only through a repository — never the raw `Db`.** If a service
   needs a table, add a `*Repository` for it (holding `Arc<Db>`, locking internally) and inject that,
   the way `AuthService` takes `SettingsRepository` and `HlcService` takes `SyncStateRepository`.
-  `Db` stays `pub(super)` inside `repository/`; only repositories hold it. Row writes belong on the
-  owning repository (e.g. `TaskRepository::record_change(id, physical, counter, node_id)` — raw
-  column values, so the repo never depends on a service type like `Hlc`); the entity service
-  composes them — `HlcService::next()` mints the clock stamp, the service's own `mark_dirty` hands
-  its fields to `repo.record_change` after each write — so a service never runs raw table SQL.
+  `Db` lives in `database/`; only repositories hold it (its `lock` is crate-visible, so this
+  is a convention the code review enforces, not the compiler).
+- **A repository touches only its own table.** No repository reads or writes another table
+  (e.g. un-grouping tasks is `TasksRepository::ungroup`, called by `TaskGroupService` next to
+  the group delete). Work spanning tables is composed in the service.
+- **Synced tables share one interface.** Every synced repository implements `SyncedRepository`
+  (`core/synced_repository.rs`: `list_dirty` / `clear_dirty` / `record_change`), each
+  with its own SQL against its own table. After a write, a service calls
+  `hlc_service.stamp(&repo, ids)`, which mints one clock stamp and marks the rows dirty; it never
+  calls `record_change` itself. `SyncService::synced_tables` lists every synced table in push
+  order. A new synced table = a migration with the HLC/dirty/deleted columns, a repository with a
+  `SyncedRepository` impl, a `RecordBody` variant, one entry in `synced_tables`, and a merge arm.
+  Anything that hangs off a note is tombstoned through `note_service::delete_note_children`, the
+  one place that knows a note's child tables.
 - **No buttons, anywhere.** Every action is a keyboard shortcut, surfaced via `HintRow`.
   **`⌘↵` confirms** every commit/destructive action (save, delete-task, delete-group) — never
   plain `Enter`. Mouse affordances (pill click, row double-click) are secondary and stay out of

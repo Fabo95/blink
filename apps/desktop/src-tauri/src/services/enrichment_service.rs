@@ -5,8 +5,7 @@
 //!
 //! Privacy rules, all enforced here: a confidential topic's sources are never fetched; a
 //! page on a private or local host is fetched (it's reachable from this Mac anyway) but
-//! never sent to the AI; everything stored or sent is DLP-filtered first; and every fetch
-//! and AI call is written to the egress log.
+//! never sent to the AI; and every fetch and AI call is written to the egress log.
 
 use std::net::IpAddr;
 use std::sync::{Arc, LazyLock};
@@ -19,13 +18,12 @@ use crate::clients::web_client::WebClient;
 use crate::core::error::{AppError, AppResult};
 use crate::core::models::{EgressKind, Enrichment, Note, NoteType, Sensitivity};
 use crate::core::sync_channel::SyncSignalSender;
-use crate::repository::{Job, JobRepository, NoteRepository};
+use crate::repository::{Job, JobsRepository, NotesRepository};
 use crate::services::ai_service::AiService;
 use crate::services::egress_service::{EgressService, AI_DESTINATION};
 use crate::services::hlc_service::HlcService;
 use crate::services::note_service::ENRICH_JOB;
 use crate::services::policy_service::PolicyService;
-use crate::services::security_service::SecurityService;
 
 /// Stop reading a page after this much; the excerpt only needs the start.
 const MAX_PAGE_BYTES: usize = 2 * 1024 * 1024;
@@ -37,12 +35,11 @@ const MAX_ATTEMPTS: i64 = 5;
 const BATCH: i64 = 5;
 
 pub struct EnrichmentService {
-    job_repository: JobRepository,
-    note_repository: NoteRepository,
+    jobs_repository: JobsRepository,
+    notes_repository: NotesRepository,
     policy_service: PolicyService,
     web_client: WebClient,
     ai_service: AiService,
-    security_service: SecurityService,
     egress_service: EgressService,
     hlc_service: Arc<HlcService>,
     sync_signal: SyncSignalSender,
@@ -51,23 +48,21 @@ pub struct EnrichmentService {
 impl EnrichmentService {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        job_repository: JobRepository,
-        note_repository: NoteRepository,
+        jobs_repository: JobsRepository,
+        notes_repository: NotesRepository,
         policy_service: PolicyService,
         web_client: WebClient,
         ai_service: AiService,
-        security_service: SecurityService,
         egress_service: EgressService,
         hlc_service: Arc<HlcService>,
         sync_signal: SyncSignalSender,
     ) -> Self {
         Self {
-            job_repository,
-            note_repository,
+            jobs_repository,
+            notes_repository,
             policy_service,
             web_client,
             ai_service,
-            security_service,
             egress_service,
             hlc_service,
             sync_signal,
@@ -78,7 +73,7 @@ impl EnrichmentService {
     /// webview to re-read.
     pub async fn run_due(&self) -> AppResult<usize> {
         let jobs = self
-            .job_repository
+            .jobs_repository
             .due(ENRICH_JOB, &Utc::now().to_rfc3339(), BATCH)?;
         let mut changed = 0;
         for job in jobs {
@@ -92,8 +87,8 @@ impl EnrichmentService {
     /// One job. Returns whether the note changed.
     async fn run(&self, job: &Job) -> AppResult<bool> {
         // The note was deleted (or never synced here): nothing to do.
-        let Ok(note) = self.note_repository.get(&job.note_id) else {
-            self.job_repository.delete(&job.id)?;
+        let Ok(note) = self.notes_repository.get(&job.note_id) else {
+            self.jobs_repository.delete(&job.id)?;
             return Ok(false);
         };
         let Some(link) = note
@@ -101,19 +96,24 @@ impl EnrichmentService {
             .clone()
             .filter(|_| note.note_type == NoteType::Source)
         else {
-            self.job_repository.delete(&job.id)?;
+            self.jobs_repository.delete(&job.id)?;
             return Ok(false);
         };
+        // Another device (or an earlier run) already finished it; the result synced here.
+        if note.enrichment == Enrichment::Done {
+            self.jobs_repository.delete(&job.id)?;
+            return Ok(false);
+        }
         // Re-checked at run time: the topic may have turned confidential since queuing.
         if self.policy_service.sensitivity(note.topic_id.as_deref())? == Sensitivity::Confidential {
             self.finish(&note.id, Enrichment::Skipped, None, None, None)?;
-            self.job_repository.delete(&job.id)?;
+            self.jobs_repository.delete(&job.id)?;
             return Ok(true);
         }
 
         match self.enrich(&note, &link).await {
             Ok(()) => {
-                self.job_repository.delete(&job.id)?;
+                self.jobs_repository.delete(&job.id)?;
                 Ok(true)
             }
             Err(err) => {
@@ -121,11 +121,11 @@ impl EnrichmentService {
                 if attempts >= MAX_ATTEMPTS {
                     eprintln!("[enrich] giving up on {}: {err}", note.id);
                     self.finish(&note.id, Enrichment::Failed, None, None, None)?;
-                    self.job_repository.delete(&job.id)?;
+                    self.jobs_repository.delete(&job.id)?;
                     return Ok(true);
                 }
                 let next = Utc::now() + retry_delay(attempts);
-                self.job_repository.retry_later(
+                self.jobs_repository.retry_later(
                     &job.id,
                     attempts,
                     &next.to_rfc3339(),
@@ -171,10 +171,9 @@ impl EnrichmentService {
         }
         let html = read_capped(response, MAX_PAGE_BYTES).await?;
 
-        let clean = |text: &str| self.security_service.sanitize(text).clean;
-        let title = extract_title(&html).map(|t| clean(&t));
+        let title = extract_title(&html);
         let text = extract_text(&html);
-        let excerpt = Some(clean(&excerpt(&text, EXCERPT_CHARS))).filter(|e| !e.is_empty());
+        let excerpt = Some(excerpt(&text, EXCERPT_CHARS)).filter(|e| !e.is_empty());
 
         let summary = match &excerpt {
             Some(excerpt) if !private && self.ai_service.key_hint()?.is_some() => {
@@ -187,7 +186,7 @@ impl EnrichmentService {
                 // The page itself was fetched fine; a failed summary leaves title + excerpt
                 // and is retried only if the user asks (`g`), not by the backoff loop.
                 match self.ai_service.summarize(title.as_deref(), excerpt).await {
-                    Ok(summary) => Some(clean(&summary)),
+                    Ok(summary) => Some(summary),
                     Err(err) => {
                         eprintln!("[enrich] summary failed for {}: {err}", note.id);
                         None
@@ -215,11 +214,9 @@ impl EnrichmentService {
         excerpt: Option<&str>,
         summary: Option<&str>,
     ) -> AppResult<()> {
-        self.note_repository
+        self.notes_repository
             .set_enrichment(note_id, enrichment, title, excerpt, summary)?;
-        let hlc = self.hlc_service.next()?;
-        self.note_repository
-            .record_change(note_id, hlc.physical, hlc.counter, &hlc.node_id)?;
+        self.hlc_service.stamp(&self.notes_repository, [note_id])?;
         self.sync_signal.send();
         Ok(())
     }

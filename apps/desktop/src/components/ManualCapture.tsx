@@ -18,7 +18,6 @@ const manualKind: CaptureKind = {
       windowTitle: '',
       capturedAt: new Date().toISOString(),
     },
-    redactionCount: 0,
   }),
   dismiss: () => api.dismissManualCapture(),
 };

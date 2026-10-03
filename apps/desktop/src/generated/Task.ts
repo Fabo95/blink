@@ -4,7 +4,7 @@ import type { TaskEffort } from "./TaskEffort";
 
 export type Task = { id: string, text: string, 
 /**
- * The post-sanitization, pre-edit captured text — frozen at capture, never updated.
+ * The pre-edit captured text — frozen at capture, never updated.
  */
 rawText: string, status: string, effort: TaskEffort, improved: boolean, link: string | null, taskGroupId: string | null, source: CaptureSource, createdAt: string, updatedAt: string, completedAt: string | null, 
 /**

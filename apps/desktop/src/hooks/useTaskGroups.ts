@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { TaskGroup } from '@/generated/TaskGroup';
-import { api, isTauri } from '@/lib/api';
+import { useTauriEvent } from '@/hooks/useTauriEvent';
+import { api } from '@/lib/api';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { errorMessage } from '@/lib/utils';
 
@@ -68,23 +69,7 @@ export function useTaskGroups({ enabled, canManage }: Options): TaskGroupsView {
 
   // A sync pull can create groups too (another device, or a group a remote capture was
   // filed into), so the filter bar has to re-read rather than trust its mount-time load.
-  useEffect(() => {
-    if (!isTauri) return;
-    let unlisten: (() => void) | undefined;
-    let active = true;
-    void import('@tauri-apps/api/event').then(({ listen }) =>
-      listen('records-merged', () => {
-        void api.listTaskGroups().then(setGroups);
-      }).then((fn) => {
-        if (active) unlisten = fn;
-        else fn();
-      }),
-    );
-    return () => {
-      active = false;
-      unlisten?.();
-    };
-  }, []);
+  useTauriEvent('records-merged', () => void refresh());
 
   const select = (id: string | null) => {
     setSelectedId(id);

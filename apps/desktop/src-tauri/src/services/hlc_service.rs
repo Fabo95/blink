@@ -2,9 +2,9 @@
 //!
 //! [`HlcService`] owns the clock (node id + last stamp) and mints stamps via
 //! [`HlcService::next`]. It fronts the [`SyncStateRepository`] where the node id and
-//! last stamp are persisted, so the stamp survives restarts and never regresses. The
-//! task/group services call `next()` after a write and hand the stamp to their
-//! repository's `record_change`, which writes it onto the row for the sync loop.
+//! last stamp are persisted, so the stamp survives restarts and never regresses. Services
+//! call [`HlcService::stamp`] after a write, which writes a fresh stamp onto the changed
+//! rows (through their [`SyncedRepository`]) for the sync loop to push.
 
 use std::sync::Mutex;
 
@@ -12,7 +12,8 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use crate::core::error::{AppError, AppResult};
-use crate::repository::SyncStateRepository;
+use crate::core::synced_repository::SyncedRepository;
+use crate::repository::{SyncStateRepository};
 
 const NODE_ID_KEY: &str = "node_id";
 const LAST_PHYSICAL_KEY: &str = "hlc_last_physical";
@@ -50,14 +51,21 @@ impl HlcService {
                 id
             }
         };
-        let last_physical =
-            sync_state_repository.get(LAST_PHYSICAL_KEY)?.and_then(|v| v.parse().ok()).unwrap_or(0);
-        let last_counter =
-            sync_state_repository.get(LAST_COUNTER_KEY)?.and_then(|v| v.parse().ok()).unwrap_or(0);
+        let last_physical = sync_state_repository
+            .get(LAST_PHYSICAL_KEY)?
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
+        let last_counter = sync_state_repository
+            .get(LAST_COUNTER_KEY)?
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
         Ok(Self {
             sync_state_repository,
             node_id,
-            state: Mutex::new(ClockState { last_physical, last_counter }),
+            state: Mutex::new(ClockState {
+                last_physical,
+                last_counter,
+            }),
         })
     }
 
@@ -72,13 +80,41 @@ impl HlcService {
             .map_err(|e| AppError::Store(format!("clock poisoned: {e}")))?;
 
         let physical = now.max(state.last_physical);
-        let counter = if physical == state.last_physical { state.last_counter + 1 } else { 0 };
+        let counter = if physical == state.last_physical {
+            state.last_counter + 1
+        } else {
+            0
+        };
         state.last_physical = physical;
         state.last_counter = counter;
 
-        self.sync_state_repository.set(LAST_PHYSICAL_KEY, &physical.to_string())?;
-        self.sync_state_repository.set(LAST_COUNTER_KEY, &counter.to_string())?;
+        self.sync_state_repository
+            .set(LAST_PHYSICAL_KEY, &physical.to_string())?;
+        self.sync_state_repository
+            .set(LAST_COUNTER_KEY, &counter.to_string())?;
 
-        Ok(Hlc { physical, counter, node_id: self.node_id.clone() })
+        Ok(Hlc {
+            physical,
+            counter,
+            node_id: self.node_id.clone(),
+        })
+    }
+
+    /// Mark rows of one table as locally changed: write one fresh stamp onto each and flag
+    /// them dirty, so the sync loop pushes them. Distinct rows may share a stamp.
+    pub fn stamp<I, S>(&self, repository: &impl SyncedRepository, ids: I) -> AppResult<()>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let mut ids = ids.into_iter().peekable();
+        if ids.peek().is_none() {
+            return Ok(());
+        }
+        let hlc = self.next()?;
+        for id in ids {
+            repository.record_change(id.as_ref(), hlc.physical, hlc.counter, &hlc.node_id)?;
+        }
+        Ok(())
     }
 }

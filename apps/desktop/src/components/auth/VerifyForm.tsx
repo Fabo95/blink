@@ -1,8 +1,8 @@
 import { Input } from '@/components/ui/input';
 import type { LoginState } from '@/hooks/useLoginState';
 import { useSession } from '@/hooks/useSession';
-import { errorMessage } from '@/lib/errorMessage';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
+import { errorMessage } from '@/lib/utils';
 import { AuthCard } from './AuthCard';
 import { AuthForm } from './AuthForm';
 import { Field } from './Field';
@@ -27,7 +27,7 @@ export function VerifyForm({ state }: { state: LoginState }) {
     try {
       await resendOtp(fields.email.trim());
     } catch (err) {
-      setError(errorMessage(err));
+      setError(errorMessage(err, 'Something went wrong. Please try again.'));
     }
   };
 

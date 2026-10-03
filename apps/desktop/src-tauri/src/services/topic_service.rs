@@ -1,4 +1,4 @@
-//! Topic business logic. [`TopicService`] fronts the [`TopicRepository`], owns the Ideas
+//! Topic business logic. [`TopicService`] fronts the [`TopicsRepository`], owns the Ideas
 //! page's active topic filter (a `settings` entry the capture windows read), and decides
 //! what deleting a topic does to its notes.
 
@@ -8,10 +8,11 @@ use crate::core::error::AppResult;
 use crate::core::models::{NewTopic, Topic};
 use crate::core::sync_channel::SyncSignalSender;
 use crate::repository::{
-    NoteLinkRepository, NoteRepository, NoteReviewRepository, NoteRevisionRepository,
-    SettingsRepository, TopicRepository,
+    NoteLinksRepository, NotesRepository, NoteReviewsRepository, NoteRevisionsRepository,
+    SettingsRepository, TopicsRepository,
 };
 use crate::services::hlc_service::HlcService;
+use crate::services::note_service::delete_note_children;
 
 pub use crate::repository::TopicPatch;
 
@@ -20,13 +21,13 @@ pub use crate::repository::TopicPatch;
 const ACTIVE_TOPIC_KEY: &str = "active_topic";
 
 pub struct TopicService {
-    topic_repository: TopicRepository,
+    topics_repository: TopicsRepository,
     // Deleting a topic unfiles or deletes its notes (and their revisions); those rows change
     // and must be stamped for sync, so the topic service reaches both repositories.
-    note_repository: NoteRepository,
-    note_revision_repository: NoteRevisionRepository,
-    note_review_repository: NoteReviewRepository,
-    note_link_repository: NoteLinkRepository,
+    notes_repository: NotesRepository,
+    note_revisions_repository: NoteRevisionsRepository,
+    note_reviews_repository: NoteReviewsRepository,
+    note_links_repository: NoteLinksRepository,
     settings_repository: SettingsRepository,
     hlc_service: Arc<HlcService>,
     sync_signal: SyncSignalSender,
@@ -34,21 +35,21 @@ pub struct TopicService {
 
 impl TopicService {
     pub fn new(
-        topic_repository: TopicRepository,
-        note_repository: NoteRepository,
-        note_revision_repository: NoteRevisionRepository,
-        note_review_repository: NoteReviewRepository,
-        note_link_repository: NoteLinkRepository,
+        topics_repository: TopicsRepository,
+        notes_repository: NotesRepository,
+        note_revisions_repository: NoteRevisionsRepository,
+        note_reviews_repository: NoteReviewsRepository,
+        note_links_repository: NoteLinksRepository,
         settings_repository: SettingsRepository,
         hlc_service: Arc<HlcService>,
         sync_signal: SyncSignalSender,
     ) -> Self {
         Self {
-            topic_repository,
-            note_repository,
-            note_revision_repository,
-            note_review_repository,
-            note_link_repository,
+            topics_repository,
+            notes_repository,
+            note_revisions_repository,
+            note_reviews_repository,
+            note_links_repository,
             settings_repository,
             hlc_service,
             sync_signal,
@@ -56,68 +57,43 @@ impl TopicService {
     }
 
     pub fn list(&self) -> AppResult<Vec<Topic>> {
-        self.topic_repository.list()
+        self.topics_repository.list()
     }
 
     pub fn create(&self, new: NewTopic) -> AppResult<Topic> {
-        let topic = self.topic_repository.create(new)?;
+        let topic = self.topics_repository.create(new)?;
         self.mark_dirty(&topic.id)?;
         Ok(topic)
     }
 
     pub fn update(&self, id: &str, patch: TopicPatch) -> AppResult<Topic> {
-        let topic = self.topic_repository.update(id, patch)?;
+        let topic = self.topics_repository.update(id, patch)?;
         self.mark_dirty(id)?;
         Ok(topic)
     }
 
-    /// Delete a topic. `delete_notes` tombstones its notes with their revisions and
-    /// reviews; otherwise the notes move back to unfiled. One clock stamp covers every
-    /// touched row (they're distinct records, so a shared stamp is fine), like
-    /// `TaskGroupService::delete`.
+    /// Delete a topic. `delete_notes` tombstones its notes with everything that hangs off
+    /// them (revisions, reviews, links); otherwise the notes move back to unfiled. Every
+    /// touched row is stamped for sync.
     pub fn delete(&self, id: &str, delete_notes: bool) -> AppResult<()> {
-        self.topic_repository.delete(id)?;
-        let mut revision_ids = Vec::new();
-        let mut review_ids = Vec::new();
-        let mut link_ids = Vec::new();
+        self.topics_repository.delete(id)?;
+        self.hlc_service.stamp(&self.topics_repository, [id])?;
         let note_ids = if delete_notes {
-            let note_ids = self.note_repository.delete_in_topic(id)?;
-            for note_id in &note_ids {
-                revision_ids.extend(self.note_revision_repository.delete_for_note(note_id)?);
-                review_ids.extend(self.note_review_repository.delete_for_note(note_id)?);
-                link_ids.extend(self.note_link_repository.delete_for_note(note_id)?);
-            }
-            note_ids
+            self.notes_repository.delete_in_topic(id)?
         } else {
-            self.note_repository.unfile_topic(id)?
+            self.notes_repository.unfile_topic(id)?
         };
-
-        let hlc = self.hlc_service.next()?;
-        self.topic_repository
-            .record_change(id, hlc.physical, hlc.counter, &hlc.node_id)?;
-        for note_id in &note_ids {
-            self.note_repository
-                .record_change(note_id, hlc.physical, hlc.counter, &hlc.node_id)?;
-        }
-        for revision_id in &revision_ids {
-            self.note_revision_repository.record_change(
-                revision_id,
-                hlc.physical,
-                hlc.counter,
-                &hlc.node_id,
-            )?;
-        }
-        for review_id in &review_ids {
-            self.note_review_repository.record_change(
-                review_id,
-                hlc.physical,
-                hlc.counter,
-                &hlc.node_id,
-            )?;
-        }
-        for link_id in &link_ids {
-            self.note_link_repository
-                .record_change(link_id, hlc.physical, hlc.counter, &hlc.node_id)?;
+        self.hlc_service.stamp(&self.notes_repository, &note_ids)?;
+        if delete_notes {
+            for note_id in &note_ids {
+                delete_note_children(
+                    note_id,
+                    &self.note_revisions_repository,
+                    &self.note_reviews_repository,
+                    &self.note_links_repository,
+                    &self.hlc_service,
+                )?;
+            }
         }
 
         if self.settings_repository.get(ACTIVE_TOPIC_KEY)?.as_deref() == Some(id) {
@@ -139,9 +115,7 @@ impl TopicService {
     }
 
     fn mark_dirty(&self, id: &str) -> AppResult<()> {
-        let hlc = self.hlc_service.next()?;
-        self.topic_repository
-            .record_change(id, hlc.physical, hlc.counter, &hlc.node_id)?;
+        self.hlc_service.stamp(&self.topics_repository, [id])?;
         self.sync_signal.send();
         Ok(())
     }

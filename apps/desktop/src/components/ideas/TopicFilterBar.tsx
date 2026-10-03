@@ -8,26 +8,12 @@ import type { Sensitivity } from '@/generated/Sensitivity';
 import type { Topic } from '@/generated/Topic';
 import type { TopicStatus } from '@/generated/TopicStatus';
 import type { TopicsView } from '@/hooks/useTopics';
+import { wrapFocus } from '@/lib/focus';
 import { SENSITIVITY_OPTIONS, TOPIC_STATUS_OPTIONS } from '@/lib/notes';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { cn } from '@/lib/utils';
 
 const FIELD = { 'data-topic-field': true };
-
-// Native Tab moves between the prompt's fields; intercept only at the ends to wrap.
-function wrapTopicFields(e: KeyboardEvent) {
-  const fields = Array.from(document.querySelectorAll<HTMLElement>('[data-topic-field]'));
-  const first = fields[0];
-  const last = fields[fields.length - 1];
-  if (fields.length < 2 || first === undefined || last === undefined) return;
-  if (!e.shiftKey && e.target === last) {
-    e.preventDefault();
-    first.focus();
-  } else if (e.shiftKey && e.target === first) {
-    e.preventDefault();
-    last.focus();
-  }
-}
 
 /**
  * The topic filter above the notes: All plus one pill per topic, a lock on confidential
@@ -87,7 +73,7 @@ function TopicPrompt({ view, topic }: { view: TopicsView; topic: Topic | null })
   const [status, setStatus] = useState<TopicStatus>(topic?.status ?? 'exploring');
   const [sensitivity, setSensitivity] = useState<Sensitivity>(topic?.sensitivity ?? 'personal');
 
-  useShortcut('topicPrompt.field', { callback: wrapTopicFields });
+  useShortcut('topicPrompt.field', { callback: (e) => wrapFocus(e, '[data-topic-field]') });
   useShortcut('topicPrompt.submit', {
     callback: () => void view.submitPrompt({ name, question, status, sensitivity }),
   });

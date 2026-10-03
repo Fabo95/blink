@@ -4,7 +4,7 @@
 
 use crate::core::error::AppResult;
 use crate::core::models::{EgressEvent, EgressKind};
-use crate::repository::EgressRepository;
+use crate::repository::EgressEventsRepository;
 
 /// Where AI calls go. One provider today (bring-your-own OpenAI key).
 pub const AI_DESTINATION: &str = "api.openai.com";
@@ -13,12 +13,12 @@ pub const AI_DESTINATION: &str = "api.openai.com";
 const RECENT_LIMIT: i64 = 50;
 
 pub struct EgressService {
-    egress_repository: EgressRepository,
+    egress_events_repository: EgressEventsRepository,
 }
 
 impl EgressService {
-    pub fn new(egress_repository: EgressRepository) -> Self {
-        Self { egress_repository }
+    pub fn new(egress_events_repository: EgressEventsRepository) -> Self {
+        Self { egress_events_repository }
     }
 
     pub fn record(
@@ -28,7 +28,7 @@ impl EgressService {
         note_id: Option<&str>,
         bytes: usize,
     ) -> AppResult<()> {
-        self.egress_repository.insert(
+        self.egress_events_repository.insert(
             kind,
             destination,
             note_id,
@@ -37,6 +37,6 @@ impl EgressService {
     }
 
     pub fn recent(&self) -> AppResult<Vec<EgressEvent>> {
-        self.egress_repository.list_recent(RECENT_LIMIT)
+        self.egress_events_repository.list_recent(RECENT_LIMIT)
     }
 }

@@ -40,7 +40,7 @@ impl Db {
     /// A migrated, unencrypted in-memory database for repository tests: the real schema
     /// and SQL, without the keychain.
     #[cfg(test)]
-    pub(super) fn open_in_memory() -> AppResult<Self> {
+    pub(crate) fn open_in_memory() -> AppResult<Self> {
         let mut conn = Connection::open_in_memory().map_err(store_err)?;
         conn.execute_batch("PRAGMA foreign_keys = ON;").map_err(store_err)?;
         migrations().to_latest(&mut conn).map_err(migrate_err)?;
@@ -51,16 +51,16 @@ impl Db {
 
     /// Lock the connection for a query (one lock spans a whole repository method, so
     /// multi-statement operations stay consistent).
-    pub(super) fn lock(&self) -> AppResult<MutexGuard<'_, Connection>> {
+    pub(crate) fn lock(&self) -> AppResult<MutexGuard<'_, Connection>> {
         self.conn.lock().map_err(lock_err)
     }
 }
 
-pub(super) fn store_err(e: rusqlite::Error) -> AppError {
+pub(crate) fn store_err(e: rusqlite::Error) -> AppError {
     AppError::Store(e.to_string())
 }
 
-pub(super) fn serde_err(e: serde_rusqlite::Error) -> AppError {
+pub(crate) fn serde_err(e: serde_rusqlite::Error) -> AppError {
     AppError::Store(e.to_string())
 }
 

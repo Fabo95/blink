@@ -1,7 +1,8 @@
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import type { WorktreeAttention } from '@/generated/WorktreeAttention';
 import type { WorktreeAttentionUpdate } from '@/generated/WorktreeAttentionUpdate';
-import { api, isTauri } from '@/lib/api';
+import { useTauriEvent } from '@/hooks/useTauriEvent';
+import { api } from '@/lib/api';
 
 interface WorktreeAttentionView {
   /** The live attention of a worktree, or `null` when it has no running session. */
@@ -34,22 +35,11 @@ export function WorktreeAttentionProvider({ children }: { children: ReactNode })
       .catch(() => {
         // No worktrees / core unavailable — leave the dashboard blank.
       });
-
-    if (!isTauri) return;
-    let unlisten: (() => void) | undefined;
-    void import('@tauri-apps/api/event').then(({ listen }) =>
-      listen<WorktreeAttentionUpdate[]>('worktree-attention', (event) => {
-        if (active) setUpdates(event.payload);
-      }).then((un) => {
-        if (active) unlisten = un;
-        else un();
-      }),
-    );
     return () => {
       active = false;
-      unlisten?.();
     };
   }, []);
+  useTauriEvent<WorktreeAttentionUpdate[]>('worktree-attention', setUpdates);
 
   const value = useMemo<WorktreeAttentionView>(() => {
     const byKey = new Map(updates.map((u) => [keyOf(u.repo, u.branch), u.attention]));

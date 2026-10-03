@@ -10,7 +10,7 @@ import { CHEATSHEET, SHORTCUTS, type Shortcut } from './shortcuts';
 
 /** The `?` cheat-sheet: every shortcut grouped by type with a full description. A
  *  reference (shows all keys, not just the enabled ones), so it's the one place a new
- *  user learns what each key does. Esc / `c` close it (bound in `TaskList`). */
+ *  user learns what each key does. Esc / `c` close it (bound in the `Inbox` shell). */
 export function ShortcutHelp({
   open,
   onOpenChange,
