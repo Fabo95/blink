@@ -46,6 +46,48 @@ pub struct SyncRecord {
 pub enum RecordBody {
     Task(TaskBody),
     Group(GroupBody),
+    Topic(TopicBody),
+    Note(NoteBody),
+    NoteRevision(NoteRevisionBody),
+}
+
+/// Enum columns ride as their stored strings (`NoteType::as_str` etc.), the same as the
+/// DB, so the server's generated `status` column reads a plain value.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TopicBody {
+    pub name: String,
+    pub question: Option<String>,
+    pub status: String,
+    pub sensitivity: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub deleted: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NoteBody {
+    pub note_type: String,
+    pub text: String,
+    pub raw_text: String,
+    pub link: Option<String>,
+    pub topic_id: Option<String>,
+    pub improved: bool,
+    pub app_id: String,
+    pub app_name: String,
+    pub window_title: String,
+    pub captured_at: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub deleted: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NoteRevisionBody {
+    pub note_id: String,
+    pub text: String,
+    pub reason: String,
+    pub created_at: String,
+    pub deleted: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

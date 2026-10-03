@@ -1,6 +1,5 @@
 import { Inbox } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { CaptureCard } from '@/components/CaptureCard';
 import { ArchivePage } from '@/components/tasks/ArchivePage';
 import { GroupFilterBar } from '@/components/tasks/GroupFilterBar';
 import { TaskEditor } from '@/components/tasks/TaskEditor';
@@ -31,12 +30,13 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
   const [helpOpen, setHelpOpen] = useState(false);
   // The `p` prompt action for a single row: `loading` while generating, `copied` for a
   // brief confirmation. The copied state auto-clears via the ref'd timeout below.
-  const [promptState, setPromptState] = useState<{ id: string; status: 'loading' | 'copied' } | null>(
-    null,
-  );
+  const [promptState, setPromptState] = useState<{
+    id: string;
+    status: 'loading' | 'copied';
+  } | null>(null);
   const promptResetTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // The Archive is its own page, reached with `a` — while it's open the inbox (capture card,
-  // filter bar, Inbox/Completed) is replaced by the archive view. Lifted here (above the two
+  // The Archive is its own page, reached with `a` — while it's open the inbox (filter bar,
+  // Inbox/Completed) is replaced by the archive view. Lifted here (above the two
   // hooks that read it) so both the group filter and the archive derivation stay in sync.
   const [archiveOpen, setArchiveOpen] = useState(false);
   const report = (e: unknown, fallback: string) => setError(errorMessage(e, fallback));
@@ -318,7 +318,6 @@ export function TaskList({ tasks, onChanged }: TaskListProps) {
         <ArchivePage archive={archive} totalCount={archived.length} renderRow={renderRow} />
       ) : (
         <>
-          <CaptureCard />
           <GroupFilterBar view={taskGroups} />
           <TaskSection title="Inbox" count={open.length}>
             {open.length === 0 ? (

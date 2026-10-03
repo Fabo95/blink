@@ -78,7 +78,11 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   + a service that fronts it. Row↔struct mapping uses `serde_rusqlite`
   (`SELECT *` maps by column name); a flat `TaskRow` mirrors the nested `Task` for storage.
   Migrations so far: 1 tasks, 2 settings, 3 `link`, 4 `completed_at`, 5 `position`,
-  6 `task_groups` + `tasks.task_group_id`.
+  6 `task_groups` + `tasks.task_group_id`, 7 `raw_text`, 8 sync columns, 9 group `context`,
+  10 `effort`, 11 re-dirty for the readable replica, 12 `topics`, 13 `notes` + `notes_fts`
+  (FTS5, external content, kept in step by triggers), 14 `note_revisions`.
+  Repository tests run against `Db::open_in_memory()` (`#[cfg(test)]`): the real migrations
+  and SQL, no keychain.
 - **Services & clients (Rust DI)**: business logic lives in `services/` as structs; each holds the
   `clients/`, repositories, and other services it needs as fields named after the type —
   `AuthService { server_client, session_token_service, settings_repository }`, `TaskService {
@@ -143,9 +147,10 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   a combo already owned by another method. UI is one `ShortcutRecorder` per method in the capture
   card; the commands `get/set_capture_shortcut` take a `method` arg.
 - **Inbox is keyboard-first** (`TaskList`): two stacked sections — **Inbox** (active) and
-  **Completed** (done in the last 24h), both always open — above the capture card and group
-  filter bar. **The Archive is its own page** (`ArchivePage`), reached with `a`: it replaces the
-  whole inbox (capture card, filter bar, both sections) with a searchable, paginated (8/page),
+  **Completed** (done in the last 24h), both always open, below the group filter bar. The
+  capture hotkey settings (`CaptureCard`) live on the **Home** tab (`HomePage`), not in the
+  inbox. **The Archive is its own page** (`ArchivePage`), reached with `a`: it replaces the
+  whole inbox (filter bar, both sections) with a searchable, paginated (8/page),
   day-grouped list of older completions (Today / Yesterday / weekday / date via
   `lib/completed.ts::groupByDay`). On the archive page `s` focuses its search box, `←→`/`hl`
   page, and `a` or `Esc` return to the inbox (`Esc` only with no row focused — a focused row's
@@ -265,6 +270,38 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   (`run_on_main_thread`). Transparency needs `macOSPrivateApi`. The capture window uses native
   `hudWindow` vibrancy; the main window has an overlay title bar (`titleBarStyle: Overlay`).
   The inbox window hides during capture; the dock-icon `Reopen` event brings it back.
+
+- **Ideas (notes + topics)**: a second track next to tasks for ideas, thoughts, and sources,
+  grouped into topics with a guiding question. Plan and later phases (review, evidence, AI
+  synthesis, teams): `local-context/idea-vault-plan.md`.
+  - **Model**: `Note` (`note_type` idea/thought/source, frozen `raw_text`, optional `topic_id`
+    with **no FK**: a pull can deliver a note before its topic), `Topic` (`question`, `status`,
+    `sensitivity`), `NoteRevision` (the previous text, kept on every edit; append-only). Topic
+    names are unique among live topics by an app-level check, not a UNIQUE constraint (the
+    `task_groups` UNIQUE trap). All three sync as their own `RecordBody` kinds; push orders
+    topics, notes, revisions.
+  - **Sync conflicts**: `NoteRepository::merge` returns the local text a pull overwrote when that
+    text was an unsynced edit; `SyncService` keeps it as a `conflict` revision (stamped, so it
+    pushes) and the note gets the device-local `conflict` flag. `y` (history) clears the flag;
+    `⌘↵` there restores a version through `NoteService::update`, so restoring is never lossy.
+  - **Sensitivity gate**: `PolicyService` is the one place that decides whether note content may
+    reach AI (`improve_note_text`) or a full export. `confidential` blocks both; an unresolvable
+    topic id fails closed. The UI also hides `⌘i`, but the core is the enforcement point.
+  - **Search**: `NoteRepository::search` builds an FTS5 query from alphanumeric words only
+    (quoted prefix terms), so user input can't produce FTS syntax errors. Raw text is indexed
+    too, so a note is still found by its original wording after an edit.
+  - **Capture**: `CaptureMethod::Idea` (`⌘⇧I`, `idea-capture` window) opens the shared panel
+    preset to a note of type Idea. Every panel shows Task / Note chips: `⌘T` switches between the
+    two (returning to the last note type). A note gets a type dropdown (idea / thought /
+    source, `⌘K` toggles it) beside the topic picker: the type is a property of the note; and
+    `⌘G` opens the group picker for tasks or the topic picker for notes (chip label `file`). A
+    source is never improved by AI. `⌘⇧B` stays a task by default.
+  - **Ideas page** (`IdeasPage` + `components/ideas/` + `useTopics`/`useNotes`/`useNoteEditor`/
+    `useNoteHistory`/`useNoteSearch`): topic filter (`←→`, `n`/`r`/`⌫`, delete offers `⌘↵` keep
+    notes vs `⌘⌫` delete notes), sections by type, `s` search, row keys `e` edit, `t` type,
+    `o` open, `y` history, `⌫` delete, `⌘e`/`⌘⇧e` export (Markdown/JSON, native save dialog,
+    DLP re-run, confidential topics only when exported explicitly). It binds its own `c`/`v`
+    since it replaces `TaskList`.
 
 ## Conventions
 

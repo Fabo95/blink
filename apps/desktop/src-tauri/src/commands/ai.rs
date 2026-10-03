@@ -2,6 +2,7 @@ use tauri::{AppHandle, State};
 
 use crate::core::error::AppResult;
 use crate::services::ai_service::AiService;
+use crate::services::policy_service::PolicyService;
 use crate::services::task_group_service::TaskGroupService;
 use crate::services::task_service::TaskService;
 
@@ -28,6 +29,19 @@ pub fn clear_ai_api_key(ai_service: State<'_, AiService>) -> AppResult<()> {
 /// Improve raw text with AI and return the cleaned-up result (no persistence).
 #[tauri::command]
 pub async fn improve_text(ai_service: State<'_, AiService>, text: String) -> AppResult<String> {
+    ai_service.improve(text).await
+}
+
+/// Improve a note's text with AI. Unlike `improve_text` it takes the note's topic, because
+/// the topic's sensitivity decides whether the text may leave the device at all.
+#[tauri::command]
+pub async fn improve_note_text(
+    ai_service: State<'_, AiService>,
+    policy_service: State<'_, PolicyService>,
+    text: String,
+    topic_id: Option<String>,
+) -> AppResult<String> {
+    policy_service.ensure_ai_allowed(topic_id.as_deref())?;
     ai_service.improve(text).await
 }
 

@@ -1,5 +1,15 @@
-import { Check, ChevronDown, Link2, ShieldCheck, Tag, WandSparkles } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  FolderOpen,
+  Link2,
+  Lock,
+  ShieldCheck,
+  Tag,
+  WandSparkles,
+} from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { NoteTypeIcon } from '@/components/ideas/NoteTypeIcon';
 import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
@@ -11,10 +21,19 @@ import {
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import type { CaptureSource } from '@/generated/CaptureSource';
+import type { NoteType } from '@/generated/NoteType';
 import type { TaskGroup } from '@/generated/TaskGroup';
+import type { Topic } from '@/generated/Topic';
 import { useAiStatus } from '@/hooks/useAiStatus';
 import { api, isTauri } from '@/lib/api';
 import { normalizeLink } from '@/lib/link';
+import {
+  CAPTURE_TYPE_LABEL,
+  type CaptureType,
+  NOTE_PLACEHOLDER,
+  NOTE_TYPE_LABEL,
+  NOTE_TYPES,
+} from '@/lib/notes';
 import { Hints } from '@/lib/shortcuts/Hints';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { errorMessage } from '@/lib/utils';
@@ -43,6 +62,8 @@ export interface CaptureKind {
   dismiss: () => Promise<void>;
   /** Show the origin line + redaction badge (copy) vs a bare field (manual). */
   showSource?: boolean;
+  /** What a fresh capture becomes; `⌘T` cycles from here. Defaults to a task. */
+  defaultType?: CaptureType;
 }
 
 /**
@@ -52,6 +73,9 @@ export interface CaptureKind {
  */
 export function CapturePanel({ kind }: { kind: CaptureKind }) {
   const { enabled: aiEnabled } = useAiStatus();
+  const [captureType, setCaptureType] = useState<CaptureType>(kind.defaultType ?? 'task');
+  // The note type `⌘T` returns to when switching back from Task, so the choice sticks.
+  const [lastNoteType, setLastNoteType] = useState<NoteType>('idea');
   const [text, setText] = useState('');
   // The immutable captured text. `null` = not yet frozen: a manual capture freezes it at
   // the first improve, a copy capture arrives already frozen (the sanitized prefill).
@@ -61,7 +85,11 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
   const [redactions, setRedactions] = useState(0);
   const [groups, setGroups] = useState<TaskGroup[]>([]);
   const [taskGroupId, setTaskGroupId] = useState<string | null>(null);
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [topicId, setTopicId] = useState<string | null>(null);
+  // One picker menu for both: a task files into a group, a note into a topic.
   const [groupMenuOpen, setGroupMenuOpen] = useState(false);
+  const [typeMenuOpen, setTypeMenuOpen] = useState(false);
   const [improving, setImproving] = useState(false);
   // True once the text is AI-improved and untouched since — carried to the saved task
   // so the inbox doesn't offer to improve it again.
@@ -72,11 +100,15 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
   const load = useCallback(async () => {
     // Groups + the inbox's active filter load alongside the content; a capture
     // defaults to that filter (guarded against a stale id whose group is gone).
-    const [content, loadedGroups, activeGroup] = await Promise.all([
+    // Topics likewise default to the Ideas page's active topic.
+    const [content, loadedGroups, activeGroup, loadedTopics, activeTopic] = await Promise.all([
       kind.load(),
       api.listTaskGroups(),
       api.getActiveTaskGroup(),
+      api.listTopics(),
+      api.getActiveTopic(),
     ]);
+    setCaptureType(kind.defaultType ?? 'task');
     setText(content.text);
     setRawText(content.rawText ?? null);
     setLink(content.link ?? '');
@@ -84,6 +116,8 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
     setRedactions(content.redactionCount);
     setGroups(loadedGroups);
     setTaskGroupId(loadedGroups.some((g) => g.id === activeGroup) ? activeGroup : null);
+    setTopics(loadedTopics);
+    setTopicId(loadedTopics.some((t) => t.id === activeTopic) ? activeTopic : null);
     setImproved(false);
     setError('');
     setTimeout(() => fieldRef.current?.focus(), 0);
@@ -95,6 +129,7 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
     setLink('');
     setRedactions(0);
     setTaskGroupId(null);
+    setTopicId(null);
     setGroupMenuOpen(false);
     setImproved(false);
     setError('');
@@ -106,21 +141,38 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
     if (!trimmed || !source) return;
     // Accept a bare domain (`github.com`) — default it to https so it opens later.
     // Never improved and never a copy-capture prefill → the raw is the saved text itself.
-    await api.saveTask({
-      text: trimmed,
-      rawText: rawText ?? trimmed,
-      improved,
-      link: normalizeLink(link),
-      taskGroupId,
-      source,
-    });
+    try {
+      if (captureType === 'task') {
+        await api.saveTask({
+          text: trimmed,
+          rawText: rawText ?? trimmed,
+          improved,
+          link: normalizeLink(link),
+          taskGroupId,
+          source,
+        });
+      } else {
+        await api.saveNote({
+          noteType: captureType,
+          text: trimmed,
+          rawText: rawText ?? trimmed,
+          improved,
+          link: normalizeLink(link),
+          topicId,
+          source,
+        });
+      }
+    } catch (e) {
+      setError(errorMessage(e, 'Could not save'));
+      return;
+    }
     if (isTauri) {
-      // Only the main (inbox) window cares — target it directly.
+      // Only the main window cares — target it directly.
       const { emitTo } = await import('@tauri-apps/api/event');
-      await emitTo('main', 'task-saved');
+      await emitTo('main', captureType === 'task' ? 'task-saved' : 'note-saved');
     }
     await hide();
-  }, [text, rawText, improved, link, taskGroupId, source, hide]);
+  }, [text, rawText, improved, link, captureType, taskGroupId, topicId, source, hide]);
 
   const improve = useCallback(async () => {
     if (!text.trim()) return;
@@ -130,14 +182,20 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
       // Freeze the raw at the first improve (manual capture); later improves don't re-freeze,
       // and a copy capture is already frozen from its prefill.
       if (rawText === null) setRawText(text);
-      setText(await api.improveText(text));
+      // A note's topic decides whether its text may reach the AI at all (checked in the
+      // core); a task has no such label.
+      setText(
+        captureType === 'task'
+          ? await api.improveText(text)
+          : await api.improveNoteText(text, topicId),
+      );
       setImproved(true);
     } catch (e) {
       setError(errorMessage(e, 'Could not improve text'));
     } finally {
       setImproving(false);
     }
-  }, [text, rawText]);
+  }, [text, rawText, captureType, topicId]);
 
   // (Re)load on mount and whenever the hotkey re-opens the panel.
   useEffect(() => {
@@ -154,16 +212,53 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
     return () => unlisten?.();
   }, [load, kind.openEvent]);
 
+  const isNote = captureType !== 'task';
+  const selectedTopic = topics.find((t) => t.id === topicId) ?? null;
+  const confidential = isNote && selectedTopic?.sensitivity === 'confidential';
+  // A source is quoted evidence: AI never rewrites it. A confidential topic never reaches
+  // the AI at all (the core refuses; this just keeps the key from being offered).
+  const canImprove =
+    aiEnabled && !improved && !improving && captureType !== 'source' && !confidential;
+  const pickerOptions = isNote ? topics : groups;
+
   useShortcut('capture.save', { callback: () => void save() });
-  useShortcut('capture.improve', {
-    enabled: aiEnabled && !improved && !improving,
-    callback: () => void improve(),
+  useShortcut('capture.improve', { enabled: canImprove, callback: () => void improve() });
+  // ⌘T is a plain switch between the two things a capture can be; what kind of note it is
+  // is a property of the note, picked from its own dropdown (⌘K) next to the topic.
+  useShortcut('capture.type', {
+    callback: () => {
+      setGroupMenuOpen(false);
+      setTypeMenuOpen(false);
+      if (captureType === 'task') {
+        setCaptureType(lastNoteType);
+      } else {
+        setLastNoteType(captureType);
+        setCaptureType('task');
+      }
+    },
+  });
+  const pickNoteType = (type: NoteType) => {
+    setCaptureType(type);
+    setLastNoteType(type);
+  };
+  useShortcut('capture.noteType', {
+    enabled: isNote,
+    callback: () => {
+      setGroupMenuOpen(false);
+      setTypeMenuOpen((open) => !open);
+    },
   });
   useShortcut('capture.group', {
-    enabled: groups.length > 0,
-    callback: () => setGroupMenuOpen((open) => !open),
+    enabled: pickerOptions.length > 0,
+    callback: () => {
+      setTypeMenuOpen(false);
+      setGroupMenuOpen((open) => !open);
+    },
   });
-  useShortcut('capture.cancel', { enabled: !groupMenuOpen, callback: () => void hide() });
+  useShortcut('capture.cancel', {
+    enabled: !groupMenuOpen && !typeMenuOpen,
+    callback: () => void hide(),
+  });
 
   const showSource = kind.showSource && source && (source.appName || source.windowTitle);
 
@@ -188,6 +283,14 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
           )}
         </div>
 
+        {/* Display only: ⌘T is hinted in the statusline, so the chips are hidden from
+            assistive tech and the current choice is announced as text. */}
+        <div className="flex select-none items-center gap-1">
+          <span className="sr-only">Capturing as {CAPTURE_TYPE_LABEL[captureType]}</span>
+          <Chip active={!isNote} type="task" label="Task" />
+          <Chip active={isNote} type={isNote ? captureType : lastNoteType} label="Note" />
+        </div>
+
         {showSource && source && (
           <p className="truncate text-[11px] text-muted-foreground">
             from {source.appName || source.appId}
@@ -209,45 +312,102 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
           />
         </div>
 
-        {/* Group picker — a field, not a button: ⌘G toggles the menu, arrows+↵ pick.
-            Hidden entirely until the user has created a group. */}
-        {groups.length > 0 && (
-          <DropdownMenu open={groupMenuOpen} onOpenChange={setGroupMenuOpen}>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                tabIndex={-1}
-                className="flex h-9 items-center gap-2 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm transition-colors"
+        <div className="flex gap-2">
+          {/* Note type picker: a field like the topic picker; ⌘K toggles it, arrows+↵ pick. */}
+          {isNote && (
+            <DropdownMenu open={typeMenuOpen} onOpenChange={setTypeMenuOpen}>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  className="flex h-9 w-36 shrink-0 items-center gap-2 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm transition-colors"
+                >
+                  <NoteTypeIcon type={captureType} className="text-muted-foreground" />
+                  <span className="flex-1 text-left">{NOTE_TYPE_LABEL[captureType].one}</span>
+                  <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-40">
+                <DropdownMenuRadioGroup
+                  value={captureType}
+                  onValueChange={(value) => {
+                    // Radix hands back a plain string; narrow against the known types.
+                    const picked = NOTE_TYPES.find((type) => type === value);
+                    if (picked) pickNoteType(picked);
+                  }}
+                >
+                  {NOTE_TYPES.map((type) => (
+                    <DropdownMenuRadioItem key={type} value={type}>
+                      <span className="flex items-center gap-2">
+                        <NoteTypeIcon type={type} className="text-muted-foreground" />
+                        {NOTE_TYPE_LABEL[type].one}
+                      </span>
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          {/* Group / topic picker — a field, not a button: ⌘G toggles the menu, arrows+↵
+            pick. A task files into a group, a note into a topic; hidden until the user has
+            created one. */}
+          {pickerOptions.length > 0 && (
+            <DropdownMenu open={groupMenuOpen} onOpenChange={setGroupMenuOpen}>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md border border-input bg-transparent px-3 text-sm shadow-sm transition-colors"
+                >
+                  {isNote ? (
+                    <FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <Tag className="size-3.5 shrink-0 text-muted-foreground" />
+                  )}
+                  <span
+                    className={
+                      (isNote ? topicId : taskGroupId)
+                        ? 'flex-1 text-left'
+                        : 'flex-1 text-left text-muted-foreground'
+                    }
+                  >
+                    {isNote
+                      ? (selectedTopic?.name ?? 'No topic')
+                      : (groups.find((g) => g.id === taskGroupId)?.name ?? 'No group')}
+                  </span>
+                  {confidential && (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <Lock className="size-3" />
+                      Confidential, AI off
+                    </span>
+                  )}
+                  <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                className="w-[var(--radix-dropdown-menu-trigger-width)]"
               >
-                <Tag className="size-3.5 shrink-0 text-muted-foreground" />
-                <span
-                  className={
-                    taskGroupId ? 'flex-1 text-left' : 'flex-1 text-left text-muted-foreground'
+                <DropdownMenuRadioGroup
+                  value={(isNote ? topicId : taskGroupId) ?? ''}
+                  onValueChange={(value) =>
+                    isNote ? setTopicId(value || null) : setTaskGroupId(value || null)
                   }
                 >
-                  {groups.find((g) => g.id === taskGroupId)?.name ?? 'No group'}
-                </span>
-                <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="start"
-              className="w-[var(--radix-dropdown-menu-trigger-width)]"
-            >
-              <DropdownMenuRadioGroup
-                value={taskGroupId ?? ''}
-                onValueChange={(value) => setTaskGroupId(value || null)}
-              >
-                <DropdownMenuRadioItem value="">No group</DropdownMenuRadioItem>
-                {groups.map((group) => (
-                  <DropdownMenuRadioItem key={group.id} value={group.id}>
-                    {group.name}
+                  <DropdownMenuRadioItem value="">
+                    {isNote ? 'No topic' : 'No group'}
                   </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+                  {pickerOptions.map((option) => (
+                    <DropdownMenuRadioItem key={option.id} value={option.id}>
+                      {option.name}
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
 
         <Textarea
           ref={fieldRef}
@@ -256,7 +416,7 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
             setText(e.target.value);
             setImproved(false);
           }}
-          placeholder={kind.placeholder}
+          placeholder={isNote ? NOTE_PLACEHOLDER[captureType] : kind.placeholder}
           className="flex-1 resize-none text-sm leading-relaxed"
         />
 
@@ -278,5 +438,21 @@ export function CapturePanel({ kind }: { kind: CaptureKind }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function Chip({ active, type, label }: { active: boolean; type: CaptureType; label: string }) {
+  return (
+    <span
+      aria-hidden
+      className={
+        active
+          ? 'inline-flex items-center gap-1 rounded-full border border-primary/40 bg-card/70 px-2.5 py-0.5 text-[11px] font-medium text-foreground'
+          : 'inline-flex items-center gap-1 rounded-full border border-transparent px-2.5 py-0.5 text-[11px] text-muted-foreground'
+      }
+    >
+      <NoteTypeIcon type={type} className="size-3" />
+      {label}
+    </span>
   );
 }

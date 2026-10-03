@@ -165,6 +165,208 @@ pub struct NewTaskGroup {
     pub context: Option<String>,
 }
 
+/// What a captured note is. Ideas and thoughts are the user's own words; a source is
+/// external evidence (a link or quote) and is never rewritten by AI.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub enum NoteType {
+    #[default]
+    Idea,
+    Thought,
+    Source,
+}
+
+impl NoteType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Idea => "idea",
+            Self::Thought => "thought",
+            Self::Source => "source",
+        }
+    }
+
+    /// An unrecognized value (a row written by a newer version) reads as the default
+    /// rather than failing the whole query.
+    pub fn from_stored(value: &str) -> Self {
+        match value {
+            "thought" => Self::Thought,
+            "source" => Self::Source,
+            _ => Self::Idea,
+        }
+    }
+}
+
+/// Where a topic stands. The user's own call, shown in the topic header.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub enum TopicStatus {
+    #[default]
+    Exploring,
+    Pursuing,
+    Parked,
+    Dropped,
+}
+
+impl TopicStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Exploring => "exploring",
+            Self::Pursuing => "pursuing",
+            Self::Parked => "parked",
+            Self::Dropped => "dropped",
+        }
+    }
+
+    pub fn from_stored(value: &str) -> Self {
+        match value {
+            "pursuing" => Self::Pursuing,
+            "parked" => Self::Parked,
+            "dropped" => Self::Dropped,
+            _ => Self::Exploring,
+        }
+    }
+}
+
+/// How sensitive a topic's notes are. `Confidential` blocks every path that would send
+/// note content off the device (AI) and keeps the topic out of bulk exports. Enforced in
+/// the Rust core by `PolicyService`, never only in the UI.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub enum Sensitivity {
+    #[default]
+    Personal,
+    Internal,
+    Confidential,
+}
+
+impl Sensitivity {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Personal => "personal",
+            Self::Internal => "internal",
+            Self::Confidential => "confidential",
+        }
+    }
+
+    /// An unrecognized value reads as `Confidential`: failing closed is the safe
+    /// direction for a privacy label.
+    pub fn from_stored(value: &str) -> Self {
+        match value {
+            "personal" => Self::Personal,
+            "internal" => Self::Internal,
+            _ => Self::Confidential,
+        }
+    }
+}
+
+/// A research thread that groups notes, with a guiding question the notes try to answer.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct Topic {
+    pub id: String,
+    pub name: String,
+    pub question: Option<String>,
+    pub status: TopicStatus,
+    pub sensitivity: Sensitivity,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct NewTopic {
+    pub name: String,
+    pub question: Option<String>,
+    pub sensitivity: Sensitivity,
+}
+
+/// One captured piece of thinking: an idea, a thought, or a source.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct Note {
+    pub id: String,
+    pub note_type: NoteType,
+    pub text: String,
+    /// The post-sanitization, pre-edit captured text, frozen at capture and never updated.
+    pub raw_text: String,
+    pub link: Option<String>,
+    pub topic_id: Option<String>,
+    pub improved: bool,
+    /// A sync pull overwrote an unsynced local edit; the lost text is kept as a conflict
+    /// revision. Device-local, cleared once the user opens the note's history.
+    pub conflict: bool,
+    pub source: CaptureSource,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct NewNote {
+    pub note_type: NoteType,
+    pub text: String,
+    /// The captured text before any edit or AI improve; falls back to `text` when empty.
+    pub raw_text: String,
+    pub improved: bool,
+    pub link: Option<String>,
+    pub topic_id: Option<String>,
+    pub source: CaptureSource,
+}
+
+/// Why a revision exists: the user edited the text, or a sync pull overwrote an
+/// unsynced local edit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub enum RevisionReason {
+    Edit,
+    Conflict,
+}
+
+impl RevisionReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Edit => "edit",
+            Self::Conflict => "conflict",
+        }
+    }
+
+    pub fn from_stored(value: &str) -> Self {
+        match value {
+            "conflict" => Self::Conflict,
+            _ => Self::Edit,
+        }
+    }
+}
+
+/// A note's previous text, kept on every edit. Append-only: a revision is never changed,
+/// only tombstoned together with its note.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct NoteRevision {
+    pub id: String,
+    pub note_id: String,
+    pub text: String,
+    pub reason: RevisionReason,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub enum ExportFormat {
+    Markdown,
+    Json,
+}
+
 /// A git repository the worktree manager tracks. Persisted (as JSON) in `settings`,
 /// not derived from disk — the user curates the list in the Settings page.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

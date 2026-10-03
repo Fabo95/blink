@@ -1,10 +1,12 @@
 import { cn } from '@/lib/utils';
 
 /** The app's top-level pages, switched from the nav below the header. */
-export type Page = 'inbox' | 'worktrees' | 'settings';
+export type Page = 'home' | 'inbox' | 'ideas' | 'worktrees' | 'settings';
 
 const TABS: { id: Page; label: string }[] = [
+  { id: 'home', label: 'Home' },
   { id: 'inbox', label: 'Inbox' },
+  { id: 'ideas', label: 'Ideas' },
   { id: 'worktrees', label: 'Worktrees' },
   { id: 'settings', label: 'Settings' },
 ];

@@ -30,6 +30,10 @@ pub enum AppError {
     /// Installing/removing the Claude Code attention hook failed (filesystem or a
     /// malformed `~/.claude/settings.json`).
     Hook(String),
+    /// A sensitivity label or policy refused the action (e.g. AI on a confidential topic).
+    Policy(String),
+    /// Writing an export file failed.
+    Export(String),
 }
 
 impl fmt::Display for AppError {
@@ -45,6 +49,8 @@ impl fmt::Display for AppError {
             AppError::Repo(msg) => write!(f, "repo error: {msg}"),
             AppError::Worktree(msg) => write!(f, "worktree error: {msg}"),
             AppError::Hook(msg) => write!(f, "hook error: {msg}"),
+            AppError::Policy(msg) => write!(f, "policy: {msg}"),
+            AppError::Export(msg) => write!(f, "export error: {msg}"),
         }
     }
 }

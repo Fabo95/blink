@@ -3,14 +3,23 @@ import type { AuthUser } from '@/generated/AuthUser';
 import type { CaptureDraft } from '@/generated/CaptureDraft';
 import type { CaptureSource } from '@/generated/CaptureSource';
 import type { EditorOption } from '@/generated/EditorOption';
+import type { ExportFormat } from '@/generated/ExportFormat';
 import type { ManagedRepo } from '@/generated/ManagedRepo';
+import type { NewNote } from '@/generated/NewNote';
 import type { NewTask } from '@/generated/NewTask';
 import type { NewTaskGroup } from '@/generated/NewTaskGroup';
+import type { NewTopic } from '@/generated/NewTopic';
+import type { Note } from '@/generated/Note';
+import type { NoteRevision } from '@/generated/NoteRevision';
+import type { NoteType } from '@/generated/NoteType';
 import type { PruneCandidate } from '@/generated/PruneCandidate';
+import type { Sensitivity } from '@/generated/Sensitivity';
 import type { Task } from '@/generated/Task';
 import type { TaskEffort } from '@/generated/TaskEffort';
 import type { TaskGroup } from '@/generated/TaskGroup';
 import type { TerminalOption } from '@/generated/TerminalOption';
+import type { Topic } from '@/generated/Topic';
+import type { TopicStatus } from '@/generated/TopicStatus';
 import type { Worktree } from '@/generated/Worktree';
 import type { WorktreeAttention } from '@/generated/WorktreeAttention';
 import type { WorktreeAttentionUpdate } from '@/generated/WorktreeAttentionUpdate';
@@ -25,8 +34,8 @@ import type { WorktreeStatus } from '@/generated/WorktreeStatus';
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
-/** A way to capture a task; each has its own global hotkey and window. */
-export type CaptureMethod = 'copy' | 'manual';
+/** A way to capture a task or note; each has its own global hotkey and window. */
+export type CaptureMethod = 'copy' | 'manual' | 'idea';
 
 async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (isTauri) {
@@ -93,6 +102,69 @@ export const api = {
   dismissCopyCapture: () => invoke<void>('dismiss_copy_capture'),
   /** Close the manual-capture panel and return focus to the previous app. */
   dismissManualCapture: () => invoke<void>('dismiss_manual_capture'),
+  /** Close the idea-capture panel and return focus to the previous app. */
+  dismissIdeaCapture: () => invoke<void>('dismiss_idea_capture'),
+  // --- Ideas: topics + notes --------------------------------------------------
+  listTopics: () => invoke<Topic[]>('list_topics'),
+  createTopic: (topic: NewTopic) => invoke<Topic>('create_topic', { topic }),
+  /** Patch a topic. Send only what changed; an empty-string `question` clears it. */
+  updateTopic: (
+    id: string,
+    patch: {
+      name?: string;
+      question?: string;
+      status?: TopicStatus;
+      sensitivity?: Sensitivity;
+    },
+  ) =>
+    invoke<Topic>('update_topic', {
+      id,
+      name: patch.name,
+      question: patch.question,
+      status: patch.status,
+      sensitivity: patch.sensitivity,
+    }),
+  /** Delete a topic; `deleteNotes` deletes its notes too, otherwise they become unfiled. */
+  deleteTopic: (id: string, deleteNotes: boolean) =>
+    invoke<void>('delete_topic', { id, deleteNotes }),
+  /** The Ideas page's active topic filter, shared with the capture windows. */
+  getActiveTopic: () => invoke<string | null>('get_active_topic'),
+  setActiveTopic: (topicId: string | null) => invoke<void>('set_active_topic', { topicId }),
+  listNotes: () => invoke<Note[]>('list_notes'),
+  /** Full-text search over every note, best match first. */
+  searchNotes: (query: string) => invoke<Note[]>('search_notes', { query }),
+  saveNote: (note: NewNote) => invoke<Note>('save_note', { note }),
+  /** Patch a note. Send only what changed; an empty `link`/`topicId` clears it. A text
+   *  change keeps the previous text as a revision. */
+  updateNote: (
+    id: string,
+    patch: {
+      text?: string;
+      noteType?: NoteType;
+      link?: string;
+      topicId?: string;
+      improved?: boolean;
+      source?: string;
+    },
+  ) =>
+    invoke<Note>('update_note', {
+      id,
+      text: patch.text,
+      noteType: patch.noteType,
+      link: patch.link,
+      topicId: patch.topicId,
+      improved: patch.improved,
+      source: patch.source,
+    }),
+  deleteNote: (id: string) => invoke<void>('delete_note', { id }),
+  /** A note's revisions, newest first. Also clears the note's conflict marker. */
+  noteHistory: (id: string) => invoke<NoteRevision[]>('note_history', { id }),
+  restoreNoteRevision: (noteId: string, revisionId: string) =>
+    invoke<Note>('restore_note_revision', { noteId, revisionId }),
+  /** Export one topic (or everything exportable with `null`) to a file picked in the save
+   *  dialog. Resolves to the written path, or `null` if the user cancelled. */
+  exportNotes: (topicId: string | null, format: ExportFormat) =>
+    invoke<string | null>('export_notes', { topicId, format }),
   /** A masked preview of the stored key (`sk-…YxkA`), or `null` when none is set. The
    *  AI features gate on this being present; the full key never enters the webview. */
   aiStatus: () => invoke<string | null>('ai_status'),
@@ -103,6 +175,9 @@ export const api = {
   clearAiApiKey: () => invoke<void>('clear_ai_api_key'),
   /** Ask OpenAI to improve raw captured text (returns the cleaned text). */
   improveText: (text: string) => invoke<string>('improve_text', { text }),
+  /** Improve a note's text with AI. Rejects when the note's topic is confidential. */
+  improveNoteText: (text: string, topicId: string | null) =>
+    invoke<string>('improve_note_text', { text, topicId }),
   /** Generate a ready-to-paste assistant prompt from a task's raw text and copy it to
    *  the clipboard (returns the prompt). */
   generateTaskPrompt: (id: string) => invoke<string>('generate_task_prompt', { id }),
@@ -288,7 +363,116 @@ const mockStore: Task[] = seedMockStore();
 const mockShortcuts: Record<CaptureMethod, string> = {
   copy: 'CommandOrControl+Shift+B',
   manual: 'CommandOrControl+Shift+M',
+  idea: 'CommandOrControl+Shift+I',
 };
+
+// Seed topics across all three sensitivities and notes across all types, plus one note
+// with a sync conflict and history, so every Ideas state is visible in `pnpm desktop`.
+function seedMockTopics(): Topic[] {
+  const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString();
+  const topic = (
+    name: string,
+    question: string | null,
+    sensitivity: Sensitivity,
+    status: TopicStatus,
+    age: number,
+  ): Topic => ({
+    id: crypto.randomUUID(),
+    name,
+    question,
+    status,
+    sensitivity,
+    createdAt: daysAgo(age),
+    updatedAt: daysAgo(age),
+  });
+  return [
+    topic(
+      'Agentic commerce',
+      'Is there a business in agents booking local businesses?',
+      'personal',
+      'exploring',
+      30,
+    ),
+    topic(
+      'Review bottleneck',
+      'What makes agent-written code safe to merge?',
+      'internal',
+      'parked',
+      20,
+    ),
+    topic('Board strategy', null, 'confidential', 'pursuing', 10),
+  ];
+}
+
+const mockTopics: Topic[] = seedMockTopics();
+let mockActiveTopic: string | null = null;
+const mockNoteRevisions: NoteRevision[] = [];
+
+function seedMockNotes(): Note[] {
+  const daysAgo = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString();
+  const [commerce, review, board] = mockTopics.map((t) => t.id);
+  const note = (
+    noteType: NoteType,
+    text: string,
+    topicId: string | null,
+    age: number,
+    link: string | null = null,
+    appName = 'Manual',
+  ): Note => ({
+    id: crypto.randomUUID(),
+    noteType,
+    text,
+    rawText: text,
+    link,
+    topicId,
+    improved: false,
+    conflict: false,
+    source: { appId: appName.toLowerCase(), appName, windowTitle: '', capturedAt: daysAgo(age) },
+    createdAt: daysAgo(age),
+    updatedAt: daysAgo(age),
+  });
+  const conflicted = note(
+    'idea',
+    'Restaurant MCP server that exposes live availability',
+    commerce ?? null,
+    12,
+  );
+  conflicted.conflict = true;
+  mockNoteRevisions.push(
+    {
+      id: crypto.randomUUID(),
+      noteId: conflicted.id,
+      text: 'Restaurant MCP server, availability + deals',
+      reason: 'conflict',
+      createdAt: daysAgo(1),
+    },
+    {
+      id: crypto.randomUUID(),
+      noteId: conflicted.id,
+      text: 'MCP server for restaurants',
+      reason: 'edit',
+      createdAt: daysAgo(6),
+    },
+  );
+  return [
+    note('idea', 'Agent-readable availability feed for restaurants', commerce ?? null, 35),
+    conflicted,
+    note('thought', 'Who is liable when an agent books the wrong table?', commerce ?? null, 7),
+    note(
+      'source',
+      'Stripe agentic payments: delegated payment tokens for AI agents',
+      commerce ?? null,
+      4,
+      'https://stripe.com/blog/agentic-commerce',
+      'Chrome',
+    ),
+    note('thought', 'Review is the new bottleneck, not writing code', review ?? null, 21),
+    note('idea', 'Spin the vertical into its own company', board ?? null, 9),
+    note('thought', 'Keep a pain log for two weeks', null, 2),
+  ];
+}
+
+const mockNotes: Note[] = seedMockNotes();
 
 // Browser-only auth: accept any credentials so the login gate is developable
 // without the Rust core / a running server.
@@ -500,7 +684,199 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
     }
     case 'dismiss_copy_capture':
     case 'dismiss_manual_capture':
+    case 'dismiss_idea_capture':
       return undefined as T;
+    case 'list_topics':
+      return [...mockTopics] as T;
+    case 'create_topic': {
+      const input = args?.topic as NewTopic;
+      const name = input.name.trim();
+      if (!name) throw new Error('topic name cannot be empty');
+      if (mockTopics.some((t) => t.name.toLowerCase() === name.toLowerCase())) {
+        throw new Error('a topic with this name already exists');
+      }
+      const now = new Date().toISOString();
+      const topic: Topic = {
+        id: crypto.randomUUID(),
+        name,
+        question: input.question?.trim() || null,
+        status: 'exploring',
+        sensitivity: input.sensitivity,
+        createdAt: now,
+        updatedAt: now,
+      };
+      mockTopics.push(topic);
+      return topic as T;
+    }
+    case 'update_topic': {
+      const topic = mockTopics.find((t) => t.id === args?.id);
+      if (!topic) throw new Error('topic not found');
+      if (typeof args?.name === 'string') {
+        const name = args.name.trim();
+        if (!name) throw new Error('topic name cannot be empty');
+        if (
+          mockTopics.some((t) => t.name.toLowerCase() === name.toLowerCase() && t.id !== topic.id)
+        ) {
+          throw new Error('a topic with this name already exists');
+        }
+        topic.name = name;
+      }
+      if (typeof args?.question === 'string') topic.question = args.question.trim() || null;
+      const status = args?.status;
+      if (
+        status === 'exploring' ||
+        status === 'pursuing' ||
+        status === 'parked' ||
+        status === 'dropped'
+      ) {
+        topic.status = status;
+      }
+      const sensitivity = args?.sensitivity;
+      if (
+        sensitivity === 'personal' ||
+        sensitivity === 'internal' ||
+        sensitivity === 'confidential'
+      ) {
+        topic.sensitivity = sensitivity;
+      }
+      topic.updatedAt = new Date().toISOString();
+      return topic as T;
+    }
+    case 'delete_topic': {
+      const idx = mockTopics.findIndex((t) => t.id === args?.id);
+      if (idx >= 0) mockTopics.splice(idx, 1);
+      for (let i = mockNotes.length - 1; i >= 0; i -= 1) {
+        const note = mockNotes[i];
+        if (!note || note.topicId !== args?.id) continue;
+        if (args?.deleteNotes === true) mockNotes.splice(i, 1);
+        else note.topicId = null;
+      }
+      if (mockActiveTopic === args?.id) mockActiveTopic = null;
+      return undefined as T;
+    }
+    case 'get_active_topic':
+      return mockActiveTopic as T;
+    case 'set_active_topic':
+      mockActiveTopic = typeof args?.topicId === 'string' ? args.topicId : null;
+      return undefined as T;
+    case 'list_notes':
+      return [...mockNotes] as T;
+    case 'search_notes': {
+      // Mirrors the FTS query: every word must prefix-match a word of the text, raw text,
+      // or link.
+      const words = String(args?.query ?? '')
+        .toLowerCase()
+        .split(/[^\p{L}\p{N}]+/u)
+        .filter(Boolean);
+      if (words.length === 0) return [] as T;
+      return mockNotes.filter((n) => {
+        const haystack = `${n.text} ${n.rawText} ${n.link ?? ''}`
+          .toLowerCase()
+          .split(/[^\p{L}\p{N}]+/u);
+        return words.every((w) => haystack.some((h) => h.startsWith(w)));
+      }) as T;
+    }
+    case 'save_note': {
+      const input = args?.note as NewNote;
+      const now = new Date().toISOString();
+      const note: Note = {
+        id: crypto.randomUUID(),
+        noteType: input.noteType,
+        text: input.text,
+        rawText: input.rawText.trim() ? input.rawText : input.text,
+        link: input.link,
+        topicId: input.topicId,
+        improved: input.improved,
+        conflict: false,
+        source: input.source,
+        createdAt: now,
+        updatedAt: now,
+      };
+      mockNotes.unshift(note);
+      return note as T;
+    }
+    case 'update_note': {
+      const note = mockNotes.find((n) => n.id === args?.id);
+      if (!note) throw new Error('note not found');
+      if (typeof args?.text === 'string' && args.text !== note.text) {
+        mockNoteRevisions.unshift({
+          id: crypto.randomUUID(),
+          noteId: note.id,
+          text: note.text,
+          reason: 'edit',
+          createdAt: new Date().toISOString(),
+        });
+        note.text = args.text;
+      }
+      const noteType = args?.noteType;
+      if (noteType === 'idea' || noteType === 'thought' || noteType === 'source') {
+        note.noteType = noteType;
+      }
+      if (typeof args?.link === 'string') note.link = args.link.trim() || null;
+      if (typeof args?.topicId === 'string') note.topicId = args.topicId.trim() || null;
+      if (typeof args?.improved === 'boolean') note.improved = args.improved;
+      if (typeof args?.source === 'string') note.source = { ...note.source, appName: args.source };
+      note.updatedAt = new Date().toISOString();
+      return note as T;
+    }
+    case 'delete_note': {
+      const idx = mockNotes.findIndex((n) => n.id === args?.id);
+      if (idx >= 0) mockNotes.splice(idx, 1);
+      return undefined as T;
+    }
+    case 'note_history': {
+      const note = mockNotes.find((n) => n.id === args?.id);
+      if (note) note.conflict = false;
+      return mockNoteRevisions.filter((r) => r.noteId === args?.id) as T;
+    }
+    case 'restore_note_revision': {
+      const note = mockNotes.find((n) => n.id === args?.noteId);
+      const revision = mockNoteRevisions.find((r) => r.id === args?.revisionId);
+      if (!note || !revision) throw new Error('revision not found');
+      return mockInvoke<T>('update_note', { id: note.id, text: revision.text });
+    }
+    case 'improve_note_text': {
+      const topic = mockTopics.find((t) => t.id === args?.topicId);
+      if (topic?.sensitivity === 'confidential') {
+        throw new Error('AI is disabled for confidential topics');
+      }
+      return String(args?.text ?? '') as T;
+    }
+    case 'export_notes': {
+      // No native save dialog in the browser: download the file instead. Same selection
+      // rule as the core: one topic explicitly, or everything minus confidential topics.
+      const topicId = typeof args?.topicId === 'string' ? args.topicId : null;
+      const topics = topicId
+        ? mockTopics.filter((t) => t.id === topicId)
+        : mockTopics.filter((t) => t.sensitivity !== 'confidential');
+      const json = args?.format === 'json';
+      const content = json
+        ? JSON.stringify(
+            topics.map((topic) => ({
+              topic,
+              notes: mockNotes.filter((n) => n.topicId === topic.id),
+            })),
+            null,
+            2,
+          )
+        : topics
+            .map(
+              (topic) =>
+                `## ${topic.name}\n\n${mockNotes
+                  .filter((n) => n.topicId === topic.id)
+                  .map((n) => `- ${n.text}`)
+                  .join('\n')}`,
+            )
+            .join('\n\n');
+      const fileName = `blink-ideas-mock.${json ? 'json' : 'md'}`;
+      const url = URL.createObjectURL(new Blob([content], { type: 'text/plain' }));
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = fileName;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      return fileName as T;
+    }
     case 'ai_status':
       return (mockAiKey ? maskKey(mockAiKey) : null) as T;
     case 'set_ai_api_key': {
@@ -544,9 +920,9 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       window.open(String(args?.url ?? ''), '_blank', 'noopener');
       return undefined as T;
     case 'get_capture_shortcut':
-      return mockShortcuts[args?.method === 'manual' ? 'manual' : 'copy'] as T;
+      return mockShortcuts[mockCaptureMethod(args?.method)] as T;
     case 'set_capture_shortcut': {
-      const method: CaptureMethod = args?.method === 'manual' ? 'manual' : 'copy';
+      const method = mockCaptureMethod(args?.method);
       mockShortcuts[method] = String(args?.shortcut ?? '');
       return undefined as T;
     }
@@ -706,6 +1082,10 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
     default:
       throw new Error(`Unknown command: ${cmd}`);
   }
+}
+
+function mockCaptureMethod(value: unknown): CaptureMethod {
+  return value === 'manual' || value === 'idea' ? value : 'copy';
 }
 
 // Mirror the native `mask_key`: first three + last four, else a bare prefix.

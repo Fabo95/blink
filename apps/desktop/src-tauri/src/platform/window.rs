@@ -30,6 +30,13 @@ pub fn open_manual_capture_window(app: &AppHandle) {
     }
 }
 
+/// Show the idea-capture panel and tell it to reset for a fresh entry.
+pub fn open_idea_capture_window(app: &AppHandle) {
+    if show_centered(app, "idea-capture") {
+        let _ = app.emit_to("idea-capture", "idea-capture-open", ());
+    }
+}
+
 /// Center the labelled capture window on the active screen, show + focus it, and hide
 /// the inbox so only the panel is up. Returns whether the window exists.
 fn show_centered(app: &AppHandle, label: &str) -> bool {

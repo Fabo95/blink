@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from '@/App';
 import { CopyCapture } from '@/components/CopyCapture';
+import { IdeaCapture } from '@/components/IdeaCapture';
 import { ManualCapture } from '@/components/ManualCapture';
 import { AiStatusProvider } from '@/hooks/useAiStatus';
 import { isTauri } from '@/lib/api';
@@ -26,6 +27,8 @@ async function main() {
       <CopyCapture />
     ) : label === 'manual-capture' ? (
       <ManualCapture />
+    ) : label === 'idea-capture' ? (
+      <IdeaCapture />
     ) : null;
   if (captureView) document.documentElement.classList.add('capture-window');
 

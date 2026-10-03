@@ -21,17 +21,19 @@ use super::{os, window};
 
 /// A way to start a capture. Each variant owns a global hotkey and a window; adding a
 /// method (voice, …) is a variant here plus its `start`/window wiring. Deserialized
-/// from the frontend as a lowercase string (`"copy"` / `"manual"`).
+/// from the frontend as a lowercase string (`"copy"` / `"manual"` / `"idea"`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CaptureMethod {
     Copy,
     Manual,
+    Idea,
 }
 
 impl CaptureMethod {
     /// Every method — the set bound at startup and dispatched over on a keypress.
-    const ALL: [CaptureMethod; 2] = [CaptureMethod::Copy, CaptureMethod::Manual];
+    const ALL: [CaptureMethod; 3] =
+        [CaptureMethod::Copy, CaptureMethod::Manual, CaptureMethod::Idea];
 
     /// This method's current hotkey: the user's saved one, or the default.
     fn shortcut(self, app: &AppHandle) -> AppResult<String> {
@@ -43,6 +45,7 @@ impl CaptureMethod {
         match self {
             CaptureMethod::Copy => start_copy_capture(app),
             CaptureMethod::Manual => start_manual_capture(app),
+            CaptureMethod::Idea => start_idea_capture(app),
         }
     }
 }
@@ -198,4 +201,11 @@ fn poll_for_selection(app: &AppHandle, original: Option<&str>) -> Option<String>
 fn start_manual_capture(app: AppHandle) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || window::open_manual_capture_window(&handle));
+}
+
+/// Idea capture: like manual capture, a blank panel, but preset to file a note rather than
+/// a task. Window ops run on the main thread (macOS).
+fn start_idea_capture(app: AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || window::open_idea_capture_window(&handle));
 }

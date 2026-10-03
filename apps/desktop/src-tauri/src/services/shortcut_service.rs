@@ -37,6 +37,7 @@ fn setting_key(method: CaptureMethod) -> &'static str {
     match method {
         CaptureMethod::Copy => "copy_capture_shortcut",
         CaptureMethod::Manual => "manual_capture_shortcut",
+        CaptureMethod::Idea => "idea_capture_shortcut",
     }
 }
 
@@ -45,5 +46,6 @@ fn default_shortcut(method: CaptureMethod) -> &'static str {
     match method {
         CaptureMethod::Copy => "CommandOrControl+Shift+B",
         CaptureMethod::Manual => "CommandOrControl+Shift+M",
+        CaptureMethod::Idea => "CommandOrControl+Shift+I",
     }
 }

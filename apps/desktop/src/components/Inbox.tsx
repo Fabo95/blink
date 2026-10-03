@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Header } from '@/components/Header';
 import { HintRow } from '@/components/HintRow';
+import { HomePage } from '@/components/HomePage';
+import { IdeasPage } from '@/components/IdeasPage';
 import { type Page, PageNav } from '@/components/PageNav';
 import { SettingsPage } from '@/components/SettingsPage';
 import { TaskList } from '@/components/TaskList';
@@ -12,7 +14,7 @@ import { api, isTauri } from '@/lib/api';
 import { useHintStyle } from '@/lib/hintStyle';
 import { Hints } from '@/lib/shortcuts/Hints';
 
-/** The signed-in app: capture card + task inbox. Rendered only inside `<AuthGate>`. */
+/** The signed-in app: header, page nav, and the active page. Rendered only inside `<AuthGate>`. */
 export function Inbox() {
   const { user, signOut } = useSession();
   const attention = useWorktreeAttention();
@@ -67,6 +69,10 @@ export function Inbox() {
           <SettingsPage />
         ) : page === 'worktrees' ? (
           <WorktreesPage />
+        ) : page === 'home' ? (
+          <HomePage />
+        ) : page === 'ideas' ? (
+          <IdeasPage />
         ) : (
           <TaskList tasks={tasks} onChanged={refresh} />
         )}

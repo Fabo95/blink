@@ -20,6 +20,10 @@ use crate::services::ai_key_service::AiKeyService;
 use crate::services::ai_service::AiService;
 use crate::services::attention_service::AttentionService;
 use crate::services::editor_service::EditorService;
+use crate::services::export_service::ExportService;
+use crate::services::note_service::NoteService;
+use crate::services::policy_service::PolicyService;
+use crate::services::topic_service::TopicService;
 use crate::services::hook_service::HookService;
 use crate::services::terminal_service::TerminalService;
 use crate::services::auth_service::AuthService;
@@ -88,6 +92,26 @@ pub fn run() {
                 hlc_service.clone(),
                 sync_sender.clone(),
             ));
+            app.manage(TopicService::new(
+                repository.topics.clone(),
+                repository.notes.clone(),
+                repository.note_revisions.clone(),
+                repository.settings.clone(),
+                hlc_service.clone(),
+                sync_sender.clone(),
+            ));
+            app.manage(NoteService::new(
+                repository.notes.clone(),
+                repository.note_revisions.clone(),
+                hlc_service.clone(),
+                sync_sender.clone(),
+            ));
+            app.manage(PolicyService::new(repository.topics.clone()));
+            app.manage(ExportService::new(
+                repository.notes.clone(),
+                repository.topics.clone(),
+                SecurityService::with_defaults(),
+            ));
             app.manage(ShortcutService::new(repository.settings.clone()));
             let repo_service = RepoService::new(GitCli::new(), repository.settings.clone());
 
@@ -129,7 +153,11 @@ pub fn run() {
                 SessionTokenService::new(),
                 repository.tasks.clone(),
                 repository.task_groups.clone(),
+                repository.topics.clone(),
+                repository.notes.clone(),
+                repository.note_revisions.clone(),
                 repository.sync_state.clone(),
+                hlc_service,
                 sync_sender,
             ));
             app.manage(sync_service.clone());
@@ -149,11 +177,13 @@ pub fn run() {
             commands::copy_capture::read_copy_capture,
             commands::copy_capture::dismiss_copy_capture,
             commands::manual_capture::dismiss_manual_capture,
+            commands::idea_capture::dismiss_idea_capture,
             commands::ai::ai_status,
             commands::ai::set_ai_api_key,
             commands::ai::clear_ai_api_key,
             commands::ai::improve_text,
             commands::ai::generate_task_prompt,
+            commands::ai::improve_note_text,
             commands::tasks::list_tasks,
             commands::tasks::save_task,
             commands::tasks::delete_task,
@@ -165,6 +195,20 @@ pub fn run() {
             commands::task_groups::delete_task_group,
             commands::task_groups::get_active_task_group,
             commands::task_groups::set_active_task_group,
+            commands::topics::list_topics,
+            commands::topics::create_topic,
+            commands::topics::update_topic,
+            commands::topics::delete_topic,
+            commands::topics::get_active_topic,
+            commands::topics::set_active_topic,
+            commands::notes::list_notes,
+            commands::notes::search_notes,
+            commands::notes::save_note,
+            commands::notes::update_note,
+            commands::notes::delete_note,
+            commands::notes::note_history,
+            commands::notes::restore_note_revision,
+            commands::export::export_notes,
             commands::link::open_link,
             commands::shortcut::get_capture_shortcut,
             commands::shortcut::set_capture_shortcut,

@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 export function CaptureCard() {
   const [copyShortcut, setCopyShortcut] = useState('');
   const [manualShortcut, setManualShortcut] = useState('');
+  const [ideaShortcut, setIdeaShortcut] = useState('');
 
   useEffect(() => {
     api
@@ -15,6 +16,10 @@ export function CaptureCard() {
     api
       .getCaptureShortcut('manual')
       .then(setManualShortcut)
+      .catch(() => {});
+    api
+      .getCaptureShortcut('idea')
+      .then(setIdeaShortcut)
       .catch(() => {});
   }, []);
 
@@ -38,6 +43,13 @@ export function CaptureCard() {
             <span className="font-medium text-foreground">Manual</span> — type a task from scratch.
           </p>
           <ShortcutRecorder method="manual" value={manualShortcut} onChange={setManualShortcut} />
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">Idea</span> — note a thought for the Ideas
+            page.
+          </p>
+          <ShortcutRecorder method="idea" value={ideaShortcut} onChange={setIdeaShortcut} />
         </div>
       </CardContent>
     </Card>

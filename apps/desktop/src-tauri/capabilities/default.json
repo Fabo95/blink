@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Core capability for Blink's windows.",
-  "windows": ["main", "copy-capture", "manual-capture"],
+  "windows": ["main", "copy-capture", "manual-capture", "idea-capture"],
   "permissions": [
     "core:default",
     "core:window:allow-hide",

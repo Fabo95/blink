@@ -37,6 +37,18 @@ impl Db {
         })
     }
 
+    /// A migrated, unencrypted in-memory database for repository tests: the real schema
+    /// and SQL, without the keychain.
+    #[cfg(test)]
+    pub(super) fn open_in_memory() -> AppResult<Self> {
+        let mut conn = Connection::open_in_memory().map_err(store_err)?;
+        conn.execute_batch("PRAGMA foreign_keys = ON;").map_err(store_err)?;
+        migrations().to_latest(&mut conn).map_err(migrate_err)?;
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
+    }
+
     /// Lock the connection for a query (one lock spans a whole repository method, so
     /// multi-statement operations stay consistent).
     pub(super) fn lock(&self) -> AppResult<MutexGuard<'_, Connection>> {

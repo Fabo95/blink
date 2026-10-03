@@ -6,13 +6,20 @@
 //! The server keeps a readable replica of these rows rather than opaque ciphertext —
 //! the payload it stores is the local row itself, as JSON.
 
+use std::sync::Arc;
+
 use serde::Deserialize;
 
 use crate::clients::server_client::ServerClient;
 use crate::core::error::{AppError, AppResult};
+use crate::core::models::RevisionReason;
 use crate::core::sync_channel::SyncSignalSender;
 use crate::core::wire::{RecordBody, SyncPacket, SyncRecord};
-use crate::repository::{SyncStateRepository, TaskGroupRepository, TaskRepository};
+use crate::repository::{
+    NoteRepository, NoteRevisionRepository, SyncStateRepository, TaskGroupRepository,
+    TaskRepository, TopicRepository,
+};
+use crate::services::hlc_service::HlcService;
 use crate::services::session_token_service::SessionTokenService;
 
 const LAST_PULLED_SEQ_KEY: &str = "last_pulled_seq";
@@ -22,17 +29,27 @@ pub struct SyncService {
     session_token_service: SessionTokenService,
     task_repository: TaskRepository,
     task_group_repository: TaskGroupRepository,
+    topic_repository: TopicRepository,
+    note_repository: NoteRepository,
+    note_revision_repository: NoteRevisionRepository,
     sync_state_repository: SyncStateRepository,
+    // Stamps the conflict revisions a pull creates, so they push like any local write.
+    hlc_service: Arc<HlcService>,
     sync_signal: SyncSignalSender,
 }
 
 impl SyncService {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         server_client: ServerClient,
         session_token_service: SessionTokenService,
         task_repository: TaskRepository,
         task_group_repository: TaskGroupRepository,
+        topic_repository: TopicRepository,
+        note_repository: NoteRepository,
+        note_revision_repository: NoteRevisionRepository,
         sync_state_repository: SyncStateRepository,
+        hlc_service: Arc<HlcService>,
         sync_signal: SyncSignalSender,
     ) -> Self {
         Self {
@@ -40,7 +57,11 @@ impl SyncService {
             session_token_service,
             task_repository,
             task_group_repository,
+            topic_repository,
+            note_repository,
+            note_revision_repository,
             sync_state_repository,
+            hlc_service,
             sync_signal,
         }
     }
@@ -78,17 +99,25 @@ impl SyncService {
         let token = self.token()?;
         let task_changes = self.task_repository.list_dirty()?;
         let group_changes = self.task_group_repository.list_dirty()?;
-        if task_changes.is_empty() && group_changes.is_empty() {
-            return Ok(0);
-        }
-
-        let mut packets = Vec::with_capacity(task_changes.len() + group_changes.len());
-        for change in task_changes.iter().chain(group_changes.iter()) {
-            packets.push(SyncPacket {
+        // Topics before notes before revisions: pull applies records in `seq` order, so a
+        // receiving device sees a topic before the notes filed under it.
+        let topic_changes = self.topic_repository.list_dirty()?;
+        let note_changes = self.note_repository.list_dirty()?;
+        let revision_changes = self.note_revision_repository.list_dirty()?;
+        let packets: Vec<SyncPacket> = task_changes
+            .iter()
+            .chain(group_changes.iter())
+            .chain(topic_changes.iter())
+            .chain(note_changes.iter())
+            .chain(revision_changes.iter())
+            .map(|change| SyncPacket {
                 id: change.id.clone(),
                 clock: change.clock.clone(),
                 body: change.body.clone(),
-            });
+            })
+            .collect();
+        if packets.is_empty() {
+            return Ok(0);
         }
 
         let resp = self.server_client.push_records(&token, &packets).await.map_err(net_err)?;
@@ -97,6 +126,9 @@ impl SyncService {
         // Clear the flags only after the server confirms the writes landed.
         self.task_repository.clear_dirty(&task_changes)?;
         self.task_group_repository.clear_dirty(&group_changes)?;
+        self.topic_repository.clear_dirty(&topic_changes)?;
+        self.note_repository.clear_dirty(&note_changes)?;
+        self.note_revision_repository.clear_dirty(&revision_changes)?;
         Ok(packets.len())
     }
 
@@ -121,6 +153,19 @@ impl SyncService {
                 RecordBody::Group(group) => {
                     self.task_group_repository.merge(&record.id, &record.clock, group)?;
                 }
+                RecordBody::Topic(topic) => {
+                    self.topic_repository.merge(&record.id, &record.clock, topic)?;
+                }
+                RecordBody::Note(note) => {
+                    if let Some(lost_text) =
+                        self.note_repository.merge(&record.id, &record.clock, note)?
+                    {
+                        self.keep_conflict(&record.id, &lost_text)?;
+                    }
+                }
+                RecordBody::NoteRevision(revision) => {
+                    self.note_revision_repository.merge(&record.id, &record.clock, revision)?;
+                }
             }
             max_seq = max_seq.max(record.seq);
         }
@@ -129,6 +174,21 @@ impl SyncService {
             self.sync_state_repository.set(LAST_PULLED_SEQ_KEY, &max_seq.to_string())?;
         }
         Ok(records.len())
+    }
+
+    /// A pulled note overwrote an unsynced local edit: keep the lost text as a `conflict`
+    /// revision. It's a new local row, stamped dirty, so this cycle's push syncs it and the
+    /// other device sees the conflict too.
+    fn keep_conflict(&self, note_id: &str, lost_text: &str) -> AppResult<()> {
+        let revision_id =
+            self.note_revision_repository.insert(note_id, lost_text, RevisionReason::Conflict)?;
+        let hlc = self.hlc_service.next()?;
+        self.note_revision_repository.record_change(
+            &revision_id,
+            hlc.physical,
+            hlc.counter,
+            &hlc.node_id,
+        )
     }
 
     fn token(&self) -> AppResult<String> {

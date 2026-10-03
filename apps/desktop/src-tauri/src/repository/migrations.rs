@@ -94,5 +94,84 @@ pub(super) fn migrations() -> Migrations<'static> {
             UPDATE task_groups SET dirty = 1;
             DELETE FROM sync_state WHERE key = 'last_pulled_seq';",
         ),
+        // Idea Vault: research topics. No UNIQUE on `name` (unlike task_groups): two
+        // devices creating the same name would collide on merge, so uniqueness is an
+        // app-level check in the repository instead.
+        M::up(
+            "CREATE TABLE IF NOT EXISTS topics (
+                id           TEXT PRIMARY KEY,
+                name         TEXT NOT NULL,
+                question     TEXT,
+                status       TEXT NOT NULL DEFAULT 'exploring',
+                sensitivity  TEXT NOT NULL DEFAULT 'personal',
+                created_at   TEXT NOT NULL,
+                updated_at   TEXT NOT NULL,
+                hlc_physical INTEGER NOT NULL DEFAULT 0,
+                hlc_counter  INTEGER NOT NULL DEFAULT 0,
+                hlc_node_id  TEXT    NOT NULL DEFAULT '',
+                dirty        INTEGER NOT NULL DEFAULT 1,
+                deleted      INTEGER NOT NULL DEFAULT 0
+            );",
+        ),
+        // Notes. `topic_id` has no FK on purpose: a pull can deliver a note before the
+        // topic another device created for it, and a hard FK would fail that merge.
+        // `conflict` is device-local (never synced). The FTS5 index is external-content
+        // over `notes`, kept in step by triggers.
+        M::up(
+            "CREATE TABLE IF NOT EXISTS notes (
+                id           TEXT PRIMARY KEY,
+                note_type    TEXT NOT NULL,
+                text         TEXT NOT NULL,
+                raw_text     TEXT NOT NULL,
+                link         TEXT,
+                topic_id     TEXT,
+                improved     INTEGER NOT NULL DEFAULT 0,
+                conflict     INTEGER NOT NULL DEFAULT 0,
+                app_id       TEXT NOT NULL,
+                app_name     TEXT NOT NULL,
+                window_title TEXT NOT NULL,
+                captured_at  TEXT NOT NULL,
+                created_at   TEXT NOT NULL,
+                updated_at   TEXT NOT NULL,
+                hlc_physical INTEGER NOT NULL DEFAULT 0,
+                hlc_counter  INTEGER NOT NULL DEFAULT 0,
+                hlc_node_id  TEXT    NOT NULL DEFAULT '',
+                dirty        INTEGER NOT NULL DEFAULT 1,
+                deleted      INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS notes_topic_idx ON notes(topic_id);
+            CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts
+                USING fts5(text, raw_text, link, content='notes', content_rowid='rowid');
+            CREATE TRIGGER IF NOT EXISTS notes_fts_insert AFTER INSERT ON notes BEGIN
+                INSERT INTO notes_fts(rowid, text, raw_text, link)
+                VALUES (new.rowid, new.text, new.raw_text, new.link);
+            END;
+            CREATE TRIGGER IF NOT EXISTS notes_fts_delete AFTER DELETE ON notes BEGIN
+                INSERT INTO notes_fts(notes_fts, rowid, text, raw_text, link)
+                VALUES ('delete', old.rowid, old.text, old.raw_text, old.link);
+            END;
+            CREATE TRIGGER IF NOT EXISTS notes_fts_update
+            AFTER UPDATE OF text, raw_text, link ON notes BEGIN
+                INSERT INTO notes_fts(notes_fts, rowid, text, raw_text, link)
+                VALUES ('delete', old.rowid, old.text, old.raw_text, old.link);
+                INSERT INTO notes_fts(rowid, text, raw_text, link)
+                VALUES (new.rowid, new.text, new.raw_text, new.link);
+            END;",
+        ),
+        M::up(
+            "CREATE TABLE IF NOT EXISTS note_revisions (
+                id           TEXT PRIMARY KEY,
+                note_id      TEXT NOT NULL,
+                text         TEXT NOT NULL,
+                reason       TEXT NOT NULL,
+                created_at   TEXT NOT NULL,
+                hlc_physical INTEGER NOT NULL DEFAULT 0,
+                hlc_counter  INTEGER NOT NULL DEFAULT 0,
+                hlc_node_id  TEXT    NOT NULL DEFAULT '',
+                dirty        INTEGER NOT NULL DEFAULT 1,
+                deleted      INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS note_revisions_note_idx ON note_revisions(note_id);",
+        ),
     ])
 }
