@@ -9,6 +9,7 @@ use tauri::Manager;
 
 use crate::core::sync_channel::SyncSignalReceiver;
 use crate::services::attention_service::AttentionService;
+use crate::services::enrichment_service::EnrichmentService;
 use crate::services::sync_service::SyncService;
 
 pub mod clipboard;
@@ -34,6 +35,7 @@ pub fn init(
         app.state::<Arc<SyncService>>().inner().clone(),
         sync_receiver,
         app.state::<Arc<AttentionService>>().inner().clone(),
+        app.state::<Arc<EnrichmentService>>().inner().clone(),
     );
     Ok(())
 }

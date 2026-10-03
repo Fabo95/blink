@@ -1,7 +1,9 @@
 use tauri::{AppHandle, State};
 
 use crate::core::error::AppResult;
+use crate::core::models::EgressKind;
 use crate::services::ai_service::AiService;
+use crate::services::egress_service::{EgressService, AI_DESTINATION};
 use crate::services::policy_service::PolicyService;
 use crate::services::task_group_service::TaskGroupService;
 use crate::services::task_service::TaskService;
@@ -28,7 +30,12 @@ pub fn clear_ai_api_key(ai_service: State<'_, AiService>) -> AppResult<()> {
 
 /// Improve raw text with AI and return the cleaned-up result (no persistence).
 #[tauri::command]
-pub async fn improve_text(ai_service: State<'_, AiService>, text: String) -> AppResult<String> {
+pub async fn improve_text(
+    ai_service: State<'_, AiService>,
+    egress_service: State<'_, EgressService>,
+    text: String,
+) -> AppResult<String> {
+    egress_service.record(EgressKind::AiImprove, AI_DESTINATION, None, text.len())?;
     ai_service.improve(text).await
 }
 
@@ -38,10 +45,12 @@ pub async fn improve_text(ai_service: State<'_, AiService>, text: String) -> App
 pub async fn improve_note_text(
     ai_service: State<'_, AiService>,
     policy_service: State<'_, PolicyService>,
+    egress_service: State<'_, EgressService>,
     text: String,
     topic_id: Option<String>,
 ) -> AppResult<String> {
     policy_service.ensure_ai_allowed(topic_id.as_deref())?;
+    egress_service.record(EgressKind::AiImprove, AI_DESTINATION, None, text.len())?;
     ai_service.improve(text).await
 }
 
@@ -53,9 +62,16 @@ pub async fn generate_task_prompt(
     ai_service: State<'_, AiService>,
     task_service: State<'_, TaskService>,
     task_group_service: State<'_, TaskGroupService>,
+    egress_service: State<'_, EgressService>,
     id: String,
 ) -> AppResult<String> {
     let task = task_service.get(&id)?;
+    egress_service.record(
+        EgressKind::AiPrompt,
+        AI_DESTINATION,
+        None,
+        task.text.len() + task.raw_text.len(),
+    )?;
     let group_context = match task.task_group_id.as_deref() {
         Some(group_id) => task_group_service.get(group_id)?.and_then(|group| group.context),
         None => None,

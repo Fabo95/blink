@@ -2,11 +2,20 @@ import { Lightbulb, TriangleAlert } from 'lucide-react';
 import { ConvictionDots } from '@/components/ideas/ConvictionDots';
 import { Input } from '@/components/ui/input';
 import { PopoverContent } from '@/components/ui/popover';
+import type { Evidence } from '@/generated/Evidence';
 import type { ReviewView } from '@/hooks/useReview';
 import { shortAge } from '@/lib/notes';
 import { cn } from '@/lib/utils';
 
 const SCALE = [1, 2, 3, 4, 5];
+
+// What the review is weighed against: the evidence linked to this note so far.
+function evidenceLine({ supports, contradicts, related }: Evidence): string {
+  if (supports + contradicts + related === 0) {
+    return 'No evidence linked yet (press u on a source to link it).';
+  }
+  return `Evidence: ${supports} supporting, ${contradicts} contradicting, ${related} related.`;
+}
 
 /** The in-row review popover. Keys live in `useReview` and are hinted by the statusline:
  *  `⌘1`–`⌘5` conviction, `⌘↵` keep, `⌘p` promote, `⌘⌫` drop, `Esc` close. */
@@ -41,6 +50,8 @@ export function ReviewPopover({ review }: { review: ReviewView }) {
           </>
         )}
       </div>
+
+      <p className="mt-1.5 text-[11px] text-muted-foreground">{evidenceLine(note.evidence)}</p>
 
       <div className="mt-3">
         <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">

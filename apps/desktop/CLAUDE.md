@@ -82,7 +82,8 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   10 `effort`, 11 re-dirty for the readable replica, 12 `topics`, 13 `notes` + `notes_fts`
   (FTS5, external content, kept in step by triggers), 14 `note_revisions`, 15 note review
   (`notes.status` + `revisit_at` with a deterministic 14-day backfill, `note_reviews`,
-  `tasks.origin_note_id`).
+  `tasks.origin_note_id`), 16 evidence (`note_links`, note `title`/`excerpt`/`summary`/
+  `enrichment`, device-local `jobs` + `egress_events`, FTS rebuilt to cover title + summary).
   Repository tests run against `Db::open_in_memory()` (`#[cfg(test)]`): the real migrations
   and SQL, no keychain.
 - **Services & clients (Rust DI)**: business logic lives in `services/` as structs; each holds the
@@ -311,6 +312,20 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
     keep, `⌘p` promote, `⌘⌫` drop, `Esc` close. The Ideas tab shows the due count
     (`useDueNotes`, re-read on capture, sync, review, and every 15 min). Due dates compare via
     `julianday`, so timestamps with different offsets or precision still order correctly.
+  - **Evidence** (`LinkService`, `useLinkPicker`, `LinkPopover`): `u` links a note to another
+    as `supports` / `contradicts` / `related` (append-only `note_links`, own sync kind; a pair is
+    linked at most once). `Note.evidence` (incoming supports/contradicts, related on both ends)
+    is derived in `note_service::decorate`, which every list, the due queue, and exports use.
+  - **Source enrichment** (`EnrichmentService`, `platform/jobs/enrichment.rs`, `WebClient`): a
+    source with a link is queued in the device-local `jobs` table; the loop (every 10 s) fetches
+    the page (10 s timeout, 2 MB cap, system proxy), extracts title + text with regexes (pure,
+    tested), stores a DLP-filtered 2,000-char excerpt, and asks the AI for a 3-5 sentence
+    summary with the page fenced as untrusted data. Never fetched for confidential topics
+    (`skipped`, re-checked at run time); never summarized for private/local hosts. Failures
+    back off (1 min, 5 min, 30 min, 2 h) and end as `failed`; `g` retries.
+  - **Egress log** (`EgressService`, `EgressCard` on Home): every AI call (`improve_text`,
+    `improve_note_text`, `generate_task_prompt`, summaries) and page fetch writes kind,
+    destination host, and character count, never content. Device-local, never synced.
   - **Ideas page** (`IdeasPage` + `components/ideas/` + `useTopics`/`useNotes`/`useNoteEditor`/
     `useNoteHistory`/`useNoteSearch`): topic filter (`←→`, `n`/`r`/`⌫`, delete offers `⌘↵` keep
     notes vs `⌘⌫` delete notes), a "Due for review" section on top, then sections by type, `s` search, row keys `e` edit, `t` type,

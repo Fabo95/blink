@@ -50,6 +50,7 @@ pub enum RecordBody {
     Note(NoteBody),
     NoteRevision(NoteRevisionBody),
     NoteReview(NoteReviewBody),
+    NoteLink(NoteLinkBody),
 }
 
 /// Enum columns ride as their stored strings (`NoteType::as_str` etc.), the same as the
@@ -85,6 +86,28 @@ pub struct NoteBody {
     pub status: String,
     #[serde(default)]
     pub revisit_at: Option<String>,
+    /// Added with source enrichment; older bodies have none.
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub excerpt: Option<String>,
+    #[serde(default)]
+    pub summary: Option<String>,
+    #[serde(default = "default_enrichment")]
+    pub enrichment: String,
+}
+
+fn default_enrichment() -> String {
+    "none".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NoteLinkBody {
+    pub from_note_id: String,
+    pub to_note_id: String,
+    pub relation: String,
+    pub created_at: String,
+    pub deleted: bool,
 }
 
 fn default_note_status() -> String {

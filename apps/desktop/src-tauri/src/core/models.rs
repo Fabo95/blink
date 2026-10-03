@@ -347,6 +347,14 @@ pub struct Note {
     /// A hint derived from the history (promote or drop), computed in the core so the rule
     /// lives in one place.
     pub review_nudge: Option<ReviewNudge>,
+    /// Sources only: the fetched page's title, a short DLP-filtered excerpt, and an AI
+    /// summary (never for confidential topics or private hosts).
+    pub title: Option<String>,
+    pub excerpt: Option<String>,
+    pub summary: Option<String>,
+    pub enrichment: Enrichment,
+    /// How many notes point at this one as evidence. Computed from links, never stored.
+    pub evidence: Evidence,
     pub source: CaptureSource,
     pub created_at: String,
     pub updated_at: String,
@@ -402,6 +410,147 @@ pub struct NoteRevision {
     pub note_id: String,
     pub text: String,
     pub reason: RevisionReason,
+    pub created_at: String,
+}
+
+/// Where a source's background enrichment (page fetch + summary) stands.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub enum Enrichment {
+    /// Not a source with a link, so nothing to fetch.
+    #[default]
+    None,
+    Pending,
+    Done,
+    /// Gave up after repeated failures; `g` on the note retries.
+    Failed,
+    /// Not fetched on purpose: the note's topic is confidential.
+    Skipped,
+}
+
+impl Enrichment {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Pending => "pending",
+            Self::Done => "done",
+            Self::Failed => "failed",
+            Self::Skipped => "skipped",
+        }
+    }
+
+    pub fn from_stored(value: &str) -> Self {
+        match value {
+            "pending" => Self::Pending,
+            "done" => Self::Done,
+            "failed" => Self::Failed,
+            "skipped" => Self::Skipped,
+            _ => Self::None,
+        }
+    }
+}
+
+/// How one note bears on another: `from` supports, contradicts, or relates to `to`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub enum NoteRelation {
+    Supports,
+    Contradicts,
+    Related,
+}
+
+impl NoteRelation {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Supports => "supports",
+            Self::Contradicts => "contradicts",
+            Self::Related => "related",
+        }
+    }
+
+    pub fn from_stored(value: &str) -> Self {
+        match value {
+            "supports" => Self::Supports,
+            "contradicts" => Self::Contradicts,
+            _ => Self::Related,
+        }
+    }
+}
+
+/// A typed link between two notes. Append-only like reviews: removing one tombstones it.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct NoteLink {
+    pub id: String,
+    pub from_note_id: String,
+    pub to_note_id: String,
+    pub relation: NoteRelation,
+    pub created_at: String,
+}
+
+/// The evidence a note has collected: incoming `supports` / `contradicts` links, and
+/// `related` links in either direction.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct Evidence {
+    pub supports: u32,
+    pub contradicts: u32,
+    pub related: u32,
+}
+
+/// What kind of content left the device.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub enum EgressKind {
+    /// Text sent to the AI provider to improve it (task or note).
+    AiImprove,
+    /// A task's text sent to the AI provider to write a prompt.
+    AiPrompt,
+    /// A fetched page excerpt sent to the AI provider to summarize a source.
+    AiSummary,
+    /// A source's page fetched (a request to its host, nothing of yours sent).
+    PageFetch,
+}
+
+impl EgressKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::AiImprove => "aiImprove",
+            Self::AiPrompt => "aiPrompt",
+            Self::AiSummary => "aiSummary",
+            Self::PageFetch => "pageFetch",
+        }
+    }
+
+    pub fn from_stored(value: &str) -> Self {
+        match value {
+            "aiPrompt" => Self::AiPrompt,
+            "aiSummary" => Self::AiSummary,
+            "pageFetch" => Self::PageFetch,
+            _ => Self::AiImprove,
+        }
+    }
+}
+
+/// One record of something leaving the device: when, what kind, to where, and how much.
+/// Never the content itself. Device-local, never synced.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct EgressEvent {
+    pub id: String,
+    pub kind: EgressKind,
+    /// The host the request went to, e.g. `api.openai.com`.
+    pub destination: String,
+    pub note_id: Option<String>,
+    /// Characters of your content sent (0 for a page fetch).
+    #[ts(type = "number")]
+    pub bytes: i64,
     pub created_at: String,
 }
 

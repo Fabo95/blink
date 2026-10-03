@@ -10,9 +10,9 @@ use serde::Serialize;
 
 use crate::core::error::{AppError, AppResult};
 use crate::core::models::{ExportFormat, Note, NoteStatus, NoteType, Topic};
-use crate::repository::{NoteRepository, NoteReviewRepository, TopicRepository};
+use crate::repository::{NoteLinkRepository, NoteRepository, NoteReviewRepository, TopicRepository};
 use crate::services::policy_service::allows_bulk_export;
-use crate::services::review_service::with_reviews;
+use crate::services::note_service::decorate;
 use crate::services::security_service::SecurityService;
 
 /// A rendered export, ready to be written wherever the user picks.
@@ -24,6 +24,7 @@ pub struct Export {
 pub struct ExportService {
     note_repository: NoteRepository,
     note_review_repository: NoteReviewRepository,
+    note_link_repository: NoteLinkRepository,
     topic_repository: TopicRepository,
     security_service: SecurityService,
 }
@@ -32,12 +33,14 @@ impl ExportService {
     pub fn new(
         note_repository: NoteRepository,
         note_review_repository: NoteReviewRepository,
+        note_link_repository: NoteLinkRepository,
         topic_repository: TopicRepository,
         security_service: SecurityService,
     ) -> Self {
         Self {
             note_repository,
             note_review_repository,
+            note_link_repository,
             topic_repository,
             security_service,
         }
@@ -46,16 +49,14 @@ impl ExportService {
     /// Render one topic (`topic_id`) or everything exportable (`None`).
     pub fn render(&self, topic_id: Option<&str>, format: ExportFormat) -> AppResult<Export> {
         let topics = self.topic_repository.list()?;
-        let mut convictions = self.note_review_repository.convictions_by_note()?;
-        let notes: Vec<Note> = self
-            .note_repository
-            .list()?
-            .into_iter()
-            .map(|note| {
-                let history = convictions.remove(&note.id).unwrap_or_default();
-                self.sanitized(with_reviews(note, history))
-            })
-            .collect();
+        let notes: Vec<Note> = decorate(
+            self.note_repository.list()?,
+            self.note_review_repository.convictions_by_note()?,
+            &self.note_link_repository.evidence_by_note()?,
+        )
+        .into_iter()
+        .map(|note| self.sanitized(note))
+        .collect();
         let document = build_document(&topics, notes, topic_id)?;
 
         let scope = match topic_id {
@@ -84,8 +85,11 @@ impl ExportService {
     }
 
     fn sanitized(&self, mut note: Note) -> Note {
-        note.text = self.security_service.sanitize(&note.text).clean;
-        note.raw_text = self.security_service.sanitize(&note.raw_text).clean;
+        let clean = |text: &str| self.security_service.sanitize(text).clean;
+        note.text = clean(&note.text);
+        note.raw_text = clean(&note.raw_text);
+        note.excerpt = note.excerpt.as_deref().map(clean);
+        note.summary = note.summary.as_deref().map(clean);
         note
     }
 }
@@ -235,7 +239,7 @@ fn slug(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::models::{CaptureSource, Sensitivity, TopicStatus};
+    use crate::core::models::{CaptureSource, Enrichment, Evidence, Sensitivity, TopicStatus};
 
     fn topic(id: &str, name: &str, sensitivity: Sensitivity) -> Topic {
         Topic {
@@ -263,6 +267,11 @@ mod tests {
             revisit_at: None,
             conviction_history: Vec::new(),
             review_nudge: None,
+            title: None,
+            excerpt: None,
+            summary: None,
+            enrichment: Enrichment::None,
+            evidence: Evidence::default(),
             source: CaptureSource {
                 app_id: "manual".to_string(),
                 app_name: "Manual".to_string(),

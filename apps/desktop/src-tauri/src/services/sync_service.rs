@@ -16,8 +16,8 @@ use crate::core::models::RevisionReason;
 use crate::core::sync_channel::SyncSignalSender;
 use crate::core::wire::{RecordBody, SyncPacket, SyncRecord};
 use crate::repository::{
-    NoteRepository, NoteReviewRepository, NoteRevisionRepository, SyncStateRepository,
-    TaskGroupRepository, TaskRepository, TopicRepository,
+    NoteLinkRepository, NoteRepository, NoteReviewRepository, NoteRevisionRepository,
+    SyncStateRepository, TaskGroupRepository, TaskRepository, TopicRepository,
 };
 use crate::services::hlc_service::HlcService;
 use crate::services::session_token_service::SessionTokenService;
@@ -33,6 +33,7 @@ pub struct SyncService {
     note_repository: NoteRepository,
     note_revision_repository: NoteRevisionRepository,
     note_review_repository: NoteReviewRepository,
+    note_link_repository: NoteLinkRepository,
     sync_state_repository: SyncStateRepository,
     // Stamps the conflict revisions a pull creates, so they push like any local write.
     hlc_service: Arc<HlcService>,
@@ -50,6 +51,7 @@ impl SyncService {
         note_repository: NoteRepository,
         note_revision_repository: NoteRevisionRepository,
         note_review_repository: NoteReviewRepository,
+        note_link_repository: NoteLinkRepository,
         sync_state_repository: SyncStateRepository,
         hlc_service: Arc<HlcService>,
         sync_signal: SyncSignalSender,
@@ -63,6 +65,7 @@ impl SyncService {
             note_repository,
             note_revision_repository,
             note_review_repository,
+            note_link_repository,
             sync_state_repository,
             hlc_service,
             sync_signal,
@@ -108,6 +111,7 @@ impl SyncService {
         let note_changes = self.note_repository.list_dirty()?;
         let revision_changes = self.note_revision_repository.list_dirty()?;
         let review_changes = self.note_review_repository.list_dirty()?;
+        let link_changes = self.note_link_repository.list_dirty()?;
         let packets: Vec<SyncPacket> = task_changes
             .iter()
             .chain(group_changes.iter())
@@ -115,6 +119,7 @@ impl SyncService {
             .chain(note_changes.iter())
             .chain(revision_changes.iter())
             .chain(review_changes.iter())
+            .chain(link_changes.iter())
             .map(|change| SyncPacket {
                 id: change.id.clone(),
                 clock: change.clock.clone(),
@@ -135,6 +140,7 @@ impl SyncService {
         self.note_repository.clear_dirty(&note_changes)?;
         self.note_revision_repository.clear_dirty(&revision_changes)?;
         self.note_review_repository.clear_dirty(&review_changes)?;
+        self.note_link_repository.clear_dirty(&link_changes)?;
         Ok(packets.len())
     }
 
@@ -168,6 +174,9 @@ impl SyncService {
                     {
                         self.keep_conflict(&record.id, &lost_text)?;
                     }
+                }
+                RecordBody::NoteLink(link) => {
+                    self.note_link_repository.merge(&record.id, &record.clock, link)?;
                 }
                 RecordBody::NoteReview(review) => {
                     self.note_review_repository.merge(&record.id, &record.clock, review)?;

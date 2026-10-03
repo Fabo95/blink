@@ -11,7 +11,9 @@ use serde_rusqlite::{from_rows, to_params_named};
 use uuid::Uuid;
 
 use crate::core::error::{AppError, AppResult};
-use crate::core::models::{CaptureSource, NewNote, Note, NoteStatus, NoteType};
+use crate::core::models::{
+    CaptureSource, Enrichment, Evidence, NewNote, Note, NoteStatus, NoteType,
+};
 use crate::core::wire::{Clock, LocalChange, NoteBody, RecordBody};
 
 use super::db::{serde_err, store_err, Db};
@@ -79,6 +81,11 @@ impl NoteRepository {
             revisit_at,
             conviction_history: Vec::new(),
             review_nudge: None,
+            title: None,
+            excerpt: None,
+            summary: None,
+            enrichment: Enrichment::None,
+            evidence: Evidence::default(),
             source: new.source,
             created_at: now.clone(),
             updated_at: now,
@@ -87,11 +94,11 @@ impl NoteRepository {
         let conn = self.db.lock()?;
         conn.execute(
             "INSERT INTO notes (id, note_type, text, raw_text, link, topic_id, improved, \
-             conflict, status, revisit_at, app_id, app_name, window_title, captured_at, \
-             created_at, updated_at) \
+             conflict, status, revisit_at, title, excerpt, summary, enrichment, app_id, \
+             app_name, window_title, captured_at, created_at, updated_at) \
              VALUES (:id, :note_type, :text, :raw_text, :link, :topic_id, :improved, \
-             :conflict, :status, :revisit_at, :app_id, :app_name, :window_title, :captured_at, \
-             :created_at, :updated_at)",
+             :conflict, :status, :revisit_at, :title, :excerpt, :summary, :enrichment, :app_id, \
+             :app_name, :window_title, :captured_at, :created_at, :updated_at)",
             params.to_slice().as_slice(),
         )
         .map_err(store_err)?;
@@ -170,6 +177,34 @@ impl NoteRepository {
         )
         .map_err(store_err)?;
         fetch_one(&conn, id)
+    }
+
+    /// Set a source's enrichment state. Title, excerpt, and summary are written only when
+    /// given (`Some`), so marking a note pending or failed keeps what an earlier fetch found.
+    pub fn set_enrichment(
+        &self,
+        id: &str,
+        enrichment: Enrichment,
+        title: Option<&str>,
+        excerpt: Option<&str>,
+        summary: Option<&str>,
+    ) -> AppResult<()> {
+        let conn = self.db.lock()?;
+        conn.execute(
+            "UPDATE notes SET enrichment = ?1, title = COALESCE(?2, title), \
+             excerpt = COALESCE(?3, excerpt), summary = COALESCE(?4, summary), \
+             updated_at = ?5 WHERE id = ?6",
+            params![
+                enrichment.as_str(),
+                title,
+                excerpt,
+                summary,
+                Utc::now().to_rfc3339(),
+                id
+            ],
+        )
+        .map_err(store_err)?;
+        Ok(())
     }
 
     /// Ideas and thoughts that are due for review at `now`, most overdue first. Dropped notes
@@ -292,6 +327,10 @@ impl NoteRepository {
                         deleted: row.get("deleted")?,
                         status: row.get("status")?,
                         revisit_at: row.get("revisit_at")?,
+                        title: row.get("title")?,
+                        excerpt: row.get("excerpt")?,
+                        summary: row.get("summary")?,
+                        enrichment: row.get("enrichment")?,
                     }),
                 })
             })
@@ -335,9 +374,10 @@ impl NoteRepository {
         conn.execute(
             "INSERT INTO notes (id, note_type, text, raw_text, link, topic_id, improved, \
              app_id, app_name, window_title, captured_at, created_at, updated_at, deleted, \
-             hlc_physical, hlc_counter, hlc_node_id, status, revisit_at, dirty) \
+             hlc_physical, hlc_counter, hlc_node_id, status, revisit_at, title, excerpt, summary, \
+             enrichment, dirty) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, \
-             ?17, ?18, ?19, 0) \
+             ?17, ?18, ?19, ?20, ?21, ?22, ?23, 0) \
              ON CONFLICT(id) DO UPDATE SET \
              note_type = excluded.note_type, text = excluded.text, \
              raw_text = excluded.raw_text, link = excluded.link, topic_id = excluded.topic_id, \
@@ -347,7 +387,9 @@ impl NoteRepository {
              updated_at = excluded.updated_at, deleted = excluded.deleted, \
              hlc_physical = excluded.hlc_physical, hlc_counter = excluded.hlc_counter, \
              hlc_node_id = excluded.hlc_node_id, status = excluded.status, \
-             revisit_at = excluded.revisit_at, dirty = 0 \
+             revisit_at = excluded.revisit_at, title = excluded.title, \
+             excerpt = excluded.excerpt, summary = excluded.summary, \
+             enrichment = excluded.enrichment, dirty = 0 \
              WHERE (notes.hlc_physical, notes.hlc_counter, notes.hlc_node_id) \
              < (excluded.hlc_physical, excluded.hlc_counter, excluded.hlc_node_id)",
             params![
@@ -369,7 +411,11 @@ impl NoteRepository {
                 clock.counter,
                 clock.node_id,
                 body.status,
-                body.revisit_at
+                body.revisit_at,
+                body.title,
+                body.excerpt,
+                body.summary,
+                body.enrichment
             ],
         )
         .map_err(store_err)?;
@@ -454,6 +500,10 @@ struct NoteRow {
     conflict: bool,
     status: String,
     revisit_at: Option<String>,
+    title: Option<String>,
+    excerpt: Option<String>,
+    summary: Option<String>,
+    enrichment: String,
     app_id: String,
     app_name: String,
     window_title: String,
@@ -475,6 +525,10 @@ impl From<&Note> for NoteRow {
             conflict: note.conflict,
             status: note.status.as_str().to_string(),
             revisit_at: note.revisit_at.clone(),
+            title: note.title.clone(),
+            excerpt: note.excerpt.clone(),
+            summary: note.summary.clone(),
+            enrichment: note.enrichment.as_str().to_string(),
             app_id: note.source.app_id.clone(),
             app_name: note.source.app_name.clone(),
             window_title: note.source.window_title.clone(),
@@ -498,9 +552,14 @@ impl From<NoteRow> for Note {
             conflict: row.conflict,
             status: NoteStatus::from_stored(&row.status),
             revisit_at: row.revisit_at,
-            // Reviews live in their own table; the services fill these in.
+            // Reviews and links live in their own tables; the services fill these in.
             conviction_history: Vec::new(),
             review_nudge: None,
+            title: row.title,
+            excerpt: row.excerpt,
+            summary: row.summary,
+            enrichment: Enrichment::from_stored(&row.enrichment),
+            evidence: Evidence::default(),
             source: CaptureSource {
                 app_id: row.app_id,
                 app_name: row.app_name,
@@ -555,6 +614,10 @@ mod tests {
             deleted,
             status: "open".to_string(),
             revisit_at: None,
+            title: None,
+            excerpt: None,
+            summary: None,
+            enrichment: "none".to_string(),
         }
     }
 
@@ -714,5 +777,30 @@ mod tests {
             )
             .unwrap();
         assert_eq!(backfilled.as_deref(), Some("2026-10-17T11:51:52Z"));
+    }
+
+    #[test]
+    fn search_covers_a_sources_title_and_summary() {
+        let notes = repository();
+        let mut source = new_note("stripe.com/blog/agentic", None);
+        source.note_type = NoteType::Source;
+        let note = notes.insert_now(source).unwrap();
+        notes
+            .set_enrichment(
+                &note.id,
+                Enrichment::Done,
+                Some("Agentic commerce"),
+                Some("excerpt"),
+                Some("Delegated payment tokens let agents pay."),
+            )
+            .unwrap();
+        assert_eq!(notes.search("delegated tokens").unwrap().len(), 1);
+        assert_eq!(notes.search("agentic commerce").unwrap().len(), 1);
+
+        // Marking it pending again keeps what the earlier fetch found.
+        notes.set_enrichment(&note.id, Enrichment::Pending, None, None, None).unwrap();
+        let kept = notes.get(&note.id).unwrap();
+        assert_eq!(kept.title.as_deref(), Some("Agentic commerce"));
+        assert_eq!(kept.enrichment, Enrichment::Pending);
     }
 }

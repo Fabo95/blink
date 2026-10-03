@@ -14,8 +14,9 @@ use crate::core::models::{
     ReviewOutcome,
 };
 use crate::core::sync_channel::SyncSignalSender;
-use crate::repository::{NoteRepository, NoteReviewRepository, TaskRepository};
+use crate::repository::{NoteLinkRepository, NoteRepository, NoteReviewRepository, TaskRepository};
 use crate::services::hlc_service::HlcService;
+use crate::services::note_service::decorate;
 
 /// A new idea or thought first comes back after this many days.
 const FIRST_REVISIT_DAYS: i64 = 14;
@@ -23,6 +24,8 @@ const FIRST_REVISIT_DAYS: i64 = 14;
 pub struct ReviewService {
     note_repository: NoteRepository,
     note_review_repository: NoteReviewRepository,
+    // Read-only: due notes show their evidence like every other list.
+    note_link_repository: NoteLinkRepository,
     // Promoting a note creates a task, so the review service reaches the task repository
     // (like TaskGroupService reaching tasks when it un-groups them).
     task_repository: TaskRepository,
@@ -34,6 +37,7 @@ impl ReviewService {
     pub fn new(
         note_repository: NoteRepository,
         note_review_repository: NoteReviewRepository,
+        note_link_repository: NoteLinkRepository,
         task_repository: TaskRepository,
         hlc_service: Arc<HlcService>,
         sync_signal: SyncSignalSender,
@@ -41,6 +45,7 @@ impl ReviewService {
         Self {
             note_repository,
             note_review_repository,
+            note_link_repository,
             task_repository,
             hlc_service,
             sync_signal,
@@ -50,14 +55,11 @@ impl ReviewService {
     /// Notes due for review now, most overdue first, with their conviction history.
     pub fn due(&self) -> AppResult<Vec<Note>> {
         let due = self.note_repository.list_due(&Utc::now().to_rfc3339())?;
-        let mut convictions = self.note_review_repository.convictions_by_note()?;
-        Ok(due
-            .into_iter()
-            .map(|note| {
-                let history = convictions.remove(&note.id).unwrap_or_default();
-                with_reviews(note, history)
-            })
-            .collect())
+        Ok(decorate(
+            due,
+            self.note_review_repository.convictions_by_note()?,
+            &self.note_link_repository.evidence_by_note()?,
+        ))
     }
 
     pub fn reviews(&self, note_id: &str) -> AppResult<Vec<NoteReview>> {
@@ -74,15 +76,23 @@ impl ReviewService {
         decision: ReviewDecision,
     ) -> AppResult<ReviewOutcome> {
         if !(1..=5).contains(&conviction) {
-            return Err(AppError::Store("conviction must be between 1 and 5".to_string()));
+            return Err(AppError::Store(
+                "conviction must be between 1 and 5".to_string(),
+            ));
         }
         let note = self.note_repository.get(note_id)?;
         let comment = comment.map(str::trim).filter(|c| !c.is_empty());
 
-        let review = self.note_review_repository.insert(note_id, conviction, comment)?;
+        let review = self
+            .note_review_repository
+            .insert(note_id, conviction, comment)?;
         let hlc = self.hlc_service.next()?;
-        self.note_review_repository
-            .record_change(&review.id, hlc.physical, hlc.counter, &hlc.node_id)?;
+        self.note_review_repository.record_change(
+            &review.id,
+            hlc.physical,
+            hlc.counter,
+            &hlc.node_id,
+        )?;
 
         let now = Utc::now();
         let next = next_revisit(conviction, now).map(|at| at.to_rfc3339());
@@ -102,24 +112,25 @@ impl ReviewService {
             ReviewDecision::Promote => {
                 let task = self.task_repository.insert(promoted_task(&note, now))?;
                 let hlc = self.hlc_service.next()?;
-                self.task_repository
-                    .record_change(&task.id, hlc.physical, hlc.counter, &hlc.node_id)?;
+                self.task_repository.record_change(
+                    &task.id,
+                    hlc.physical,
+                    hlc.counter,
+                    &hlc.node_id,
+                )?;
                 Some(task)
             }
             _ => None,
         };
 
         self.sync_signal.send();
-        let history = self
-            .note_review_repository
-            .list_for_note(note_id)?
-            .into_iter()
-            .map(|r| r.conviction)
-            .collect();
-        Ok(ReviewOutcome {
-            note: with_reviews(updated, history),
-            task,
-        })
+        let note = decorate(
+            vec![updated],
+            self.note_review_repository.convictions_by_note()?,
+            &self.note_link_repository.evidence_by_note()?,
+        )
+        .remove(0);
+        Ok(ReviewOutcome { note, task })
     }
 }
 
@@ -220,7 +231,10 @@ mod tests {
 
     #[test]
     fn three_strong_reviews_in_a_row_suggest_promoting() {
-        assert_eq!(nudge(&[2, 4, 5, 4], NoteStatus::Open), Some(ReviewNudge::Promote));
+        assert_eq!(
+            nudge(&[2, 4, 5, 4], NoteStatus::Open),
+            Some(ReviewNudge::Promote)
+        );
         assert_eq!(nudge(&[4, 5], NoteStatus::Open), None);
         assert_eq!(nudge(&[5, 5, 5], NoteStatus::Promoted), None);
     }

@@ -3,6 +3,8 @@ import type { AuthUser } from '@/generated/AuthUser';
 import type { CaptureDraft } from '@/generated/CaptureDraft';
 import type { CaptureSource } from '@/generated/CaptureSource';
 import type { EditorOption } from '@/generated/EditorOption';
+import type { EgressEvent } from '@/generated/EgressEvent';
+import type { Evidence } from '@/generated/Evidence';
 import type { ExportFormat } from '@/generated/ExportFormat';
 import type { ManagedRepo } from '@/generated/ManagedRepo';
 import type { NewNote } from '@/generated/NewNote';
@@ -10,6 +12,8 @@ import type { NewTask } from '@/generated/NewTask';
 import type { NewTaskGroup } from '@/generated/NewTaskGroup';
 import type { NewTopic } from '@/generated/NewTopic';
 import type { Note } from '@/generated/Note';
+import type { NoteLink } from '@/generated/NoteLink';
+import type { NoteRelation } from '@/generated/NoteRelation';
 import type { NoteReview } from '@/generated/NoteReview';
 import type { NoteRevision } from '@/generated/NoteRevision';
 import type { NoteStatus } from '@/generated/NoteStatus';
@@ -166,6 +170,16 @@ export const api = {
   noteHistory: (id: string) => invoke<NoteRevision[]>('note_history', { id }),
   restoreNoteRevision: (noteId: string, revisionId: string) =>
     invoke<Note>('restore_note_revision', { noteId, revisionId }),
+  /** Fetch and summarize a source again (after a failure, or to refresh it). */
+  retryEnrichment: (id: string) => invoke<Note>('retry_enrichment', { id }),
+  /** Every link touching a note, in either direction. */
+  listNoteLinks: (noteId: string) => invoke<NoteLink[]>('list_note_links', { noteId }),
+  /** Link two notes: `fromNoteId` supports, contradicts, or relates to `toNoteId`. */
+  linkNotes: (fromNoteId: string, toNoteId: string, relation: NoteRelation) =>
+    invoke<NoteLink>('link_notes', { fromNoteId, toNoteId, relation }),
+  unlinkNotes: (id: string) => invoke<void>('unlink_notes', { id }),
+  /** What left this Mac recently (AI calls, page fetches), newest first. Never content. */
+  listEgressEvents: () => invoke<EgressEvent[]>('list_egress_events'),
   /** Ideas and thoughts due for review now, most overdue first. */
   listDueNotes: () => invoke<Note[]>('list_due_notes'),
   /** Every review a note was given, oldest first. */
@@ -449,9 +463,41 @@ function mockNudge(history: number[], status: NoteStatus): ReviewNudge | null {
   return null;
 }
 
+const mockNoteLinks: NoteLink[] = [];
+const mockEgress: EgressEvent[] = [];
+
+function mockEvidence(noteId: string): Evidence {
+  const evidence: Evidence = { supports: 0, contradicts: 0, related: 0 };
+  for (const link of mockNoteLinks) {
+    if (link.toNoteId === noteId && link.relation === 'supports') evidence.supports += 1;
+    if (link.toNoteId === noteId && link.relation === 'contradicts') evidence.contradicts += 1;
+    if (link.relation === 'related' && (link.toNoteId === noteId || link.fromNoteId === noteId)) {
+      evidence.related += 1;
+    }
+  }
+  return evidence;
+}
+
+function mockEgressEvent(kind: EgressEvent['kind'], destination: string, bytes: number) {
+  mockEgress.unshift({
+    id: crypto.randomUUID(),
+    kind,
+    destination,
+    noteId: null,
+    bytes,
+    createdAt: new Date().toISOString(),
+  });
+}
+
+// Mirrors the core's `decorate`: conviction history, nudge, and evidence are derived.
 function mockWithReviews(note: Note): Note {
   const history = mockNoteReviews.filter((r) => r.noteId === note.id).map((r) => r.conviction);
-  return { ...note, convictionHistory: history, reviewNudge: mockNudge(history, note.status) };
+  return {
+    ...note,
+    convictionHistory: history,
+    reviewNudge: mockNudge(history, note.status),
+    evidence: mockEvidence(note.id),
+  };
 }
 
 function seedMockNotes(): Note[] {
@@ -477,6 +523,11 @@ function seedMockNotes(): Note[] {
     revisitAt: mockFirstRevisit(noteType, Date.now() - age * DAY_MS),
     convictionHistory: [],
     reviewNudge: null,
+    title: null,
+    excerpt: null,
+    summary: null,
+    enrichment: noteType === 'source' && link ? 'done' : 'none',
+    evidence: { supports: 0, contradicts: 0, related: 0 },
     source: { appId: appName.toLowerCase(), appName, windowTitle: '', capturedAt: daysAgo(age) },
     createdAt: daysAgo(age),
     updatedAt: daysAgo(age),
@@ -535,19 +586,67 @@ function seedMockNotes(): Note[] {
   reviewed(feed.id, [3, 4], 20);
   reviewed(bottleneck.id, [4, 4, 5], 25);
   reviewed(dropped.id, [2, 1], 30);
+
+  // Sources in every enrichment state, and links so the evidence chips show.
+  const stripe = note(
+    'source',
+    'Stripe agentic payments: delegated payment tokens for AI agents',
+    commerce ?? null,
+    4,
+    'https://stripe.com/blog/agentic-commerce',
+    'Chrome',
+  );
+  stripe.title = 'Introducing agentic commerce';
+  stripe.excerpt = 'Agents can now pay on behalf of users with scoped, revocable tokens…';
+  stripe.summary =
+    'Stripe describes delegated payment tokens that let AI agents pay on a user’s behalf. ' +
+    'Tokens are scoped to a merchant and amount and can be revoked at any time. ' +
+    'The post positions this as the payment layer for agent-led shopping.';
+  const failed = note(
+    'source',
+    'Survey: diners would let an assistant book for them',
+    commerce ?? null,
+    3,
+    'https://example.org/survey-2026',
+    'Safari',
+  );
+  failed.enrichment = 'failed';
+  const confidentialSource = note(
+    'source',
+    'Board deck, Q3 numbers',
+    board ?? null,
+    1,
+    'https://docs.internal/board-q3',
+  );
+  confidentialSource.enrichment = 'skipped';
+  const liability = note(
+    'thought',
+    'Who is liable when an agent books the wrong table?',
+    commerce ?? null,
+    7,
+  );
+  const link = (from: Note, to: Note, relation: NoteRelation) =>
+    mockNoteLinks.push({
+      id: crypto.randomUUID(),
+      fromNoteId: from.id,
+      toNoteId: to.id,
+      relation,
+      createdAt: daysAgo(2),
+    });
+  link(stripe, feed, 'supports');
+  link(failed, feed, 'supports');
+  link(liability, feed, 'contradicts');
+  mockEgressEvent('pageFetch', 'stripe.com', 0);
+  mockEgressEvent('aiSummary', 'api.openai.com', 2140);
+  mockEgressEvent('aiImprove', 'api.openai.com', 182);
   return [
     feed,
     conflicted,
     dropped,
-    note('thought', 'Who is liable when an agent books the wrong table?', commerce ?? null, 7),
-    note(
-      'source',
-      'Stripe agentic payments: delegated payment tokens for AI agents',
-      commerce ?? null,
-      4,
-      'https://stripe.com/blog/agentic-commerce',
-      'Chrome',
-    ),
+    liability,
+    stripe,
+    failed,
+    confidentialSource,
     bottleneck,
     note('idea', 'Spin the vertical into its own company', board ?? null, 9),
     note('thought', 'Keep a pain log for two weeks', null, 2),
@@ -857,6 +956,52 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
         .sort((a, b) => Date.parse(a.revisitAt ?? '') - Date.parse(b.revisitAt ?? ''))
         .map(mockWithReviews) as T;
     }
+    case 'retry_enrichment': {
+      const note = mockNotes.find((n) => n.id === args?.id);
+      if (!note) throw new Error('note not found');
+      if (note.noteType !== 'source' || !note.link) {
+        throw new Error('only a source with a link can be fetched');
+      }
+      // No network in the browser: pretend the fetch worked after a moment.
+      note.enrichment = 'pending';
+      setTimeout(() => {
+        note.enrichment = 'done';
+        note.title = note.title ?? 'Fetched page title';
+      }, 1500);
+      return mockWithReviews(note) as T;
+    }
+    case 'list_note_links':
+      return mockNoteLinks.filter(
+        (l) => l.fromNoteId === args?.noteId || l.toNoteId === args?.noteId,
+      ) as T;
+    case 'link_notes': {
+      const from = String(args?.fromNoteId ?? '');
+      const to = String(args?.toNoteId ?? '');
+      if (from === to) throw new Error("a note can't be linked to itself");
+      const exists = mockNoteLinks.some(
+        (l) =>
+          (l.fromNoteId === from && l.toNoteId === to) ||
+          (l.fromNoteId === to && l.toNoteId === from),
+      );
+      if (exists) throw new Error('these notes are already linked');
+      const relation = args?.relation;
+      const created: NoteLink = {
+        id: crypto.randomUUID(),
+        fromNoteId: from,
+        toNoteId: to,
+        relation: relation === 'supports' || relation === 'contradicts' ? relation : 'related',
+        createdAt: new Date().toISOString(),
+      };
+      mockNoteLinks.push(created);
+      return created as T;
+    }
+    case 'unlink_notes': {
+      const idx = mockNoteLinks.findIndex((l) => l.id === args?.id);
+      if (idx >= 0) mockNoteLinks.splice(idx, 1);
+      return undefined as T;
+    }
+    case 'list_egress_events':
+      return [...mockEgress] as T;
     case 'list_note_reviews':
       return mockNoteReviews.filter((r) => r.noteId === args?.noteId) as T;
     case 'review_note': {
@@ -939,6 +1084,11 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
         revisitAt: mockFirstRevisit(input.noteType, Date.now()),
         convictionHistory: [],
         reviewNudge: null,
+        title: null,
+        excerpt: null,
+        summary: null,
+        enrichment: input.noteType === 'source' && input.link ? 'pending' : 'none',
+        evidence: { supports: 0, contradicts: 0, related: 0 },
         source: input.source,
         createdAt: now,
         updatedAt: now,
@@ -994,6 +1144,7 @@ async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
       if (topic?.sensitivity === 'confidential') {
         throw new Error('AI is disabled for confidential topics');
       }
+      mockEgressEvent('aiImprove', 'api.openai.com', String(args?.text ?? '').length);
       return String(args?.text ?? '') as T;
     }
     case 'export_notes': {

@@ -2,7 +2,10 @@
 //! facade, which shares the connection across one entity repository per table.
 
 mod db;
+mod egress_repository;
+mod job_repository;
 mod migrations;
+mod note_link_repository;
 mod note_repository;
 mod note_review_repository;
 mod note_revision_repository;
@@ -15,6 +18,9 @@ mod topic_repository;
 use std::sync::Arc;
 
 pub use db::Db;
+pub use egress_repository::EgressRepository;
+pub use job_repository::{Job, JobRepository};
+pub use note_link_repository::NoteLinkRepository;
 pub use note_repository::{NotePatch, NoteRepository};
 pub use note_review_repository::NoteReviewRepository;
 pub use note_revision_repository::NoteRevisionRepository;
@@ -33,6 +39,9 @@ pub struct Repository {
     pub notes: NoteRepository,
     pub note_revisions: NoteRevisionRepository,
     pub note_reviews: NoteReviewRepository,
+    pub note_links: NoteLinkRepository,
+    pub jobs: JobRepository,
+    pub egress: EgressRepository,
     pub settings: SettingsRepository,
     pub sync_state: SyncStateRepository,
 }
@@ -46,6 +55,9 @@ impl Repository {
             notes: NoteRepository::new(db.clone()),
             note_revisions: NoteRevisionRepository::new(db.clone()),
             note_reviews: NoteReviewRepository::new(db.clone()),
+            note_links: NoteLinkRepository::new(db.clone()),
+            jobs: JobRepository::new(db.clone()),
+            egress: EgressRepository::new(db.clone()),
             settings: SettingsRepository::new(db.clone()),
             sync_state: SyncStateRepository::new(db.clone()),
         }

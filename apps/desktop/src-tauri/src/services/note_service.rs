@@ -2,16 +2,24 @@
 //! [`NoteRevisionRepository`]: every text edit first keeps the previous text as a revision,
 //! and every mutation is stamped through [`HlcService`] so it syncs.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::Utc;
 
 use crate::core::error::{AppError, AppResult};
-use crate::core::models::{NewNote, Note, NoteRevision, NoteStatus, RevisionReason};
+use crate::core::models::{
+    Enrichment, Evidence, NewNote, Note, NoteRevision, NoteStatus, NoteType, RevisionReason,
+};
 use crate::core::sync_channel::SyncSignalSender;
-use crate::repository::{NoteRepository, NoteReviewRepository, NoteRevisionRepository};
+use crate::repository::{
+    JobRepository, NoteLinkRepository, NoteRepository, NoteReviewRepository, NoteRevisionRepository,
+};
 use crate::services::hlc_service::HlcService;
 use crate::services::review_service::{first_revisit, with_reviews};
+
+/// The job kind for a source's background page fetch + summary.
+pub const ENRICH_JOB: &str = "enrich";
 
 pub use crate::repository::NotePatch;
 
@@ -19,15 +27,21 @@ pub struct NoteService {
     note_repository: NoteRepository,
     note_revision_repository: NoteRevisionRepository,
     note_review_repository: NoteReviewRepository,
+    note_link_repository: NoteLinkRepository,
+    // Saving a source with a link queues its background enrichment.
+    job_repository: JobRepository,
     hlc_service: Arc<HlcService>,
     sync_signal: SyncSignalSender,
 }
 
 impl NoteService {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         note_repository: NoteRepository,
         note_revision_repository: NoteRevisionRepository,
         note_review_repository: NoteReviewRepository,
+        note_link_repository: NoteLinkRepository,
+        job_repository: JobRepository,
         hlc_service: Arc<HlcService>,
         sync_signal: SyncSignalSender,
     ) -> Self {
@@ -35,26 +49,29 @@ impl NoteService {
             note_repository,
             note_revision_repository,
             note_review_repository,
+            note_link_repository,
+            job_repository,
             hlc_service,
             sync_signal,
         }
     }
 
     pub fn list(&self) -> AppResult<Vec<Note>> {
-        self.attach_reviews(self.note_repository.list()?)
+        self.decorate(self.note_repository.list()?)
     }
 
     pub fn search(&self, query: &str) -> AppResult<Vec<Note>> {
-        self.attach_reviews(self.note_repository.search(query)?)
+        self.decorate(self.note_repository.search(query)?)
     }
 
     /// Save a captured note and schedule its first review (ideas and thoughts only).
     pub fn save(&self, new: NewNote) -> AppResult<Note> {
         let revisit_at = first_revisit(new.note_type, Utc::now()).map(|at| at.to_rfc3339());
         let note = self.note_repository.insert(new, revisit_at)?;
+        self.queue_enrichment_if_needed(&note)?;
         self.stamp_note(&note.id)?;
         self.sync_signal.send();
-        Ok(note)
+        self.note_repository.get(&note.id)
     }
 
     /// Apply a patch. A text change keeps the previous text as an `edit` revision first, so
@@ -67,6 +84,7 @@ impl NoteService {
             }
         }
         let type_changed = patch.note_type.is_some();
+        let link_changed = patch.link.is_some();
         let mut note = self.note_repository.update(id, patch)?;
         // A source turned into an idea or thought starts its review cycle now.
         if type_changed && note.revisit_at.is_none() && note.status == NoteStatus::Open {
@@ -78,22 +96,49 @@ impl NoteService {
                 )?;
             }
         }
+        // A new link (or a note that just became a source) needs a fresh fetch.
+        if type_changed || link_changed {
+            self.queue_enrichment_if_needed(&note)?;
+        }
         self.stamp_note(id)?;
         self.sync_signal.send();
-        let history = self
-            .note_review_repository
-            .list_for_note(id)?
-            .into_iter()
-            .map(|r| r.conviction)
-            .collect();
-        Ok(with_reviews(note, history))
+        let note = self.note_repository.get(id)?;
+        Ok(self.decorate(vec![note])?.remove(0))
     }
 
-    /// Tombstone a note with its revisions and reviews.
+    /// Fetch and summarize a source again (after a failure, or to refresh it).
+    pub fn request_enrichment(&self, id: &str) -> AppResult<Note> {
+        let note = self.note_repository.get(id)?;
+        if !self.queue_enrichment_if_needed(&note)? {
+            return Err(AppError::Store(
+                "only a source with a link can be fetched".to_string(),
+            ));
+        }
+        self.stamp_note(id)?;
+        self.sync_signal.send();
+        let note = self.note_repository.get(id)?;
+        Ok(self.decorate(vec![note])?.remove(0))
+    }
+
+    /// Queue the background fetch for a source with a link and mark it pending. The job
+    /// itself re-checks the topic's sensitivity when it runs. Returns whether it queued.
+    fn queue_enrichment_if_needed(&self, note: &Note) -> AppResult<bool> {
+        if note.note_type != NoteType::Source || note.link.is_none() {
+            return Ok(false);
+        }
+        self.job_repository
+            .enqueue(ENRICH_JOB, &note.id, &Utc::now().to_rfc3339())?;
+        self.note_repository
+            .set_enrichment(&note.id, Enrichment::Pending, None, None, None)?;
+        Ok(true)
+    }
+
+    /// Tombstone a note with its revisions, reviews, and links.
     pub fn delete(&self, id: &str) -> AppResult<()> {
         self.note_repository.delete(id)?;
         let revision_ids = self.note_revision_repository.delete_for_note(id)?;
         let review_ids = self.note_review_repository.delete_for_note(id)?;
+        let link_ids = self.note_link_repository.delete_for_note(id)?;
         let hlc = self.hlc_service.next()?;
         self.note_repository
             .record_change(id, hlc.physical, hlc.counter, &hlc.node_id)?;
@@ -108,6 +153,14 @@ impl NoteService {
         for review_id in &review_ids {
             self.note_review_repository.record_change(
                 review_id,
+                hlc.physical,
+                hlc.counter,
+                &hlc.node_id,
+            )?;
+        }
+        for link_id in &link_ids {
+            self.note_link_repository.record_change(
+                link_id,
                 hlc.physical,
                 hlc.counter,
                 &hlc.node_id,
@@ -153,15 +206,12 @@ impl NoteService {
         )
     }
 
-    fn attach_reviews(&self, notes: Vec<Note>) -> AppResult<Vec<Note>> {
-        let mut convictions = self.note_review_repository.convictions_by_note()?;
-        Ok(notes
-            .into_iter()
-            .map(|note| {
-                let history = convictions.remove(&note.id).unwrap_or_default();
-                with_reviews(note, history)
-            })
-            .collect())
+    fn decorate(&self, notes: Vec<Note>) -> AppResult<Vec<Note>> {
+        Ok(decorate(
+            notes,
+            self.note_review_repository.convictions_by_note()?,
+            &self.note_link_repository.evidence_by_note()?,
+        ))
     }
 
     fn stamp_note(&self, id: &str) -> AppResult<()> {
@@ -169,4 +219,23 @@ impl NoteService {
         self.note_repository
             .record_change(id, hlc.physical, hlc.counter, &hlc.node_id)
     }
+}
+
+/// Attach what's derived from other tables (conviction history, review nudge, evidence)
+/// to notes. Shared by every service that hands notes to the UI or an export, so a note
+/// reads the same everywhere.
+pub fn decorate(
+    notes: Vec<Note>,
+    mut convictions: HashMap<String, Vec<i64>>,
+    evidence: &HashMap<String, Evidence>,
+) -> Vec<Note> {
+    notes
+        .into_iter()
+        .map(|note| {
+            let history = convictions.remove(&note.id).unwrap_or_default();
+            let mut note = with_reviews(note, history);
+            note.evidence = evidence.get(&note.id).copied().unwrap_or_default();
+            note
+        })
+        .collect()
 }

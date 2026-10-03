@@ -19,7 +19,11 @@ use crate::repository::{Db, Repository};
 use crate::services::ai_key_service::AiKeyService;
 use crate::services::ai_service::AiService;
 use crate::services::attention_service::AttentionService;
+use crate::clients::web_client::WebClient;
 use crate::services::editor_service::EditorService;
+use crate::services::egress_service::EgressService;
+use crate::services::enrichment_service::EnrichmentService;
+use crate::services::link_service::LinkService;
 use crate::services::export_service::ExportService;
 use crate::services::note_service::NoteService;
 use crate::services::policy_service::PolicyService;
@@ -98,6 +102,7 @@ pub fn run() {
                 repository.notes.clone(),
                 repository.note_revisions.clone(),
                 repository.note_reviews.clone(),
+                repository.note_links.clone(),
                 repository.settings.clone(),
                 hlc_service.clone(),
                 sync_sender.clone(),
@@ -106,12 +111,35 @@ pub fn run() {
                 repository.notes.clone(),
                 repository.note_revisions.clone(),
                 repository.note_reviews.clone(),
+                repository.note_links.clone(),
+                repository.jobs.clone(),
                 hlc_service.clone(),
                 sync_sender.clone(),
             ));
+            app.manage(LinkService::new(
+                repository.note_links.clone(),
+                repository.notes.clone(),
+                hlc_service.clone(),
+                sync_sender.clone(),
+            ));
+            app.manage(EgressService::new(repository.egress.clone()));
+            // Its own instances of the stateless helpers (AI key reads go to the keychain
+            // per call; policy and egress share the same repositories).
+            app.manage(Arc::new(EnrichmentService::new(
+                repository.jobs.clone(),
+                repository.notes.clone(),
+                PolicyService::new(repository.topics.clone()),
+                WebClient::new(),
+                AiService::new(AiKeyService::new()),
+                SecurityService::with_defaults(),
+                EgressService::new(repository.egress.clone()),
+                hlc_service.clone(),
+                sync_sender.clone(),
+            )));
             app.manage(ReviewService::new(
                 repository.notes.clone(),
                 repository.note_reviews.clone(),
+                repository.note_links.clone(),
                 repository.tasks.clone(),
                 hlc_service.clone(),
                 sync_sender.clone(),
@@ -120,6 +148,7 @@ pub fn run() {
             app.manage(ExportService::new(
                 repository.notes.clone(),
                 repository.note_reviews.clone(),
+                repository.note_links.clone(),
                 repository.topics.clone(),
                 SecurityService::with_defaults(),
             ));
@@ -168,6 +197,7 @@ pub fn run() {
                 repository.notes.clone(),
                 repository.note_revisions.clone(),
                 repository.note_reviews.clone(),
+                repository.note_links.clone(),
                 repository.sync_state.clone(),
                 hlc_service,
                 sync_sender,
@@ -220,6 +250,11 @@ pub fn run() {
             commands::notes::delete_note,
             commands::notes::note_history,
             commands::notes::restore_note_revision,
+            commands::notes::retry_enrichment,
+            commands::links::list_note_links,
+            commands::links::link_notes,
+            commands::links::unlink_notes,
+            commands::egress::list_egress_events,
             commands::export::export_notes,
             commands::reviews::list_due_notes,
             commands::reviews::list_note_reviews,

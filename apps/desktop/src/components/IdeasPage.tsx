@@ -2,6 +2,7 @@ import { Lightbulb, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { DeleteNotePopover } from '@/components/ideas/DeleteNotePopover';
 import { HistoryPopover } from '@/components/ideas/HistoryPopover';
+import { LinkPopover } from '@/components/ideas/LinkPopover';
 import { NoteEditor } from '@/components/ideas/NoteEditor';
 import { NoteRow } from '@/components/ideas/NoteRow';
 import { NoteSection } from '@/components/ideas/NoteSection';
@@ -12,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import type { ExportFormat } from '@/generated/ExportFormat';
 import type { Note } from '@/generated/Note';
 import { useDueNotes } from '@/hooks/useDueNotes';
+import { useLinkPicker } from '@/hooks/useLinkPicker';
 import { useListCursor } from '@/hooks/useListCursor';
 import { useNoteEditor } from '@/hooks/useNoteEditor';
 import { useNoteHistory } from '@/hooks/useNoteHistory';
@@ -54,9 +56,22 @@ export function IdeasPage({ onChanged }: { onChanged: () => void }) {
     },
   });
 
+  const picker = useLinkPicker({
+    notes,
+    onChanged: () => {
+      void refresh();
+      void refreshDue();
+    },
+  });
+
   const isEditing = editor.note !== null;
   const baseEnabled =
-    !isEditing && !history.note && !review.current && deletingNote === null && !helpOpen;
+    !isEditing &&
+    !history.note &&
+    !review.current &&
+    !picker.note &&
+    deletingNote === null &&
+    !helpOpen;
   const topics = useTopics({ enabled: baseEnabled, onNotesChanged: refresh });
   const enabled = baseEnabled && !topics.busy;
   const search = useNoteSearch({ enabled, version: notes });
@@ -106,6 +121,15 @@ export function IdeasPage({ onChanged }: { onChanged: () => void }) {
       await refresh();
     } catch (e) {
       report(e, 'Could not change the type');
+    }
+  };
+
+  const refetch = async (note: Note) => {
+    try {
+      await api.retryEnrichment(note.id);
+      await refresh();
+    } catch (e) {
+      report(e, 'Could not fetch the source');
     }
   };
 
@@ -194,6 +218,18 @@ export function IdeasPage({ onChanged }: { onChanged: () => void }) {
     enabled: enabled && focused === null && dueVisible.length > 0,
     callback: () => review.startSession(dueVisible),
   });
+  useShortcut('note.link', {
+    enabled: focusedEnabled,
+    callback: () => {
+      if (focused) void picker.open(focused);
+    },
+  });
+  useShortcut('note.refetch', {
+    enabled: focusedEnabled && focused?.noteType === 'source' && focused.link !== null,
+    callback: () => {
+      if (focused) void refetch(focused);
+    },
+  });
   useShortcut('note.delete', {
     enabled: focusedEnabled,
     callback: () => {
@@ -212,7 +248,7 @@ export function IdeasPage({ onChanged }: { onChanged: () => void }) {
   // The inbox binds these in TaskList; this page replaces it, so it binds its own.
   useShortcut('app.hintDialect', { callback: toggleHintStyle });
   useShortcut('app.help', {
-    enabled: !isEditing && !review.current && deletingNote === null && !topics.busy,
+    enabled: !isEditing && !review.current && !picker.note && deletingNote === null && !topics.busy,
     callback: () => setHelpOpen((open) => !open),
   });
   useShortcut('browse.swallowTab', {
@@ -237,12 +273,13 @@ export function IdeasPage({ onChanged }: { onChanged: () => void }) {
     const showingHistory = history.isOpen(note.id);
     const confirmingDelete = deletingNote?.id === note.id;
     const reviewing = review.current?.id === note.id;
+    const linking = picker.isOpen(note.id);
     return (
       <NoteRow
         key={note.id}
         note={note}
         focused={focusedId === note.id}
-        overlayOpen={editing || showingHistory || confirmingDelete || reviewing}
+        overlayOpen={editing || showingHistory || confirmingDelete || reviewing || linking}
         confirmingDelete={confirmingDelete}
         topicName={
           topics.selectedId === null && note.topicId ? topicNames.get(note.topicId) : undefined
@@ -253,10 +290,12 @@ export function IdeasPage({ onChanged }: { onChanged: () => void }) {
           if (editing) editor.cancel();
           else if (showingHistory) history.close();
           else if (reviewing) review.close();
+          else if (linking) picker.close();
           else setDeletingNote(null);
         }}
       >
         {reviewing && <ReviewPopover review={review} />}
+        {linking && <LinkPopover picker={picker} notes={notes} />}
         {editing && <NoteEditor editor={editor} error={error} topics={topics.topics} />}
         {showingHistory && <HistoryPopover note={note} history={history} />}
         {confirmingDelete && <DeleteNotePopover note={note} />}

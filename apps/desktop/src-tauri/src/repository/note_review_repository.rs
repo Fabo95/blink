@@ -52,7 +52,9 @@ impl NoteReviewRepository {
             )
             .map_err(store_err)?;
         let rows = stmt
-            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)))
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })
             .map_err(store_err)?;
         let mut by_note: HashMap<String, Vec<i64>> = HashMap::new();
         for row in rows {

@@ -198,5 +198,80 @@ pub(super) fn migrations() -> Migrations<'static> {
             CREATE INDEX IF NOT EXISTS note_reviews_note_idx ON note_reviews(note_id);
             ALTER TABLE tasks ADD COLUMN origin_note_id TEXT;",
         ),
+        // Evidence: typed note links (append-only, synced), source enrichment (title,
+        // excerpt, summary; synced so other devices don't refetch), a device-local job queue
+        // for the background fetch, and a device-local egress log (what left this Mac, never
+        // the content). The FTS index is rebuilt to also cover a source's title and summary.
+        // Existing sources with a link are queued once; the job re-checks the topic's
+        // sensitivity when it runs.
+        M::up(
+            "ALTER TABLE notes ADD COLUMN title TEXT;
+            ALTER TABLE notes ADD COLUMN excerpt TEXT;
+            ALTER TABLE notes ADD COLUMN summary TEXT;
+            ALTER TABLE notes ADD COLUMN enrichment TEXT NOT NULL DEFAULT 'none';
+            CREATE TABLE IF NOT EXISTS note_links (
+                id           TEXT PRIMARY KEY,
+                from_note_id TEXT NOT NULL,
+                to_note_id   TEXT NOT NULL,
+                relation     TEXT NOT NULL,
+                created_at   TEXT NOT NULL,
+                hlc_physical INTEGER NOT NULL DEFAULT 0,
+                hlc_counter  INTEGER NOT NULL DEFAULT 0,
+                hlc_node_id  TEXT    NOT NULL DEFAULT '',
+                dirty        INTEGER NOT NULL DEFAULT 1,
+                deleted      INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS note_links_from_idx ON note_links(from_note_id);
+            CREATE INDEX IF NOT EXISTS note_links_to_idx ON note_links(to_note_id);
+            CREATE TABLE IF NOT EXISTS jobs (
+                id          TEXT PRIMARY KEY,
+                kind        TEXT NOT NULL,
+                note_id     TEXT NOT NULL,
+                attempts    INTEGER NOT NULL DEFAULT 0,
+                next_run_at TEXT NOT NULL,
+                last_error  TEXT,
+                UNIQUE (kind, note_id)
+            );
+            CREATE TABLE IF NOT EXISTS egress_events (
+                id          TEXT PRIMARY KEY,
+                kind        TEXT NOT NULL,
+                destination TEXT NOT NULL,
+                note_id     TEXT,
+                bytes       INTEGER NOT NULL,
+                created_at  TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS egress_events_created_idx ON egress_events(created_at);
+            DROP TRIGGER IF EXISTS notes_fts_insert;
+            DROP TRIGGER IF EXISTS notes_fts_delete;
+            DROP TRIGGER IF EXISTS notes_fts_update;
+            DROP TABLE IF EXISTS notes_fts;
+            CREATE VIRTUAL TABLE notes_fts USING fts5(
+                text, raw_text, link, title, summary, content='notes', content_rowid='rowid'
+            );
+            CREATE TRIGGER notes_fts_insert AFTER INSERT ON notes BEGIN
+                INSERT INTO notes_fts(rowid, text, raw_text, link, title, summary)
+                VALUES (new.rowid, new.text, new.raw_text, new.link, new.title, new.summary);
+            END;
+            CREATE TRIGGER notes_fts_delete AFTER DELETE ON notes BEGIN
+                INSERT INTO notes_fts(notes_fts, rowid, text, raw_text, link, title, summary)
+                VALUES ('delete', old.rowid, old.text, old.raw_text, old.link, old.title,
+                    old.summary);
+            END;
+            CREATE TRIGGER notes_fts_update
+            AFTER UPDATE OF text, raw_text, link, title, summary ON notes BEGIN
+                INSERT INTO notes_fts(notes_fts, rowid, text, raw_text, link, title, summary)
+                VALUES ('delete', old.rowid, old.text, old.raw_text, old.link, old.title,
+                    old.summary);
+                INSERT INTO notes_fts(rowid, text, raw_text, link, title, summary)
+                VALUES (new.rowid, new.text, new.raw_text, new.link, new.title, new.summary);
+            END;
+            INSERT INTO notes_fts(notes_fts) VALUES ('rebuild');
+            INSERT INTO jobs (id, kind, note_id, attempts, next_run_at)
+                SELECT lower(hex(randomblob(16))), 'enrich', id, 0,
+                    strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+                FROM notes WHERE note_type = 'source' AND link IS NOT NULL AND deleted = 0;
+            UPDATE notes SET enrichment = 'pending'
+                WHERE note_type = 'source' AND link IS NOT NULL AND deleted = 0;",
+        ),
     ])
 }

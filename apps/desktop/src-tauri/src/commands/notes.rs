@@ -46,6 +46,12 @@ pub fn update_note(
     )
 }
 
+/// Fetch and summarize a source again (after a failure, or to refresh it).
+#[tauri::command]
+pub fn retry_enrichment(note_service: State<'_, NoteService>, id: String) -> AppResult<Note> {
+    note_service.request_enrichment(&id)
+}
+
 #[tauri::command]
 pub fn delete_note(note_service: State<'_, NoteService>, id: String) -> AppResult<()> {
     note_service.delete(&id)
