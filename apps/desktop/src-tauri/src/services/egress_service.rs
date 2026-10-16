@@ -1,4 +1,4 @@
-//! "What left this Mac": [`EgressService`] records every AI call and page fetch (kind,
+//! "What left this Mac": [`EgressService`] records every AI call (kind,
 //! destination host, size; never the content) and lists them for the Home page. The first
 //! question every security review asks, answered from the device itself.
 
@@ -18,7 +18,9 @@ pub struct EgressService {
 
 impl EgressService {
     pub fn new(egress_events_repository: EgressEventsRepository) -> Self {
-        Self { egress_events_repository }
+        Self {
+            egress_events_repository,
+        }
     }
 
     pub fn record(

@@ -34,8 +34,10 @@ pub enum AppError {
     Policy(String),
     /// Writing an export file failed.
     Export(String),
-    /// Fetching a source's page failed (network, bad link, or an error status).
-    Fetch(String),
+    /// Reading an Incoming source failed (e.g. `gh` absent or not signed in).
+    Incoming(String),
+    /// Reading Claude Code's transcripts for the usage report failed.
+    Usage(String),
 }
 
 impl fmt::Display for AppError {
@@ -53,7 +55,8 @@ impl fmt::Display for AppError {
             AppError::Hook(msg) => write!(f, "hook error: {msg}"),
             AppError::Policy(msg) => write!(f, "policy: {msg}"),
             AppError::Export(msg) => write!(f, "export error: {msg}"),
-            AppError::Fetch(msg) => write!(f, "fetch error: {msg}"),
+            AppError::Incoming(msg) => write!(f, "incoming error: {msg}"),
+            AppError::Usage(msg) => write!(f, "usage error: {msg}"),
         }
     }
 }

@@ -8,7 +8,7 @@ import {
 import { Kbd } from '@/components/ui/kbd';
 import { CHEATSHEET, SHORTCUTS, type Shortcut } from './shortcuts';
 
-/** The `?` cheat-sheet: every shortcut grouped by type with a full description. A
+/** The `c` cheat-sheet: every shortcut grouped by page with a full description. A
  *  reference (shows all keys, not just the enabled ones), so it's the one place a new
  *  user learns what each key does. Esc / `c` close it (bound in the `Inbox` shell). */
 export function ShortcutHelp({
@@ -23,7 +23,7 @@ export function ShortcutHelp({
       <AlertDialogContent className="max-w-lg gap-5">
         <AlertDialogHeader>
           <AlertDialogTitle>Keyboard shortcuts</AlertDialogTitle>
-          <AlertDialogDescription>Press a key to run it, or Esc to close.</AlertDialogDescription>
+          <AlertDialogDescription>Every key, page by page. Esc or c closes this.</AlertDialogDescription>
         </AlertDialogHeader>
         <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
           {CHEATSHEET.map((section) => (

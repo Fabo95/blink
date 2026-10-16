@@ -14,8 +14,8 @@ use crate::core::error::{AppError, AppResult};
 use crate::core::models::{CaptureSource, NewTask, Task, TaskEffort};
 use crate::core::wire::{Clock, LocalChange, RecordBody, TaskBody};
 
-use crate::database::{serde_err, store_err, Db};
 use crate::core::synced_repository::SyncedRepository;
+use crate::database::{serde_err, store_err, Db};
 
 /// A partial task edit — every `Some` field is written, `None` leaves it untouched.
 /// An empty `link` or `task_group_id` clears the stored value; `source_name` sets the
@@ -60,7 +60,11 @@ impl TasksRepository {
         let now = Utc::now().to_rfc3339();
         // A copy capture that opened blank and was typed into has no frozen raw text yet —
         // fall back to the saved text so every task carries a raw_text to prompt from.
-        let raw_text = if new.raw_text.trim().is_empty() { new.text.clone() } else { new.raw_text };
+        let raw_text = if new.raw_text.trim().is_empty() {
+            new.text.clone()
+        } else {
+            new.raw_text
+        };
         let task = Task {
             id: Uuid::new_v4().to_string(),
             text: new.text,
@@ -108,14 +112,22 @@ impl TasksRepository {
     pub fn swap_positions(&self, a: &str, b: &str) -> AppResult<()> {
         let conn = self.db.lock()?;
         let read = |id: &str| -> AppResult<i64> {
-            conn.query_row("SELECT position FROM tasks WHERE id = ?1", [id], |row| row.get(0))
-                .map_err(store_err)
+            conn.query_row("SELECT position FROM tasks WHERE id = ?1", [id], |row| {
+                row.get(0)
+            })
+            .map_err(store_err)
         };
         let (pa, pb) = (read(a)?, read(b)?);
-        conn.execute("UPDATE tasks SET position = ?1 WHERE id = ?2", params![pb, a])
-            .map_err(store_err)?;
-        conn.execute("UPDATE tasks SET position = ?1 WHERE id = ?2", params![pa, b])
-            .map_err(store_err)?;
+        conn.execute(
+            "UPDATE tasks SET position = ?1 WHERE id = ?2",
+            params![pb, a],
+        )
+        .map_err(store_err)?;
+        conn.execute(
+            "UPDATE tasks SET position = ?1 WHERE id = ?2",
+            params![pa, b],
+        )
+        .map_err(store_err)?;
         Ok(())
     }
 
@@ -140,7 +152,8 @@ impl TasksRepository {
             let rows = stmt
                 .query_map([task_group_id], |row| row.get::<_, String>(0))
                 .map_err(store_err)?;
-            rows.collect::<Result<Vec<String>, _>>().map_err(store_err)?
+            rows.collect::<Result<Vec<String>, _>>()
+                .map_err(store_err)?
         };
         conn.execute(
             "UPDATE tasks SET task_group_id = NULL WHERE task_group_id = ?1",
@@ -194,7 +207,11 @@ impl TasksRepository {
         if let Some(link) = patch.link {
             // Empty input clears the link (stored NULL).
             let trimmed = link.trim();
-            let value = if trimmed.is_empty() { None } else { Some(trimmed) };
+            let value = if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            };
             conn.execute(
                 "UPDATE tasks SET link = ?1, updated_at = ?2 WHERE id = ?3",
                 params![value, now, id],
@@ -205,7 +222,11 @@ impl TasksRepository {
         if let Some(task_group_id) = patch.task_group_id {
             // Empty input un-groups the task (stored NULL).
             let trimmed = task_group_id.trim();
-            let value = if trimmed.is_empty() { None } else { Some(trimmed) };
+            let value = if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            };
             conn.execute(
                 "UPDATE tasks SET task_group_id = ?1, updated_at = ?2 WHERE id = ?3",
                 params![value, now, id],
@@ -249,17 +270,32 @@ impl TasksRepository {
              WHERE (tasks.hlc_physical, tasks.hlc_counter, tasks.hlc_node_id) \
              < (excluded.hlc_physical, excluded.hlc_counter, excluded.hlc_node_id)",
             params![
-                id, body.text, body.raw_text, body.status, body.app_id, body.app_name,
-                body.window_title, body.captured_at, body.created_at, body.updated_at,
-                body.improved, body.link, body.completed_at, body.task_group_id, body.position,
-                body.deleted, clock.physical, clock.counter, clock.node_id, body.effort.as_str(),
+                id,
+                body.text,
+                body.raw_text,
+                body.status,
+                body.app_id,
+                body.app_name,
+                body.window_title,
+                body.captured_at,
+                body.created_at,
+                body.updated_at,
+                body.improved,
+                body.link,
+                body.completed_at,
+                body.task_group_id,
+                body.position,
+                body.deleted,
+                clock.physical,
+                clock.counter,
+                clock.node_id,
+                body.effort.as_str(),
                 body.origin_note_id
             ],
         )
         .map_err(store_err)?;
         Ok(())
     }
-
 }
 
 impl SyncedRepository for TasksRepository {
@@ -320,13 +356,7 @@ impl SyncedRepository for TasksRepository {
         Ok(())
     }
 
-    fn record_change(
-        &self,
-        id: &str,
-        physical: i64,
-        counter: i64,
-        node_id: &str,
-    ) -> AppResult<()> {
+    fn record_change(&self, id: &str, physical: i64, counter: i64, node_id: &str) -> AppResult<()> {
         let conn = self.db.lock()?;
         conn.execute(
             "UPDATE tasks SET hlc_physical = ?1, hlc_counter = ?2, hlc_node_id = ?3, \

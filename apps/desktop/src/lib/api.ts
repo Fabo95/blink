@@ -1,30 +1,32 @@
 import type { AuthResult } from '@/generated/AuthResult';
 import type { AuthUser } from '@/generated/AuthUser';
 import type { CaptureDraft } from '@/generated/CaptureDraft';
+import type { ClaudeConversation } from '@/generated/ClaudeConversation';
 import type { EditorOption } from '@/generated/EditorOption';
 import type { EgressEvent } from '@/generated/EgressEvent';
 import type { ExportFormat } from '@/generated/ExportFormat';
+import type { IncomingFeed } from '@/generated/IncomingFeed';
+import type { IncomingSource } from '@/generated/IncomingSource';
 import type { ManagedRepo } from '@/generated/ManagedRepo';
 import type { NewNote } from '@/generated/NewNote';
 import type { NewTask } from '@/generated/NewTask';
 import type { NewTaskGroup } from '@/generated/NewTaskGroup';
 import type { NewTopic } from '@/generated/NewTopic';
 import type { Note } from '@/generated/Note';
-import type { NoteLink } from '@/generated/NoteLink';
-import type { NoteRelation } from '@/generated/NoteRelation';
-import type { NoteReview } from '@/generated/NoteReview';
 import type { NoteRevision } from '@/generated/NoteRevision';
 import type { NoteType } from '@/generated/NoteType';
 import type { PruneCandidate } from '@/generated/PruneCandidate';
-import type { ReviewDecision } from '@/generated/ReviewDecision';
-import type { ReviewOutcome } from '@/generated/ReviewOutcome';
 import type { Sensitivity } from '@/generated/Sensitivity';
+import type { SourceConnection } from '@/generated/SourceConnection';
 import type { Task } from '@/generated/Task';
 import type { TaskEffort } from '@/generated/TaskEffort';
 import type { TaskGroup } from '@/generated/TaskGroup';
+import type { TaskWorktree } from '@/generated/TaskWorktree';
 import type { TerminalOption } from '@/generated/TerminalOption';
 import type { Topic } from '@/generated/Topic';
 import type { TopicStatus } from '@/generated/TopicStatus';
+import type { UsageRange } from '@/generated/UsageRange';
+import type { UsageReport } from '@/generated/UsageReport';
 import type { Worktree } from '@/generated/Worktree';
 import type { WorktreeAttentionUpdate } from '@/generated/WorktreeAttentionUpdate';
 import type { WorktreeStatus } from '@/generated/WorktreeStatus';
@@ -167,28 +169,8 @@ export const api = {
   noteHistory: (id: string) => invoke<NoteRevision[]>('note_history', { id }),
   restoreNoteRevision: (noteId: string, revisionId: string) =>
     invoke<Note>('restore_note_revision', { noteId, revisionId }),
-  /** Fetch and summarize a source again (after a failure, or to refresh it). */
-  retryEnrichment: (id: string) => invoke<Note>('retry_enrichment', { id }),
-  /** Every link touching a note, in either direction. */
-  listNoteLinks: (noteId: string) => invoke<NoteLink[]>('list_note_links', { noteId }),
-  /** Link two notes: `fromNoteId` supports, contradicts, or relates to `toNoteId`. */
-  linkNotes: (fromNoteId: string, toNoteId: string, relation: NoteRelation) =>
-    invoke<NoteLink>('link_notes', { fromNoteId, toNoteId, relation }),
-  unlinkNotes: (id: string) => invoke<void>('unlink_notes', { id }),
-  /** What left this Mac recently (AI calls, page fetches), newest first. Never content. */
+  /** What left this Mac recently (AI calls), newest first. Never content. */
   listEgressEvents: () => invoke<EgressEvent[]>('list_egress_events'),
-  /** Ideas and thoughts due for review now, most overdue first. */
-  listDueNotes: () => invoke<Note[]>('list_due_notes'),
-  /** Every review a note was given, oldest first. */
-  listNoteReviews: (noteId: string) => invoke<NoteReview[]>('list_note_reviews', { noteId }),
-  /** Record a review (conviction 1 to 5) and apply its decision: keep and reschedule, drop,
-   *  or promote into an inbox task. */
-  reviewNote: (
-    noteId: string,
-    conviction: number,
-    comment: string | null,
-    decision: ReviewDecision,
-  ) => invoke<ReviewOutcome>('review_note', { noteId, conviction, comment, decision }),
   /** Export one topic (or everything exportable with `null`) to a file picked in the save
    *  dialog. Resolves to the written path, or `null` if the user cancelled. */
   exportNotes: (topicId: string | null, format: ExportFormat) =>
@@ -216,6 +198,22 @@ export const api = {
     invoke<void>('set_capture_shortcut', { method, shortcut }),
   /** Run one sync cycle (pull then push). A no-op until signed in. */
   syncNow: () => invoke<void>('sync_now'),
+  // --- Incoming (GitHub, …) ----------------------------------------------------
+  /** The Incoming feed as of the last poll; the `incoming` event keeps it live. */
+  getIncoming: () => invoke<IncomingFeed>('get_incoming'),
+  /** Poll every source now. */
+  refreshIncoming: () => invoke<IncomingFeed>('refresh_incoming'),
+  /** Hide an item in Blink until it changes at the source. Returns the updated feed. */
+  archiveIncoming: (id: string) => invoke<IncomingFeed>('archive_incoming', { id }),
+  /** Turn an item into an inbox task (title + link) and archive it. */
+  incomingToTask: (id: string) => invoke<Task>('incoming_to_task', { id }),
+  /** Every source's live connection: who it's signed in as, how, and any problem. */
+  listSourceConnections: () => invoke<SourceConnection[]>('list_source_connections'),
+  /** Connect a source with a pasted key (or replace it); checked before it's kept. */
+  connectSource: (source: IncomingSource, key: string) =>
+    invoke<void>('connect_source', { source, key }),
+  /** Forget the key Blink keeps for a source. */
+  disconnectSource: (source: IncomingSource) => invoke<void>('disconnect_source', { source }),
   // --- Managed repos (repo stuff) ---------------------------------------------
   /** The git repos the worktree manager tracks (curated in Settings). */
   listManagedRepos: () => invoke<ManagedRepo[]>('list_managed_repos'),
@@ -224,12 +222,27 @@ export const api = {
   /** Open a native folder picker; on selection, add the chosen git repo and return the
    *  updated list (unchanged if the user cancels). */
   pickManagedRepo: () => invoke<ManagedRepo[]>('pick_managed_repo'),
+  /** Set (or clear with null/empty) the command a repo's new worktrees run before Claude
+   *  starts (`{repo}` = the main checkout). Returns the updated list. */
+  setRepoSetupCommand: (path: string, command: string | null) =>
+    invoke<ManagedRepo[]>('set_repo_setup_command', { path, command }),
   // --- Worktrees (worktree stuff) ---------------------------------------------
   /** The linked worktrees of a managed repo (with dirty + tmux-session state). */
   listWorktrees: (repoPath: string) => invoke<Worktree[]>('list_worktrees', { repoPath }),
-  /** Create (or attach) a worktree for `branch` and ensure its tmux/Claude session. */
-  addWorktree: (repoPath: string, branch: string) =>
-    invoke<Worktree>('add_worktree', { repoPath, branch }),
+  /** Create (or attach) a worktree for `branch` and ensure its tmux/Claude session; with
+   *  `forkSessionId`, its Claude starts as a fork of that conversation. */
+  addWorktree: (repoPath: string, branch: string, forkSessionId: string | null) =>
+    invoke<Worktree>('add_worktree', { repoPath, branch, forkSessionId }),
+  /** The newest Claude conversations across the repo's checkouts (main + worktrees),
+   *  newest first — what a new worktree can carry over. */
+  listClaudeConversations: (repoPath: string) =>
+    invoke<ClaudeConversation[]>('list_claude_conversations', { repoPath }),
+  /** Every task that lives in a worktree (`w` on a task), with its repo + branch. */
+  listTaskWorktrees: () => invoke<TaskWorktree[]>('list_task_worktrees'),
+  getUsageReport: (range: UsageRange) => invoke<UsageReport>('get_usage_report', { range }),
+  /** Start a task in a worktree: brief, setup, Claude with the brief, terminal open. */
+  startTaskWorktree: (taskId: string, repoPath: string, branch: string) =>
+    invoke<TaskWorktree>('start_task_worktree', { taskId, repoPath, branch }),
   /** Remove a worktree + its session + its local branch. `force` removes a dirty/untracked
    *  worktree. The remote branch is untouched (see `deleteRemoteBranch`). */
   removeWorktree: (repoPath: string, branch: string, force: boolean) =>

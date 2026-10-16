@@ -49,8 +49,11 @@ pub enum RecordBody {
     Topic(TopicBody),
     Note(NoteBody),
     NoteRevision(NoteRevisionBody),
-    NoteReview(NoteReviewBody),
-    NoteLink(NoteLinkBody),
+    /// Any kind this build doesn't know: retired ones (`note_review`, `note_link` still sit
+    /// on the server) or ones from a newer device. Pull decodes whole pages, so one
+    /// unknown record must not fail the page and wedge sync; merging skips it.
+    #[serde(other)]
+    Unknown,
 }
 
 /// Enum columns ride as their stored strings (`NoteType::as_str` etc.), the same as the
@@ -80,46 +83,6 @@ pub struct NoteBody {
     pub captured_at: String,
     pub created_at: String,
     pub updated_at: String,
-    pub deleted: bool,
-    /// Added with note reviews; a body without them reads as an open, unscheduled note.
-    #[serde(default = "default_note_status")]
-    pub status: String,
-    #[serde(default)]
-    pub revisit_at: Option<String>,
-    /// Added with source enrichment; older bodies have none.
-    #[serde(default)]
-    pub title: Option<String>,
-    #[serde(default)]
-    pub excerpt: Option<String>,
-    #[serde(default)]
-    pub summary: Option<String>,
-    #[serde(default = "default_enrichment")]
-    pub enrichment: String,
-}
-
-fn default_enrichment() -> String {
-    "none".to_string()
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NoteLinkBody {
-    pub from_note_id: String,
-    pub to_note_id: String,
-    pub relation: String,
-    pub created_at: String,
-    pub deleted: bool,
-}
-
-fn default_note_status() -> String {
-    "open".to_string()
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NoteReviewBody {
-    pub note_id: String,
-    pub conviction: i64,
-    pub comment: Option<String>,
-    pub reviewed_at: String,
     pub deleted: bool,
 }
 
@@ -176,4 +139,26 @@ pub struct LocalChange {
     pub id: String,
     pub clock: Clock,
     pub body: RecordBody,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_pull_page_with_retired_kinds_still_decodes() {
+        let page = r#"[
+            {"kind": "note_review", "note_id": "n1", "conviction": 4, "comment": null,
+             "reviewed_at": "2026-10-01T00:00:00Z", "deleted": false},
+            {"kind": "note_link", "from_note_id": "n1", "to_note_id": "n2",
+             "relation": "supports", "created_at": "2026-10-01T00:00:00Z", "deleted": false},
+            {"kind": "group", "name": "Work", "context": null,
+             "created_at": "2026-10-01T00:00:00Z", "updated_at": "2026-10-01T00:00:00Z",
+             "deleted": false}
+        ]"#;
+        let bodies: Vec<RecordBody> = serde_json::from_str(page).unwrap();
+        assert!(matches!(bodies[0], RecordBody::Unknown));
+        assert!(matches!(bodies[1], RecordBody::Unknown));
+        assert!(matches!(bodies[2], RecordBody::Group(_)));
+    }
 }

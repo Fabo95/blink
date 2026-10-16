@@ -1,13 +1,14 @@
 import { cn } from '@/lib/utils';
 
 /** The app's top-level pages, switched from the nav below the header. */
-export type Page = 'home' | 'inbox' | 'ideas' | 'worktrees' | 'settings';
+export type Page = 'incoming' | 'inbox' | 'ideas' | 'worktrees' | 'usage' | 'settings';
 
 const TABS: { id: Page; label: string }[] = [
-  { id: 'home', label: 'Home' },
+  { id: 'incoming', label: 'Incoming' },
   { id: 'inbox', label: 'Inbox' },
   { id: 'ideas', label: 'Ideas' },
   { id: 'worktrees', label: 'Worktrees' },
+  { id: 'usage', label: 'Usage' },
   { id: 'settings', label: 'Settings' },
 ];
 
@@ -17,8 +18,8 @@ const TABS: { id: Page; label: string }[] = [
  * stay out of the keyboard focus flow (`tabIndex={-1}` + mousedown-preventDefault) so the
  * in-page shortcuts keep firing, matching the app's other mouse affordances.
  *
- * `badges` hangs a small "needs you" count on a tab (the Worktrees attention badge) — so a
- * worktree waiting for input is visible from anywhere, not just the Worktrees page.
+ * `badges` hangs a small "needs you" count on a tab (Incoming's waiting items, worktrees
+ * waiting for input) — so it's visible from anywhere, not just on that page.
  */
 export function PageNav({
   page,

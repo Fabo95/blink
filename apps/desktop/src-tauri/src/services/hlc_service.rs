@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use crate::core::error::{AppError, AppResult};
 use crate::core::synced_repository::SyncedRepository;
-use crate::repository::{SyncStateRepository};
+use crate::repository::SyncStateRepository;
 
 const NODE_ID_KEY: &str = "node_id";
 const LAST_PHYSICAL_KEY: &str = "hlc_last_physical";

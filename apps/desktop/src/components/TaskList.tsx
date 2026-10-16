@@ -2,19 +2,23 @@ import { Inbox } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { ArchivePage } from '@/components/tasks/ArchivePage';
 import { GroupFilterBar } from '@/components/tasks/GroupFilterBar';
+import { StartWorktreePopover } from '@/components/tasks/StartWorktreePopover';
 import { TaskEditor } from '@/components/tasks/TaskEditor';
 import { TaskRow } from '@/components/tasks/TaskRow';
-import { TaskSection } from '@/components/tasks/TaskSection';
+import { EmptyState, ErrorLine, Section } from '@/components/ui/section';
 import type { Task } from '@/generated/Task';
 import type { TaskEffort } from '@/generated/TaskEffort';
 import { useAiStatus } from '@/hooks/useAiStatus';
 import { useArchive } from '@/hooks/useArchive';
 import { useListCursor } from '@/hooks/useListCursor';
+import { useManagedRepos } from '@/hooks/useManagedRepos';
 import { useTaskEditor } from '@/hooks/useTaskEditor';
 import { useTaskGroups } from '@/hooks/useTaskGroups';
+import { useTaskWorktrees } from '@/hooks/useTaskWorktrees';
 import { api } from '@/lib/api';
 import { splitTasks } from '@/lib/completed';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
+import { branchSlug } from '@/lib/slug';
 import { errorMessage } from '@/lib/utils';
 
 interface TaskListProps {
@@ -43,10 +47,17 @@ export function TaskList({ tasks, onChanged, helpOpen }: TaskListProps) {
   const editor = useTaskEditor({ onSaved: onChanged, setError });
   const { enabled: aiEnabled } = useAiStatus();
   const isEditing = editor.task !== null;
+  const repos = useManagedRepos();
+  const taskWorktrees = useTaskWorktrees();
+  // The `w` prompt: which task, which repo, which branch.
+  const [startingTask, setStartingTask] = useState<Task | null>(null);
+  const [worktreeRepo, setWorktreeRepo] = useState<string | null>(null);
+  const [worktreeBranch, setWorktreeBranch] = useState('');
   // The browsing shortcuts are enabled exactly while no overlay (editor, delete dialogs,
-  // group prompt, help sheet) owns the keyboard — each overlay's own shortcuts enable on
-  // its state.
-  const baseEnabled = !isEditing && deletingTask === null && !helpOpen;
+  // worktree prompt, group prompt, help sheet) owns the keyboard — each overlay's own
+  // shortcuts enable on its state.
+  const baseEnabled =
+    !isEditing && deletingTask === null && startingTask === null && !helpOpen;
   const taskGroups = useTaskGroups({ enabled: baseEnabled, canManage: !archiveOpen });
   const enabled = baseEnabled && !taskGroups.busy;
 
@@ -278,6 +289,57 @@ export function TaskList({ tasks, onChanged, helpOpen }: TaskListProps) {
     callback: () => setDeletingTask(null),
   });
 
+  // `w`: start the focused (open) task in a worktree — repo defaults to the first managed
+  // one, the branch to a slug of the task.
+  const openWorktreePrompt = (task: Task) => {
+    taskWorktrees.clearError();
+    setWorktreeRepo(repos.repos[0]?.path ?? null);
+    setWorktreeBranch(branchSlug(task.text));
+    setStartingTask(task);
+  };
+  const closeWorktreePrompt = () => setStartingTask(null);
+  const startWorktree = async () => {
+    if (!startingTask || !worktreeRepo || !worktreeBranch.trim()) return;
+    try {
+      await taskWorktrees.start(startingTask.id, worktreeRepo, worktreeBranch.trim());
+      setStartingTask(null);
+    } catch {
+      // Error surfaced in the prompt by the hook; keep it open to fix the branch or repo.
+    }
+  };
+  const cycleWorktreeRepo = (delta: number) => {
+    const count = repos.repos.length;
+    if (count === 0) return;
+    const idx = Math.max(
+      0,
+      repos.repos.findIndex((repo) => repo.path === worktreeRepo),
+    );
+    setWorktreeRepo(repos.repos[(idx + delta + count) % count]?.path ?? null);
+  };
+  useShortcut('task.worktree', {
+    enabled: focusedEnabled && focusedTask?.status !== 'done',
+    callback: () => {
+      if (focusedTask) openWorktreePrompt(focusedTask);
+    },
+  });
+  const promptingWorktree = startingTask !== null && !taskWorktrees.starting;
+  useShortcut('taskWorktree.start', {
+    enabled: promptingWorktree && worktreeRepo !== null && worktreeBranch.trim().length > 0,
+    callback: () => void startWorktree(),
+  });
+  useShortcut('taskWorktree.nextRepo', {
+    enabled: promptingWorktree && repos.repos.length > 1,
+    callback: () => cycleWorktreeRepo(1),
+  });
+  useShortcut('taskWorktree.prevRepo', {
+    enabled: promptingWorktree && repos.repos.length > 1,
+    callback: () => cycleWorktreeRepo(-1),
+  });
+  useShortcut('taskWorktree.cancel', {
+    enabled: startingTask !== null,
+    callback: closeWorktreePrompt,
+  });
+
   const renderRow = (task: Task) => (
     <TaskRow
       key={task.id}
@@ -297,8 +359,24 @@ export function TaskList({ tasks, onChanged, helpOpen }: TaskListProps) {
       onOpenLink={openLink}
       onCancelEdit={editor.cancel}
       onCancelDelete={() => setDeletingTask(null)}
+      startingWorktree={startingTask?.id === task.id}
+      onCancelWorktree={closeWorktreePrompt}
+      worktreeBranch={taskWorktrees.linkOf(task.id)?.branch}
     >
-      <TaskEditor editor={editor} error={error} groups={taskGroups.groups} />
+      {startingTask?.id === task.id ? (
+        <StartWorktreePopover
+          repos={repos.repos}
+          repoPath={worktreeRepo}
+          onPickRepo={setWorktreeRepo}
+          branch={worktreeBranch}
+          onBranchChange={setWorktreeBranch}
+          aiBrief={aiEnabled}
+          starting={taskWorktrees.starting}
+          error={taskWorktrees.error}
+        />
+      ) : (
+        <TaskEditor editor={editor} error={error} groups={taskGroups.groups} />
+      )}
     </TaskRow>
   );
 
@@ -309,26 +387,28 @@ export function TaskList({ tasks, onChanged, helpOpen }: TaskListProps) {
       ) : (
         <>
           <GroupFilterBar view={taskGroups} />
-          <TaskSection title="Inbox" count={open.length}>
+          <Section title="Inbox" count={open.length}>
             {open.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 py-6 text-muted-foreground">
-                <Inbox className="size-6" />
-                <p className="text-sm">
-                  {recentCompleted.length + archived.length > 0
-                    ? 'Inbox zero — all caught up.'
-                    : 'No tasks yet — capture something above.'}
-                </p>
-              </div>
+              <EmptyState icon={Inbox}>
+                {recentCompleted.length + archived.length > 0
+                  ? 'Inbox zero — all caught up.'
+                  : 'No tasks yet — capture one from anywhere, or move one over from Incoming.'}
+              </EmptyState>
             ) : (
               <ul className="space-y-2">{open.map(renderRow)}</ul>
             )}
-            {error && <p className="mt-2 line-clamp-2 text-[11px] text-destructive">{error}</p>}
-          </TaskSection>
+            {/* The editor shows its own error; don't repeat it under the list. */}
+            {error && !editor.task && (
+              <div className="mt-2">
+                <ErrorLine>{error}</ErrorLine>
+              </div>
+            )}
+          </Section>
 
           {recentCompleted.length > 0 && (
-            <TaskSection title="Completed" count={recentCompleted.length}>
+            <Section title="Completed" count={recentCompleted.length}>
               <ul className="space-y-2">{recentCompleted.map(renderRow)}</ul>
-            </TaskSection>
+            </Section>
           )}
         </>
       )}

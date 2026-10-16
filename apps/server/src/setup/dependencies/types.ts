@@ -4,6 +4,7 @@ import type { NameAndRegistrationPair } from 'awilix';
 import type { AuthClient } from '@/clients/authClient.js';
 import type { EmailClient } from '@/clients/emailClient.js';
 import type { OpenAiClient } from '@/clients/openaiClient.js';
+import type { NovemberService } from '@/november/novemberService.js';
 import type { AuthService } from '@/services/common/authService.js';
 import type { CaptureService } from '@/services/common/captureService.js';
 import type { SyncService } from '@/services/common/syncService.js';
@@ -23,6 +24,7 @@ declare module '@fastify/awilix' {
     authService: AuthService;
     syncService: SyncService;
     captureService: CaptureService;
+    novemberService: NovemberService;
   }
 }
 

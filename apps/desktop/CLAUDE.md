@@ -46,8 +46,12 @@ generated/          ts-rs output — never hand-edit; run gen:types after changi
 components/
   auth/             LoginScreen, CredentialsForm, VerifyForm, ForgotPasswordForm,
                     ResetPasswordForm, AuthCard, Field
-  tasks/            TaskSection, ArchivePage, TaskRow, TaskEditor, GroupFilterBar,
+  tasks/            ArchivePage, TaskRow, TaskEditor, GroupFilterBar,
                     DeleteTaskPopover, DeleteGroupPopover (in-row confirms)
+  ui/               shadcn primitives + the app's shared pieces: ListRow (the one row look),
+                    Section / EmptyState / ErrorLine + SECTION_TITLE / FIELD_LABEL (section.tsx),
+                    Pill (every filter/choice bar), Kbd
+  ConnectionsCard   Settings → Connections: Incoming sources + the OpenAI key, one row each
   CapturePanel.tsx  shared capture UI; CopyCapture/ManualCapture are thin config wrappers
   TaskList.tsx      inbox orchestrator (cursor + delete flow + group filter)
 hooks/              useTaskEditor, useTaskGroups, useArchive, useListCursor, useSession
@@ -83,9 +87,14 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   6 `task_groups` + `tasks.task_group_id`, 7 `raw_text`, 8 sync columns, 9 group `context`,
   10 `effort`, 11 re-dirty for the readable replica, 12 `topics`, 13 `notes` + `notes_fts`
   (FTS5, external content, kept in step by triggers), 14 `note_revisions`, 15 note review
-  (`notes.status` + `revisit_at` with a deterministic 14-day backfill, `note_reviews`,
-  `tasks.origin_note_id`), 16 evidence (`note_links`, note `title`/`excerpt`/`summary`/
-  `enrichment`, device-local `jobs` + `egress_events`, FTS rebuilt to cover title + summary).
+  (`notes.status` + `revisit_at`, `note_reviews`, `tasks.origin_note_id`), 16 evidence
+  (`note_links`, note `title`/`excerpt`/`summary`/`enrichment`, device-local `jobs` +
+  `egress_events`, FTS rebuilt to cover title + summary), 17 device-local
+  `incoming_dismissals`, 18 device-local `task_worktrees`. Review, evidence links, and source enrichment were later removed:
+  their tables and columns (`note_reviews`, `note_links`, `jobs`, `notes.status`/`revisit_at`/
+  `title`/`excerpt`/`summary`/`enrichment`) stay in place with their old data but nothing
+  reads or writes them any more (inserts rely on the column defaults). No destructive
+  migration — don't add one casually.
   Repository tests run against `Db::open_in_memory()` (`#[cfg(test)]`): the real migrations
   and SQL, no keychain.
 - **Services & clients (Rust DI)**: business logic lives in `services/` as structs; each holds the
@@ -152,9 +161,9 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   a combo already owned by another method. UI is one `ShortcutRecorder` per method in the capture
   card; the commands `get/set_capture_shortcut` take a `method` arg.
 - **Inbox is keyboard-first** (`TaskList`): two stacked sections — **Inbox** (active) and
-  **Completed** (done in the last 24h), both always open, below the group filter bar. The
-  capture hotkey settings (`CaptureCard`) live on the **Home** tab (`HomePage`), not in the
-  inbox. **The Archive is its own page** (`ArchivePage`), reached with `a`: it replaces the
+  **Completed** (done in the last 24h, shown only when non-empty), below the group filter bar. The
+  capture hotkey settings (`CaptureCard`) live on the **Settings** page (`SettingsPage`), not
+  in the inbox. **The Archive is its own page** (`ArchivePage`), reached with `a`: it replaces the
   whole inbox (filter bar, both sections) with a searchable, paginated (8/page),
   day-grouped list of older completions (Today / Yesterday / weekday / date via
   `lib/completed.ts::groupByDay`). On the archive page `s` focuses its search box, `←→`/`hl`
@@ -162,7 +171,7 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   `Esc` clears the selection first). `archiveOpen` lives in `TaskList` (lifted above
   `useTaskGroups`/`useArchive` so both read it); while it's true the group-management keys
   (`n`/`r`/`⌫`) and filter cycling stand down. A virtual cursor (`useListCursor`, built on
-  `react-hotkeys-hook`) walks whichever page is showing — the inbox (Inbox → Completed) or the
+  `useShortcut`) walks whichever page is showing — the inbox (Inbox → Completed) or the
   archive page's current slice: `↑↓`/`jk` move it, `↵` completes/restores the focused task,
   `e`/`i` edit, `o` opens its link, `⌫`/`d` delete (in-row confirm popover, `⌘↵` confirms),
   `⌥↑↓`/`⌥KJ` reorder it (Inbox only — see below), `Esc` unselects. `Tab` is swallowed while
@@ -210,8 +219,9 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
     (Bindings are matched by physical key code, so single letters are used over layout-shifted
     symbols like `/` or `?` that break on non-US keyboards.)
   - **`c` opens the cheat-sheet** (`ShortcutHelp`, an `AlertDialog`; `c` toggles, `Esc` closes):
-    a reference of every shortcut grouped by the three types the user thinks in — **Sections /
-    Task groups / Tasks / Editing** (`CHEATSHEET` in `shortcuts.ts`), each row's chip from its
+    a reference of every shortcut, one section per page in nav order plus **Everywhere**
+    (cursor, `g` reload, sync, sign-out) (`CHEATSHEET` in `shortcuts.ts`; every row with a
+    `describe` belongs in it), each row's chip from its
     `hint` and its sentence from `describe`. It shows *all* keys (not just enabled ones); the
     always-on bar shows the relevant subset. `c` and `v` are app-wide, bound once in the shell
     (`Inbox`), which owns `helpOpen` and passes it to the pages; while it's open their
@@ -267,25 +277,30 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   (one per window, like `ShortcutProvider`) tracks only whether one is set via `ai_status`, and
   **every AI action gates on it** — `editor.improve`, `capture.improve`, `task.prompt` all add
   `&& aiEnabled`, so with no key the shortcuts don't fire and their chips drop from the statusline.
-  The key is entered in `AiCard`, a section of the **Settings page** (`SettingsPage`, which
-  replaces the inbox — opened from the header dropdown beside Sign out, `Esc`/`settings.close`
-  leaves): a masked field where `⌘↵` (`ai.saveKey`) tests-then-saves and `⌘⌫` (`ai.clearKey`)
-  removes. The header dropdown is the one click affordance (like Sign out); the page is otherwise
-  keyboard-first.
+  The key is managed as the **OpenAI** row of **Settings → Connections** (`ConnectionsCard`),
+  exactly like the Incoming sources' keys: `e` opens an in-row popover where `⌘↵` tests and
+  saves, `⌫` removes after a `⌘↵` confirm.
 - **macOS specifics**: input simulation and window ops must run on the main thread
   (`run_on_main_thread`). Transparency needs `macOSPrivateApi`. The capture window uses native
   `hudWindow` vibrancy; the main window has an overlay title bar (`titleBarStyle: Overlay`).
   The inbox window hides during capture; the dock-icon `Reopen` event brings it back.
 
-- **Ideas (notes + topics)**: a second track next to tasks for ideas, thoughts, and sources,
-  grouped into topics with a guiding question. Plan and later phases (review, evidence, AI
-  synthesis, teams): `local-context/idea-vault-plan.md`.
+- **Ideas (notes + topics)**: a plain notebook next to tasks for ideas, thoughts, and
+  sources, grouped into topics with a guiding question. Capture, file, search, edit (with
+  history), export; nothing is scheduled, linked, or fetched in the background.
   - **Model**: `Note` (`note_type` idea/thought/source, frozen `raw_text`, optional `topic_id`
     with **no FK**: a pull can deliver a note before its topic), `Topic` (`question`, `status`,
     `sensitivity`), `NoteRevision` (the previous text, kept on every edit; append-only). Topic
     names are unique among live topics by an app-level check, not a UNIQUE constraint (the
     `task_groups` UNIQUE trap). All three sync as their own `RecordBody` kinds; push orders
     topics, notes, revisions.
+  - **Unknown sync kinds are skipped**: `RecordBody` has a `#[serde(other)] Unknown` variant
+    and the pull merge ignores it. Pull decodes a whole page at once, so an unknown `kind`
+    would otherwise fail the page and wedge sync — the retired `note_review` / `note_link`
+    records still sit on the server (and a newer device may add kinds). Keep that variant
+    when adding or removing kinds. The note body no longer carries `status` / `revisit_at` /
+    `title` / `excerpt` / `summary` / `enrichment`; the server accepts any body (it only
+    validates `kind`), and extra fields on pulled bodies are ignored.
   - **Sync conflicts**: `NotesRepository::merge` returns the local text a pull overwrote when that
     text was an unsynced edit; `SyncService` keeps it as a `conflict` revision (stamped, so it
     pushes) and the note gets the device-local `conflict` flag. `y` (history) clears the flag;
@@ -302,40 +317,94 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
     source, `⌘K` toggles it) beside the topic picker: the type is a property of the note; and
     `⌘G` opens the group picker for tasks or the topic picker for notes (chip label `file`). A
     source is never improved by AI. `⌘⇧B` stays a task by default.
-  - **Review** (`ReviewService`, `useReview`, `ReviewPopover`): ideas and thoughts come back on
-    a schedule. The rules are pure functions in `review_service.rs`: first review 14 days after
-    capture (sources never), then 5 → 7 days, 4 → 14, 3 → 30, 2 → 60, 1 → unscheduled; `nudge`
-    suggests promote after three 4+ in a row and drop after a 1 or two 2-or-lower. Reviews
-    are append-only `note_reviews` rows (their own sync kind). A review keeps (reschedules),
-    drops (status `dropped`, out of the sections, still searchable), or promotes (status
-    `promoted` + an inbox task `Validate: …` with `origin_note_id`, shown as a chip on the
-    task). Notes carry `conviction_history` + `review_nudge`, filled by the services (never
-    stored). Keys: `w` reviews the focused note, or with nothing focused starts a session over
-    the due notes in the current topic (max 10); in the popover `⌘1`–`⌘5` conviction, `⌘↵`
-    keep, `⌘p` promote, `⌘⌫` drop, `Esc` close. The Ideas tab shows the due count
-    (`useDueNotes`, re-read on capture, sync, review, and every 15 min). Due dates compare via
-    `julianday`, so timestamps with different offsets or precision still order correctly.
-  - **Evidence** (`LinkService`, `useLinkPicker`, `LinkPopover`): `u` links a note to another
-    as `supports` / `contradicts` / `related` (append-only `note_links`, own sync kind; a pair is
-    linked at most once). `Note.evidence` (incoming supports/contradicts, related on both ends)
-    is derived in `note_service::decorate`, which every list, the due queue, and exports use.
-  - **Source enrichment** (`EnrichmentService`, `platform/jobs/enrichment.rs`, `WebClient`): a
-    source with a link is queued in the device-local `jobs` table; the loop (every 10 s) fetches
-    the page (10 s timeout, 2 MB cap, system proxy), extracts title + text with regexes (pure,
-    tested), stores a 2,000-char excerpt, and asks the AI for a 3-5 sentence
-    summary with the page fenced as untrusted data. Never fetched for confidential topics
-    (`skipped`, re-checked at run time); never summarized for private/local hosts. Failures
-    back off (1 min, 5 min, 30 min, 2 h) and end as `failed`; `g` retries. A pulled source
-    still `pending` (remote capture, or another device's capture) is queued by `SyncService`;
-    a job whose note is already `done` (finished elsewhere) is dropped.
-  - **Egress log** (`EgressService`, `EgressCard` on Home): every AI call (`improve_text`,
-    `improve_note_text`, `generate_task_prompt`, summaries) and page fetch writes kind,
-    destination host, and character count, never content. Device-local, never synced.
+  - **Egress log** (`EgressService`, `EgressCard` in Settings): every AI call (`improve_text`,
+    `improve_note_text`, `generate_task_prompt`) writes kind, destination host, and character
+    count, never content. Device-local, never synced. `EgressKind::AiSummary` / `PageFetch`
+    stay only so rows from the retired source enrichment still label correctly.
   - **Ideas page** (`IdeasPage` + `components/ideas/` + `useTopics`/`useNotes`/`useNoteEditor`/
     `useNoteHistory`/`useNoteSearch`): topic filter (`←→`, `n`/`r`/`⌫`, delete offers `⌘↵` keep
-    notes vs `⌘⌫` delete notes), a "Due for review" section on top, then sections by type, `s` search, row keys `e` edit, `t` type,
+    notes vs `⌘⌫` delete notes), sections by type, `s` search, row keys `e` edit, `t` type,
     `o` open, `y` history, `⌫` delete, `⌘e`/`⌘⇧e` export (Markdown/JSON, native save dialog,
     confidential topics only when exported explicitly).
+  - `tasks.origin_note_id` (and the task chip for it) remains for tasks an older build
+    promoted from a note; nothing sets it any more.
+- **Incoming** (`IncomingService`, `platform/jobs/incoming.rs`, `IncomingPage`, `useIncoming`):
+  one list of what external sources want from you, polled every 60 s and pushed as the
+  `incoming` event (the page + its nav badge share one `useIncoming` in the shell). **Every
+  source is an `IncomingProvider`** (`core/incoming_provider.rs`): `fetch(since)` →
+  `IncomingItem`s, `connection()` → a live `SourceConnection` (the `SourceAccount` profile —
+  name, handle, organization, avatar — plus `SourceAuth` gh-CLI / API-key, a credential hint,
+  any problem), and `connect_with_key` / `disconnect` (default: refused, "signed in outside
+  Blink"). `IncomingService` knows no source: it asks the providers registered in `lib.rs` all at once (`join_all` in `core/incoming_provider.rs`) and merges them
+  (a failing one only adds its own error line) and routes the generic `list_source_connections`
+  / `connect_source` / `disconnect_source` commands. Adding a source = an `IncomingSource`
+  variant + a provider + one `lib.rs` entry + its entry in `lib/sources.ts` (icon, name, key
+  help — shared by Incoming and Connections).
+  `IncomingItem.urgent` (incidents, DMs) fires a native notification the first time the item
+  appears (the first poll seeds silently). **Settings → Connections** (`ConnectionsCard`)
+  shows every source — and the OpenAI key — as the same row: avatar, name, handle ·
+  organization, `connected` / `problem` / `off`, how (credential hint); with the list cursor
+  `e` sets/replaces a key, `⌫` removes it (both in-row popovers, `⌘↵` / `Esc`, only for rows
+  whose key Blink keeps). The connections are
+  checked once at launch and kept in the shell (`useSourceConnections`), so Settings shows them
+  instantly; they're re-checked by the app-wide `g`, after a connect/disconnect, and when Incoming's error
+  lines change (a source starting or stopping to fail). Pasted keys live
+  in the keychain through `core/keychain_secret.rs` (one item per source, plus the
+  `secret_hint` glimpse). Providers today: **Linear** (personal API key, checked with a
+  `viewer` query before `LinearAccountService` keeps it in `linear-api-key`; sent as
+  `Authorization: <key>`, no `Bearer`; reads inbox notifications by category over GraphQL),
+  **Slack** (the user token `xoxp-…` of a small Slack app the user installs with user scopes
+  `search:read`, `users:read`, `im:read`, `mpim:read`, `channels:read`, `groups:read`, checked
+  with `auth.test` before `SlackAccountService` keeps it in `slack-user-token`; deliberately
+  quiet — only mentions, read or not (`<@me>`, or `@here` / `@channel` / `@everyone` whose
+  markup really is `<!here>`… in a conversation you're a member of, per `users.conversations`),
+  and DMs you haven't read once the oldest unread one is over 30 min old, one **urgent** item per conversation (read position from `conversations.info`
+  `last_read`; reading it in Slack makes it go away); channel messages only as mentions;
+  Slack markup cleaned to plain text), **Better Stack** (an Uptime API token, checked with a
+  one-incident list before `BetterStackAccountService` keeps it in `better-stack-token`; no
+  "who am I" endpoint, so the connection shows the incidents' team; every unresolved
+  incident, **urgent** until acknowledged, no age limit; a resolved one leaves on the next
+  poll) and **GitHub** (the `gh` login; profile from `gh api user`;
+  `gh api notifications`, read **and** unread, updated in the last 14 days; actionable
+  reasons: review requested, mention, assign, author, comment, CI). Read-only at the source, and reading on GitHub doesn't hide anything: `a` archives in
+  Blink by storing the item's `updated_at` in the device-local `incoming_dismissals` table,
+  so a newer update brings it back. `m` moves an item to the inbox as a task (title + link,
+  source = the provider) and archives it; `o` opens it; the app-wide `g` and window focus poll now.
+  A source that fails shows its error line instead of an empty list.
+  **Not a source: Notion** (tried and removed): its API has no notifications or read state, so
+  "for me" had to be guessed by scanning every database — slow (dozens of requests a poll) and
+  noisy (rows in a busy workspace change constantly, so archived items came back). Notion's own
+  notifications reach Incoming through Notion's Slack app as Slack DMs instead.
+- **Task → worktree** (`TaskWorktreeService`, `commands/task_worktrees.rs`, `useTaskWorktrees`,
+  `StartWorktreePopover`): `w` on an inbox task opens an in-row prompt — `↑↓` picks the managed
+  repo, the branch is prefilled from the task text (`lib/slug.ts`), `⌘↵` starts. The core
+  writes a brief to `<data dir>/briefs/<task id>.md` (an AI-written prompt when an OpenAI key
+  is set, logged as egress; else `plain_brief`: the task, its link, its group context), creates
+  the worktree with `ClaudeStart::Brief` (setup command, then `claude "$(cat brief)"`), opens
+  its terminal, and links task ↔ branch in the device-local `task_worktrees` table. The task
+  row shows the branch chip, the worktree row shows the task. When `list_worktree_pr_statuses`
+  sees a linked branch's PR **merged**, it completes the task and emits `task-saved`; removing
+  or pruning the worktree drops the link. `ClaudeStart` (`terminal_service`) is the one place
+  that decides how Claude starts in a worktree: `Default` (`--continue` when the checkout has
+  transcripts), `Fork(id)` (`--resume id --fork-session`, the `n` conversation picker), `Brief`.
+- **Usage** (`UsageService`, `commands/usage.rs`, `useUsage`, `UsagePage`): Claude Code usage
+  on this Mac, read from Claude's own transcripts (`ClaudeStore::all_transcripts` — every
+  project's sessions plus nested sub-agent transcripts). Each reply's `message.usage` is
+  counted **once by message id** (Claude writes one reply on several lines). Cost is an
+  estimate at API list prices from the one table in `core/model_prices.rs` (cache writes
+  1.25× / 2× input for 5 min / 1 h, fast mode 2×); a model missing from it is listed as
+  unpriced, never guessed. Parsed files are cached in the service by size + mtime, so only
+  grown transcripts are re-read; the command runs on `spawn_blocking`. A session's repo is
+  its cwd's `git --git-common-dir` parent, so worktrees count toward their main repo. The
+  page: range pills (`←→`), stat tiles, per day / model / repo + branch, top sessions;
+  refreshed on open, range change, and `g`.
+- **Reload = `g`, everywhere** (`lib/reload.tsx`): everything that can sync in the background
+  does (Incoming poll, server sync, worktree attention, PR status on focus, source re-checks
+  on error changes); `g` is the one manual "fetch it all again now". Whatever is mounted
+  registers what it can reload with `useReloadHandler` (the shell: Incoming, source
+  connections, tasks; the sync indicator: a server sync; the Worktrees page: its
+  list + PR status; the Ideas page: its notes) and the shell's `app.reload` runs them all
+  (`Promise.allSettled` — each surfaces its own errors). No page binds its own `g`.
 
 ## Conventions
 
@@ -367,10 +436,17 @@ lib/completed.ts    pure helpers (splitTasks, groupByDay)
   **`⌘↵` confirms** every commit/destructive action (save, delete-task, delete-group) — never
   plain `Enter`. Mouse affordances (pill click, row double-click) are secondary and stay out of
   the focus flow (`tabIndex={-1}` + `preventDefault` on mousedown).
+- **One look per thing — use the shared pieces, don't restyle locally.** Lists are
+  `Section` cards of `ListRow`s (focused row: violet left bar; an in-row popover rings it,
+  red for a confirm; per-item confirms anchor to their own row); empty lists use `EmptyState`,
+  errors `ErrorLine`, headers `SECTION_TITLE`, field labels `FIELD_LABEL`, filter/choice bars
+  `Pill`, relative times `timeAgo` (`lib/timeAgo.ts`), source icon/name `lib/sources.ts`.
+  Every page takes the shell's `helpOpen` and stands its keys down while the cheat-sheet is
+  up.
 - **No emoji in the app UI.** Icons via `lucide-react`. One cursor everywhere (`cursor: default`),
   UI text not selectable.
 - **Keyboard shortcuts go through the `SHORTCUTS`** (`lib/shortcuts/shortcuts.ts`): add the entry
-  there, enable it with `useShortcut(id, { when, run })` — never raw `useHotkeys` or a
+  there, enable it with `useShortcut(id, { enabled, callback })` — never raw `useHotkeys` or a
   hand-rolled `window.addEventListener('keydown', …)`. The exceptions: `ShortcutRecorder`
   (*records* arbitrary combos, not a fixed binding) and input-local `onKeyDown` behavior
   (the archive search's Esc-to-clear). Set `opts.enableOnFormTags` on the SHORTCUTS entry

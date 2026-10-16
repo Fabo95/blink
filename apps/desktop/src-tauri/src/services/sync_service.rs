@@ -14,14 +14,13 @@ use crate::clients::server_client::ServerClient;
 use crate::core::error::{AppError, AppResult};
 use crate::core::models::RevisionReason;
 use crate::core::sync_channel::SyncSignalSender;
-use crate::core::wire::{RecordBody, SyncPacket, SyncRecord};
 use crate::core::synced_repository::SyncedRepository;
+use crate::core::wire::{RecordBody, SyncPacket, SyncRecord};
 use crate::repository::{
-    JobsRepository, NoteLinksRepository, NotesRepository, NoteReviewsRepository, NoteRevisionsRepository,
-    SyncStateRepository, TaskGroupsRepository, TasksRepository, TopicsRepository,
+    NoteRevisionsRepository, NotesRepository, SyncStateRepository, TaskGroupsRepository,
+    TasksRepository, TopicsRepository,
 };
 use crate::services::hlc_service::HlcService;
-use crate::services::note_service::ENRICH_JOB;
 use crate::services::session_token_service::SessionTokenService;
 
 const LAST_PULLED_SEQ_KEY: &str = "last_pulled_seq";
@@ -34,12 +33,7 @@ pub struct SyncService {
     topics_repository: TopicsRepository,
     notes_repository: NotesRepository,
     note_revisions_repository: NoteRevisionsRepository,
-    note_reviews_repository: NoteReviewsRepository,
-    note_links_repository: NoteLinksRepository,
     sync_state_repository: SyncStateRepository,
-    // A pulled source still waiting for its preview (captured remotely, or on a device that
-    // hasn't fetched it) is queued here, so every device can finish it.
-    jobs_repository: JobsRepository,
     // Stamps the conflict revisions a pull creates, so they push like any local write.
     hlc_service: Arc<HlcService>,
     sync_signal: SyncSignalSender,
@@ -55,10 +49,7 @@ impl SyncService {
         topics_repository: TopicsRepository,
         notes_repository: NotesRepository,
         note_revisions_repository: NoteRevisionsRepository,
-        note_reviews_repository: NoteReviewsRepository,
-        note_links_repository: NoteLinksRepository,
         sync_state_repository: SyncStateRepository,
-        jobs_repository: JobsRepository,
         hlc_service: Arc<HlcService>,
         sync_signal: SyncSignalSender,
     ) -> Self {
@@ -70,10 +61,7 @@ impl SyncService {
             topics_repository,
             notes_repository,
             note_revisions_repository,
-            note_reviews_repository,
-            note_links_repository,
             sync_state_repository,
-            jobs_repository,
             hlc_service,
             sync_signal,
         }
@@ -128,7 +116,11 @@ impl SyncService {
             return Ok(0);
         }
 
-        let resp = self.server_client.push_records(&token, &packets).await.map_err(net_err)?;
+        let resp = self
+            .server_client
+            .push_records(&token, &packets)
+            .await
+            .map_err(net_err)?;
         ensure_ok(&resp)?;
 
         // Clear the flags only after the server confirms the writes landed.
@@ -145,56 +137,54 @@ impl SyncService {
         let token = self.token()?;
         let since = self.last_pulled_seq()?;
 
-        let resp = self.server_client.pull_records(&token, since).await.map_err(net_err)?;
+        let resp = self
+            .server_client
+            .pull_records(&token, since)
+            .await
+            .map_err(net_err)?;
         ensure_ok(&resp)?;
-        let records =
-            resp.json::<ApiResponse<PullData>>().await.map_err(net_err)?.data.records;
+        let records = resp
+            .json::<ApiResponse<PullData>>()
+            .await
+            .map_err(net_err)?
+            .data
+            .records;
 
         let mut max_seq = since;
         for record in &records {
             match &record.body {
                 RecordBody::Task(task) => {
-                    self.tasks_repository.merge(&record.id, &record.clock, task)?;
+                    self.tasks_repository
+                        .merge(&record.id, &record.clock, task)?;
                 }
                 RecordBody::Group(group) => {
-                    self.task_groups_repository.merge(&record.id, &record.clock, group)?;
+                    self.task_groups_repository
+                        .merge(&record.id, &record.clock, group)?;
                 }
                 RecordBody::Topic(topic) => {
-                    self.topics_repository.merge(&record.id, &record.clock, topic)?;
+                    self.topics_repository
+                        .merge(&record.id, &record.clock, topic)?;
                 }
                 RecordBody::Note(note) => {
                     if let Some(lost_text) =
-                        self.notes_repository.merge(&record.id, &record.clock, note)?
+                        self.notes_repository
+                            .merge(&record.id, &record.clock, note)?
                     {
                         self.keep_conflict(&record.id, &lost_text)?;
                     }
-                    if note.note_type == "source"
-                        && note.link.is_some()
-                        && note.enrichment == "pending"
-                        && !note.deleted
-                    {
-                        self.jobs_repository.enqueue(
-                            ENRICH_JOB,
-                            &record.id,
-                            &chrono::Utc::now().to_rfc3339(),
-                        )?;
-                    }
-                }
-                RecordBody::NoteLink(link) => {
-                    self.note_links_repository.merge(&record.id, &record.clock, link)?;
-                }
-                RecordBody::NoteReview(review) => {
-                    self.note_reviews_repository.merge(&record.id, &record.clock, review)?;
                 }
                 RecordBody::NoteRevision(revision) => {
-                    self.note_revisions_repository.merge(&record.id, &record.clock, revision)?;
+                    self.note_revisions_repository
+                        .merge(&record.id, &record.clock, revision)?;
                 }
+                RecordBody::Unknown => {}
             }
             max_seq = max_seq.max(record.seq);
         }
 
         if max_seq > since {
-            self.sync_state_repository.set(LAST_PULLED_SEQ_KEY, &max_seq.to_string())?;
+            self.sync_state_repository
+                .set(LAST_PULLED_SEQ_KEY, &max_seq.to_string())?;
         }
         Ok(records.len())
     }
@@ -202,15 +192,13 @@ impl SyncService {
     /// Every synced table, in push order. Topics before notes before what hangs off notes:
     /// pull applies records in `seq` order, so a receiving device sees a topic before the
     /// notes filed under it. A new synced table is one more entry here (plus its merge arm).
-    fn synced_tables(&self) -> [&dyn SyncedRepository; 7] {
+    fn synced_tables(&self) -> [&dyn SyncedRepository; 5] {
         [
             &self.tasks_repository,
             &self.task_groups_repository,
             &self.topics_repository,
             &self.notes_repository,
             &self.note_revisions_repository,
-            &self.note_reviews_repository,
-            &self.note_links_repository,
         ]
     }
 
@@ -219,12 +207,16 @@ impl SyncService {
     /// other device sees the conflict too.
     fn keep_conflict(&self, note_id: &str, lost_text: &str) -> AppResult<()> {
         let revision_id =
-            self.note_revisions_repository.insert(note_id, lost_text, RevisionReason::Conflict)?;
-        self.hlc_service.stamp(&self.note_revisions_repository, [revision_id])
+            self.note_revisions_repository
+                .insert(note_id, lost_text, RevisionReason::Conflict)?;
+        self.hlc_service
+            .stamp(&self.note_revisions_repository, [revision_id])
     }
 
     fn token(&self) -> AppResult<String> {
-        self.session_token_service.read()?.ok_or_else(|| AppError::Sync("not signed in".into()))
+        self.session_token_service
+            .read()?
+            .ok_or_else(|| AppError::Sync("not signed in".into()))
     }
 
     fn last_pulled_seq(&self) -> AppResult<i64> {

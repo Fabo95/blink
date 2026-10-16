@@ -30,3 +30,14 @@ pub async fn pick_managed_repo(
 ) -> AppResult<Vec<ManagedRepo>> {
     repo_service.add_or_list(dialog::pick_folder(&app, "Choose a git repository to manage").await)
 }
+
+/// Set (or clear, with `null`/empty) the command a repo's new worktrees run before Claude
+/// starts. Returns the updated list.
+#[tauri::command]
+pub fn set_repo_setup_command(
+    repo_service: State<'_, RepoService>,
+    path: String,
+    command: Option<String>,
+) -> AppResult<Vec<ManagedRepo>> {
+    repo_service.set_setup_command(&path, command)
+}

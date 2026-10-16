@@ -273,5 +273,24 @@ pub(super) fn migrations() -> Migrations<'static> {
             UPDATE notes SET enrichment = 'pending'
                 WHERE note_type = 'source' AND link IS NOT NULL AND deleted = 0;",
         ),
+        // Incoming: what the user archived from the external feed (GitHub, …), keyed by the
+        // item's id with the source's last-update time at archive, so an item comes back when
+        // it changes. Device-local, never synced.
+        M::up(
+            "CREATE TABLE IF NOT EXISTS incoming_dismissals (
+                id         TEXT PRIMARY KEY,
+                updated_at TEXT NOT NULL
+            );",
+        ),
+        // Task → worktree: which worktree a task was started in. Device-local, never synced —
+        // a worktree's path only exists on this Mac. One worktree per task.
+        M::up(
+            "CREATE TABLE IF NOT EXISTS task_worktrees (
+                task_id    TEXT PRIMARY KEY,
+                repo_path  TEXT NOT NULL,
+                branch     TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );",
+        ),
     ])
 }

@@ -1,8 +1,10 @@
 import { authHandlers } from './auth';
 import { ideaHandlers } from './ideas';
+import { incomingHandlers } from './incoming';
 import { settingsHandlers } from './settings';
 import { taskHandlers } from './tasks';
 import type { MockHandlers } from './types';
+import { usageHandlers } from './usage';
 import { worktreeHandlers } from './worktrees';
 
 /**
@@ -17,6 +19,8 @@ const handlers: MockHandlers = {
   ...ideaHandlers,
   ...settingsHandlers,
   ...worktreeHandlers,
+  ...incomingHandlers,
+  ...usageHandlers,
 };
 
 export async function mockInvoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> {

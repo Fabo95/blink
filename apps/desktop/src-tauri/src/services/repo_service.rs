@@ -66,6 +66,7 @@ impl RepoService {
                 name,
                 path,
                 base_branch: None,
+                setup_command: None,
             });
             self.save(&repos)?;
         }
@@ -79,6 +80,26 @@ impl RepoService {
             Some(dir) => self.add(dir),
             None => self.list(),
         }
+    }
+
+    /// Set (or clear, with an empty/`None` value) the repo's worktree setup command. Returns
+    /// the new list.
+    pub fn set_setup_command(
+        &self,
+        path: &str,
+        command: Option<String>,
+    ) -> AppResult<Vec<ManagedRepo>> {
+        let command = command
+            .map(|c| c.trim().to_string())
+            .filter(|c| !c.is_empty());
+        let mut repos = self.list()?;
+        let repo = repos
+            .iter_mut()
+            .find(|r| r.path == path)
+            .ok_or_else(|| AppError::Repo(format!("repo not managed: {path}")))?;
+        repo.setup_command = command;
+        self.save(&repos)?;
+        Ok(repos)
     }
 
     /// Stop tracking a repo (does not touch git). Returns the new list.

@@ -1,4 +1,5 @@
 import { asClass } from 'awilix';
+import { NovemberService } from '@/november/novemberService.js';
 import { AuthService } from '@/services/common/authService.js';
 import { CaptureService } from '@/services/common/captureService.js';
 import { SyncService } from '@/services/common/syncService.js';
@@ -17,5 +18,7 @@ export function createRequestCradle(): RequestRegistrations {
     authService: asClass(AuthService).scoped(),
     syncService: asClass(SyncService).scoped(),
     captureService: asClass(CaptureService).scoped(),
+    // November Escape side project — remove with src/november.
+    novemberService: asClass(NovemberService).scoped(),
   };
 }

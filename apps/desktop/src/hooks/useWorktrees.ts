@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { ClaudeConversation } from '@/generated/ClaudeConversation';
 import type { PruneCandidate } from '@/generated/PruneCandidate';
 import type { Worktree } from '@/generated/Worktree';
 import { api } from '@/lib/api';
@@ -14,15 +15,19 @@ export interface WorktreesView {
   error: string;
   /** Reload the list (fast local pass) then re-fetch PR status. Bound to `g` and window focus. */
   refresh: () => Promise<void>;
-  /** Create (or attach) a worktree, then open its terminal. Rethrows so the caller can
-   *  keep its prompt open on failure. */
-  create: (branch: string) => Promise<void>;
+  /** Create (or attach) a worktree, then open its terminal; with `forkSessionId` its Claude
+   *  starts as a fork of that conversation. Rethrows so the caller can keep its prompt open
+   *  on failure. */
+  create: (branch: string, forkSessionId: string | null) => Promise<void>;
   /** Remove the worktree, its session, and its local branch; `deleteRemote` also deletes
    *  the branch on GitHub. */
   remove: (branch: string, force: boolean, deleteRemote: boolean) => Promise<void>;
   openInTerminal: (branch: string) => Promise<void>;
   /** Open the worktree's folder in the configured editor. */
   openInEditor: (branch: string) => Promise<void>;
+  /** The newest Claude conversations across the repo's checkouts — what a new worktree can
+   *  carry over. */
+  conversations: () => Promise<ClaudeConversation[]>;
   prunePreview: () => Promise<PruneCandidate[]>;
   pruneApply: () => Promise<void>;
 }
@@ -98,11 +103,11 @@ export function useWorktrees(repoPath: string | null): WorktreesView {
   }, [repoPath, refresh]);
 
   const create = useCallback(
-    async (branch: string) => {
+    async (branch: string, forkSessionId: string | null) => {
       if (!repoPath) return;
       setError('');
       try {
-        await api.addWorktree(repoPath, branch);
+        await api.addWorktree(repoPath, branch, forkSessionId);
         await api.openWorktreeInTerminal(repoPath, branch);
         await load(repoPath);
       } catch (e) {
@@ -156,6 +161,16 @@ export function useWorktrees(repoPath: string | null): WorktreesView {
     [repoPath],
   );
 
+  const conversations = useCallback(async () => {
+    if (!repoPath) return [];
+    try {
+      return await api.listClaudeConversations(repoPath);
+    } catch (e) {
+      setError(errorMessage(e, 'Could not read the recent Claude conversations'));
+      return [];
+    }
+  }, [repoPath]);
+
   const prunePreview = useCallback(async () => {
     if (!repoPath) return [];
     setError('');
@@ -189,6 +204,7 @@ export function useWorktrees(repoPath: string | null): WorktreesView {
     remove,
     openInTerminal,
     openInEditor,
+    conversations,
     prunePreview,
     pruneApply,
   };

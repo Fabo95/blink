@@ -1,19 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Header } from '@/components/Header';
 import { HintRow } from '@/components/HintRow';
-import { HomePage } from '@/components/HomePage';
 import { IdeasPage } from '@/components/IdeasPage';
+import { IncomingPage } from '@/components/IncomingPage';
 import { type Page, PageNav } from '@/components/PageNav';
 import { SettingsPage } from '@/components/SettingsPage';
 import { TaskList } from '@/components/TaskList';
+import { UsagePage } from '@/components/UsagePage';
 import { WorktreesPage } from '@/components/WorktreesPage';
 import type { Task } from '@/generated/Task';
-import { useDueNotes } from '@/hooks/useDueNotes';
+import { useIncoming } from '@/hooks/useIncoming';
 import { useSession } from '@/hooks/useSession';
+import { useSourceConnections } from '@/hooks/useSourceConnections';
 import { useTauriEvent } from '@/hooks/useTauriEvent';
 import { useWorktreeAttention } from '@/hooks/useWorktreeAttention';
 import { api } from '@/lib/api';
 import { toggleHintStyle, useHintStyle } from '@/lib/hintStyle';
+import { useReloadAll, useReloadHandler } from '@/lib/reload';
 import { Hints } from '@/lib/shortcuts/Hints';
 import { ShortcutHelp } from '@/lib/shortcuts/ShortcutHelp';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
@@ -22,9 +25,10 @@ import { useShortcut } from '@/lib/shortcuts/useShortcut';
 export function Inbox() {
   const { user, signOut } = useSession();
   const attention = useWorktreeAttention();
-  const { due, refresh: refreshDue } = useDueNotes();
+  const incoming = useIncoming();
+  const sources = useSourceConnections(incoming.feed.errors);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [page, setPage] = useState<Page>('inbox');
+  const [page, setPage] = useState<Page>('incoming');
   const [helpOpen, setHelpOpen] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -47,6 +51,14 @@ export function Inbox() {
   useShortcut('app.help', { callback: () => setHelpOpen((open) => !open) });
   useShortcut('app.hintDialect', { callback: toggleHintStyle });
 
+  // `g` reloads everything at once: what the shell owns is registered here, each page and
+  // the sync indicator register their own (see `lib/reload.tsx`).
+  useReloadHandler(() => incoming.refresh());
+  useReloadHandler(() => sources.recheck());
+  useReloadHandler(() => refresh());
+  const reloadAll = useReloadAll();
+  useShortcut('app.reload', { callback: () => void reloadAll() });
+
   // AuthGate only renders us once authenticated; this keeps the type honest.
   if (!user) return null;
 
@@ -56,24 +68,30 @@ export function Inbox() {
       <PageNav
         page={page}
         onSelect={setPage}
-        badges={{ ideas: due.length, worktrees: attention.needsInputCount }}
+        badges={{
+          incoming: incoming.feed.items.length,
+          worktrees: attention.needsInputCount,
+        }}
       />
       <main className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-6">
         {page === 'settings' ? (
-          <SettingsPage />
-        ) : page === 'worktrees' ? (
-          <WorktreesPage />
-        ) : page === 'home' ? (
-          <HomePage />
-        ) : page === 'ideas' ? (
-          <IdeasPage
+          <SettingsPage
+            sources={sources}
+            onSourcesChanged={() => void incoming.refresh()}
             helpOpen={helpOpen}
-            onChanged={() => {
-              // A review changes what's due; a promotion adds an inbox task.
-              void refreshDue();
-              void refresh();
-            }}
           />
+        ) : page === 'worktrees' ? (
+          <WorktreesPage helpOpen={helpOpen} />
+        ) : page === 'incoming' ? (
+          <IncomingPage
+            incoming={incoming}
+            helpOpen={helpOpen}
+            onTaskCreated={() => void refresh()}
+          />
+        ) : page === 'ideas' ? (
+          <IdeasPage helpOpen={helpOpen} />
+        ) : page === 'usage' ? (
+          <UsagePage helpOpen={helpOpen} />
         ) : (
           <TaskList tasks={tasks} onChanged={refresh} helpOpen={helpOpen} />
         )}

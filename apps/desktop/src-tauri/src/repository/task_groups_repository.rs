@@ -14,8 +14,8 @@ use crate::core::error::{AppError, AppResult};
 use crate::core::models::{NewTaskGroup, TaskGroup};
 use crate::core::wire::{Clock, GroupBody, LocalChange, RecordBody};
 
-use crate::database::{serde_err, store_err, Db};
 use crate::core::synced_repository::SyncedRepository;
+use crate::database::{serde_err, store_err, Db};
 
 /// A patch over a group's mutable fields. `None` leaves a field untouched; for `context`
 /// an empty string clears it (stored NULL) — the same convention as [`TaskPatch`].
@@ -40,7 +40,9 @@ impl TaskGroupsRepository {
     pub fn list(&self) -> AppResult<Vec<TaskGroup>> {
         let conn = self.db.lock()?;
         let mut stmt = conn
-            .prepare("SELECT * FROM task_groups WHERE deleted = 0 ORDER BY created_at ASC, name ASC")
+            .prepare(
+                "SELECT * FROM task_groups WHERE deleted = 0 ORDER BY created_at ASC, name ASC",
+            )
             .map_err(store_err)?;
         let rows = stmt.query([]).map_err(store_err)?;
         from_rows::<TaskGroupRow>(rows)
@@ -50,8 +52,12 @@ impl TaskGroupsRepository {
 
     pub fn create(&self, new: NewTaskGroup) -> AppResult<TaskGroup> {
         let name = validated_name(&new.name)?;
-        let context =
-            new.context.as_deref().map(str::trim).filter(|c| !c.is_empty()).map(str::to_string);
+        let context = new
+            .context
+            .as_deref()
+            .map(str::trim)
+            .filter(|c| !c.is_empty())
+            .map(str::to_string);
         let now = Utc::now().to_rfc3339();
         let group = TaskGroup {
             id: Uuid::new_v4().to_string(),
@@ -64,7 +70,13 @@ impl TaskGroupsRepository {
         conn.execute(
             "INSERT INTO task_groups (id, name, context, created_at, updated_at) \
              VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![group.id, group.name, group.context, group.created_at, group.updated_at],
+            params![
+                group.id,
+                group.name,
+                group.context,
+                group.created_at,
+                group.updated_at
+            ],
         )
         .map_err(name_taken_err)?;
         Ok(group)
@@ -78,7 +90,10 @@ impl TaskGroupsRepository {
             .prepare("SELECT * FROM task_groups WHERE id = ?1 AND deleted = 0")
             .map_err(store_err)?;
         let rows = stmt.query([id]).map_err(store_err)?;
-        let row = from_rows::<TaskGroupRow>(rows).next().transpose().map_err(serde_err)?;
+        let row = from_rows::<TaskGroupRow>(rows)
+            .next()
+            .transpose()
+            .map_err(serde_err)?;
         Ok(row.map(TaskGroup::from))
     }
 
@@ -104,7 +119,11 @@ impl TaskGroupsRepository {
         if let Some(context) = patch.context {
             // Empty input clears the context (stored NULL).
             let trimmed = context.trim();
-            let value = if trimmed.is_empty() { None } else { Some(trimmed) };
+            let value = if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            };
             conn.execute(
                 "UPDATE task_groups SET context = ?1, updated_at = ?2 WHERE id = ?3",
                 params![value, now, id],
@@ -120,8 +139,11 @@ impl TaskGroupsRepository {
     /// the service, through the task repository.
     pub fn delete(&self, id: &str) -> AppResult<()> {
         let conn = self.db.lock()?;
-        conn.execute("UPDATE task_groups SET deleted = 1, name = id WHERE id = ?1", [id])
-            .map_err(store_err)?;
+        conn.execute(
+            "UPDATE task_groups SET deleted = 1, name = id WHERE id = ?1",
+            [id],
+        )
+        .map_err(store_err)?;
         Ok(())
     }
 
@@ -141,8 +163,15 @@ impl TaskGroupsRepository {
              WHERE (task_groups.hlc_physical, task_groups.hlc_counter, task_groups.hlc_node_id) \
              < (excluded.hlc_physical, excluded.hlc_counter, excluded.hlc_node_id)",
             params![
-                id, body.name, body.context, body.created_at, body.updated_at, body.deleted,
-                clock.physical, clock.counter, clock.node_id
+                id,
+                body.name,
+                body.context,
+                body.created_at,
+                body.updated_at,
+                body.deleted,
+                clock.physical,
+                clock.counter,
+                clock.node_id
             ],
         );
         match result {
@@ -158,7 +187,6 @@ impl TaskGroupsRepository {
             Err(e) => Err(store_err(e)),
         }
     }
-
 }
 
 impl SyncedRepository for TaskGroupsRepository {
@@ -207,13 +235,7 @@ impl SyncedRepository for TaskGroupsRepository {
         Ok(())
     }
 
-    fn record_change(
-        &self,
-        id: &str,
-        physical: i64,
-        counter: i64,
-        node_id: &str,
-    ) -> AppResult<()> {
+    fn record_change(&self, id: &str, physical: i64, counter: i64, node_id: &str) -> AppResult<()> {
         let conn = self.db.lock()?;
         conn.execute(
             "UPDATE task_groups SET hlc_physical = ?1, hlc_counter = ?2, hlc_node_id = ?3, \

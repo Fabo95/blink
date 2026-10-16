@@ -2,6 +2,7 @@ import { Archive, ChevronLeft, ChevronRight, Search } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { SECTION_TITLE } from '@/components/ui/section';
 import type { Task } from '@/generated/Task';
 import type { ArchiveView } from '@/hooks/useArchive';
 
@@ -22,7 +23,7 @@ export function ArchivePage({ archive, totalCount, renderRow }: ArchivePageProps
     <Card className="panel">
       <CardHeader className="space-y-2.5">
         <div className="flex items-center justify-between">
-          <span className="section-bar text-sm font-semibold uppercase tracking-wide text-primary">
+          <span className={SECTION_TITLE}>
             Archive
           </span>
           <span className="text-xs text-muted-foreground">{totalCount} completed</span>
@@ -82,6 +83,8 @@ function Pager({
     <div className="flex items-center justify-center gap-4 pt-1 text-xs text-muted-foreground">
       <button
         type="button"
+        tabIndex={-1}
+        onMouseDown={(e) => e.preventDefault()}
         onClick={() => onChange(page - 1)}
         disabled={page === 0}
         aria-label="Newer completions"
@@ -94,6 +97,8 @@ function Pager({
       </span>
       <button
         type="button"
+        tabIndex={-1}
+        onMouseDown={(e) => e.preventDefault()}
         onClick={() => onChange(page + 1)}
         disabled={page === pageCount - 1}
         aria-label="Older completions"

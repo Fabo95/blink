@@ -1,10 +1,11 @@
 import { Globe, Sparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ErrorLine, SECTION_TITLE } from '@/components/ui/section';
 import type { EgressEvent } from '@/generated/EgressEvent';
 import type { EgressKind } from '@/generated/EgressKind';
 import { api } from '@/lib/api';
-import { shortAge } from '@/lib/notes';
+import { timeAgo } from '@/lib/timeAgo';
 import { errorMessage } from '@/lib/utils';
 
 /** Rows shown; the core keeps a longer recent window. */
@@ -39,7 +40,7 @@ export function EgressCard() {
     <Card className="panel">
       <CardHeader>
         <div className="flex w-full items-center justify-between">
-          <CardTitle className="section-bar text-sm font-semibold uppercase tracking-wide text-primary">
+          <CardTitle className={SECTION_TITLE}>
             What left this Mac
           </CardTitle>
           <span className="text-xs text-muted-foreground">{lastWeek} in the last 7 days</span>
@@ -50,7 +51,7 @@ export function EgressCard() {
           Every AI call and source fetch: where it went and how much of your text was sent. Never
           the content itself. Confidential topics never appear here.
         </p>
-        {error && <p className="text-[11px] text-destructive">{error}</p>}
+        {error && <ErrorLine>{error}</ErrorLine>}
         {events.length === 0 ? (
           <p className="text-sm text-muted-foreground">Nothing has left this Mac yet.</p>
         ) : (
@@ -70,7 +71,7 @@ export function EgressCard() {
                   {event.bytes > 0 ? `${event.bytes} chars` : 'no text'}
                 </span>
                 <span className="w-10 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">
-                  {shortAge(event.createdAt)}
+                  {timeAgo(event.createdAt)}
                 </span>
               </li>
             ))}

@@ -14,8 +14,8 @@ use crate::core::error::AppResult;
 use crate::core::models::{NoteRevision, RevisionReason};
 use crate::core::wire::{Clock, LocalChange, NoteRevisionBody, RecordBody};
 
-use crate::database::{serde_err, store_err, Db};
 use crate::core::synced_repository::SyncedRepository;
+use crate::database::{serde_err, store_err, Db};
 
 #[derive(Clone)]
 pub struct NoteRevisionsRepository {

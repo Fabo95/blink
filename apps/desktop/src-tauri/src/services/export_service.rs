@@ -8,10 +8,9 @@ use chrono::Utc;
 use serde::Serialize;
 
 use crate::core::error::{AppError, AppResult};
-use crate::core::models::{ExportFormat, Note, NoteStatus, NoteType, Topic};
-use crate::repository::{NoteLinksRepository, NotesRepository, NoteReviewsRepository, TopicsRepository};
+use crate::core::models::{ExportFormat, Note, NoteType, Topic};
+use crate::repository::{NotesRepository, TopicsRepository};
 use crate::services::policy_service::allows_bulk_export;
-use crate::services::note_service::decorate;
 
 /// A rendered export, ready to be written wherever the user picks.
 pub struct Export {
@@ -21,22 +20,13 @@ pub struct Export {
 
 pub struct ExportService {
     notes_repository: NotesRepository,
-    note_reviews_repository: NoteReviewsRepository,
-    note_links_repository: NoteLinksRepository,
     topics_repository: TopicsRepository,
 }
 
 impl ExportService {
-    pub fn new(
-        notes_repository: NotesRepository,
-        note_reviews_repository: NoteReviewsRepository,
-        note_links_repository: NoteLinksRepository,
-        topics_repository: TopicsRepository,
-    ) -> Self {
+    pub fn new(notes_repository: NotesRepository, topics_repository: TopicsRepository) -> Self {
         Self {
             notes_repository,
-            note_reviews_repository,
-            note_links_repository,
             topics_repository,
         }
     }
@@ -44,11 +34,7 @@ impl ExportService {
     /// Render one topic (`topic_id`) or everything exportable (`None`).
     pub fn render(&self, topic_id: Option<&str>, format: ExportFormat) -> AppResult<Export> {
         let topics = self.topics_repository.list()?;
-        let notes: Vec<Note> = decorate(
-            self.notes_repository.list()?,
-            self.note_reviews_repository.convictions_by_note()?,
-            &self.note_links_repository.evidence_by_note()?,
-        );
+        let notes = self.notes_repository.list()?;
         let document = build_document(&topics, notes, topic_id)?;
 
         let scope = match topic_id {
@@ -182,20 +168,12 @@ fn render_notes(out: &mut String, notes: &[Note], heading: &str) {
             let date = note.created_at.get(..10).unwrap_or(&note.created_at);
             // Continuation lines are indented so a multi-line note stays one list item.
             let text = note.text.trim().replace('\n', "\n  ");
-            let link = note.link.as_ref().map(|l| format!(" ({l})")).unwrap_or_default();
-            let conviction = if note.conviction_history.is_empty() {
-                String::new()
-            } else {
-                let scores: Vec<String> =
-                    note.conviction_history.iter().map(i64::to_string).collect();
-                format!(", conviction {}", scores.join(" > "))
-            };
-            let status = match note.status {
-                NoteStatus::Open => "",
-                NoteStatus::Promoted => ", promoted",
-                NoteStatus::Dropped => ", dropped",
-            };
-            out.push_str(&format!("- {text}{link} _{date}{conviction}{status}_\n"));
+            let link = note
+                .link
+                .as_ref()
+                .map(|l| format!(" ({l})"))
+                .unwrap_or_default();
+            out.push_str(&format!("- {text}{link} _{date}_\n"));
         }
     }
 }
@@ -222,7 +200,7 @@ fn slug(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::models::{CaptureSource, Enrichment, Evidence, Sensitivity, TopicStatus};
+    use crate::core::models::{CaptureSource, Sensitivity, TopicStatus};
 
     fn topic(id: &str, name: &str, sensitivity: Sensitivity) -> Topic {
         Topic {
@@ -246,15 +224,6 @@ mod tests {
             topic_id: topic_id.map(str::to_string),
             improved: false,
             conflict: false,
-            status: NoteStatus::Open,
-            revisit_at: None,
-            conviction_history: Vec::new(),
-            review_nudge: None,
-            title: None,
-            excerpt: None,
-            summary: None,
-            enrichment: Enrichment::None,
-            evidence: Evidence::default(),
             source: CaptureSource {
                 app_id: "manual".to_string(),
                 app_name: "Manual".to_string(),
@@ -316,16 +285,6 @@ mod tests {
         assert!(markdown.contains("## Agentic commerce\n\n> Is it real?"));
         assert!(markdown.contains("### Ideas\n\n- Agents book tables _2026-10-02_"));
         assert!(markdown.contains("- Line one\n  line two _2026-10-02_"));
-    }
-
-    #[test]
-    fn markdown_shows_conviction_history_and_status() {
-        let topics = [topic("a", "Agentic commerce", Sensitivity::Personal)];
-        let mut promoted = note("Agents book tables", NoteType::Idea, Some("a"));
-        promoted.conviction_history = vec![2, 4, 5];
-        promoted.status = NoteStatus::Promoted;
-        let markdown = render_markdown(&build_document(&topics, vec![promoted], None).unwrap());
-        assert!(markdown.contains("- Agents book tables _2026-10-02, conviction 2 > 4 > 5, promoted_"));
     }
 
     #[test]

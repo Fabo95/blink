@@ -54,17 +54,3 @@ export function splitNotes(notes: Note[]): Record<NoteType, Note[]> {
   for (const note of notes) buckets[note.noteType].push(note);
   return buckets;
 }
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** A compact age for a row: `today`, `3d`, `5w`, `4mo`, `2y`. */
-export function shortAge(iso: string, now: number = Date.now()): string {
-  const parsed = Date.parse(iso);
-  if (Number.isNaN(parsed)) return '';
-  const days = Math.floor((now - parsed) / DAY_MS);
-  if (days < 1) return 'today';
-  if (days < 14) return `${days}d`;
-  if (days < 60) return `${Math.floor(days / 7)}w`;
-  if (days < 730) return `${Math.floor(days / 30)}mo`;
-  return `${Math.floor(days / 365)}y`;
-}

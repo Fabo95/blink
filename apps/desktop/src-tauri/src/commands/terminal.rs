@@ -5,7 +5,7 @@
 use tauri::State;
 
 use crate::core::error::AppResult;
-use crate::core::models::TerminalOption;
+use crate::core::models::{ClaudeConversation, TerminalOption};
 use crate::services::repo_service::RepoService;
 use crate::services::terminal_service::TerminalService;
 use crate::services::worktree_service::WorktreeService;
@@ -46,4 +46,15 @@ pub fn set_worktree_terminal(
     command: Option<String>,
 ) -> AppResult<()> {
     terminal_service.set_command(command)
+}
+
+/// The newest Claude conversations across the repo's checkouts (main + worktrees) — what a
+/// new worktree can carry over.
+#[tauri::command]
+pub fn list_claude_conversations(
+    repo_service: State<'_, RepoService>,
+    worktree_service: State<'_, WorktreeService>,
+    repo_path: String,
+) -> AppResult<Vec<ClaudeConversation>> {
+    worktree_service.recent_conversations(&repo_service.find(&repo_path)?)
 }

@@ -229,7 +229,12 @@ fn verification_required() -> AuthResult {
 fn is_email_not_verified(body: &str) -> bool {
     serde_json::from_str::<serde_json::Value>(body)
         .ok()
-        .and_then(|value| value.get("code")?.as_str().map(|code| code == "EMAIL_NOT_VERIFIED"))
+        .and_then(|value| {
+            value
+                .get("code")?
+                .as_str()
+                .map(|code| code == "EMAIL_NOT_VERIFIED")
+        })
         .unwrap_or(false)
 }
 

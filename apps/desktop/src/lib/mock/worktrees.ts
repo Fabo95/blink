@@ -2,6 +2,7 @@
 
 import type { ManagedRepo } from '@/generated/ManagedRepo';
 import type { PruneCandidate } from '@/generated/PruneCandidate';
+import type { TaskWorktree } from '@/generated/TaskWorktree';
 import type { Worktree } from '@/generated/Worktree';
 import type { WorktreeAttention } from '@/generated/WorktreeAttention';
 import type { WorktreeAttentionUpdate } from '@/generated/WorktreeAttentionUpdate';
@@ -15,8 +16,14 @@ let mockWorktreeEditor: string | null = null;
 const DEFAULT_TERMINAL_COMMAND = 'alacritty -e tmux attach -t {session}';
 const DEFAULT_EDITOR_COMMAND = 'code {path}';
 let mockManagedRepos: ManagedRepo[] = [
-  { name: 'blink', path: '/Users/you/repositories/blink', baseBranch: null },
+  {
+    name: 'blink',
+    path: '/Users/you/repositories/blink',
+    baseBranch: null,
+    setupCommand: 'pnpm install',
+  },
 ];
+let mockTaskWorktrees: TaskWorktree[] = [];
 const mockWorktrees: Record<string, Worktree[]> = {
   '/Users/you/repositories/blink': [
     {
@@ -105,10 +112,65 @@ export const worktreeHandlers: MockHandlers = {
     const path = picked?.trim() ?? '';
     if (path && !mockManagedRepos.some((r) => r.path === path)) {
       const name = path.split('/').filter(Boolean).pop() ?? path;
-      mockManagedRepos.push({ name, path, baseBranch: null });
+      mockManagedRepos.push({ name, path, baseBranch: null, setupCommand: null });
       mockWorktrees[path] ??= [];
     }
     return [...mockManagedRepos];
+  },
+  set_repo_setup_command: async (args) => {
+    const path = String(args?.path ?? '');
+    const command = typeof args?.command === 'string' ? args.command.trim() : '';
+    mockManagedRepos = mockManagedRepos.map((r) =>
+      r.path === path ? { ...r, setupCommand: command ? command : null } : r,
+    );
+    return [...mockManagedRepos];
+  },
+  list_task_worktrees: async () => [...mockTaskWorktrees],
+  start_task_worktree: async (args) => {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const repoPath = String(args?.repoPath ?? '');
+    const branch = String(args?.branch ?? '').trim();
+    if (!branch) throw new Error('branch is empty');
+    const link: TaskWorktree = {
+      taskId: String(args?.taskId ?? ''),
+      taskText: 'A task from the inbox',
+      repoPath,
+      branch,
+    };
+    mockTaskWorktrees = [...mockTaskWorktrees.filter((l) => l.taskId !== link.taskId), link];
+    const list = mockWorktrees[repoPath] ?? [];
+    mockWorktrees[repoPath] = list;
+    if (!list.some((w) => w.branch === branch)) {
+      list.push({
+        repo: repoPath,
+        branch,
+        path: `/Users/you/repositories/worktrees/${repoPath.split('/').pop()}/${branch}`,
+        isMain: false,
+        isDirty: false,
+        sessionLive: true,
+        status: 'local',
+      });
+    }
+    return link;
+  },
+  list_claude_conversations: async () => {
+    const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+    return [
+      {
+        sessionId: '00000000-0000-0000-0000-000000000001',
+        preview: 'Refactor the sync retry so a failed push backs off instead of looping',
+        updatedAt: ago(12),
+        origin: 'master',
+        fromMain: true,
+      },
+      {
+        sessionId: '00000000-0000-0000-0000-000000000002',
+        preview: 'Why does the DLP filter miss IBANs with spaces?',
+        updatedAt: ago(95),
+        origin: 'fix/dlp-rules',
+        fromMain: false,
+      },
+    ];
   },
   list_worktrees: async (args) => {
     return [...(mockWorktrees[String(args?.repoPath ?? '')] ?? [])];

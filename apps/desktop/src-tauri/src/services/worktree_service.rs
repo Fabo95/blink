@@ -21,14 +21,19 @@ use std::path::{Path, PathBuf};
 use crate::clients::git_cli::GitCli;
 use crate::clients::github_cli::GitHubCli;
 use crate::core::error::{AppError, AppResult};
-use crate::core::models::{ManagedRepo, PruneCandidate, Worktree, WorktreeStatus};
-use crate::core::paths::expand_tilde;
+use crate::core::models::{
+    ClaudeConversation, ManagedRepo, PruneCandidate, Worktree, WorktreeStatus,
+};
+use crate::core::paths::{expand_tilde, shell_quote};
 use crate::repository::SettingsRepository;
-use crate::services::terminal_service::TerminalService;
+use crate::services::terminal_service::{ClaudeStart, SessionLaunch, TerminalService};
 
 /// `settings` key holding the optional base directory all worktrees go under. Unset =
 /// the derived default (a `worktrees/` dir beside each repo).
 const WORKTREE_BASE_DIR_KEY: &str = "worktree_base_dir";
+
+/// How many recent Claude conversations the new-worktree prompt offers to carry over.
+const RECENT_CONVERSATIONS: usize = 8;
 
 #[derive(Clone)]
 pub struct WorktreeService {
@@ -106,13 +111,21 @@ impl WorktreeService {
 
     /// Create the worktree if missing (existing local branch → checkout; origin branch →
     /// tracking branch; else new branch off the repo's base) and ensure its tmux/Claude
-    /// session. Idempotent per branch.
-    pub fn add(&self, repo: &ManagedRepo, branch: String) -> AppResult<Worktree> {
+    /// session. Idempotent per branch. A worktree created here first runs the repo's setup
+    /// command; `claude` says how its Claude starts (a fork, a task's brief, or the default) —
+    /// both only apply when the session is new.
+    pub fn add(
+        &self,
+        repo: &ManagedRepo,
+        branch: String,
+        claude: ClaudeStart,
+    ) -> AppResult<Worktree> {
         let root = Path::new(&repo.path);
         let wt_path = self.worktree_dir(repo, &branch)?;
         let wt_path_str = wt_path.to_string_lossy().to_string();
+        let created = !wt_path.exists();
 
-        if !wt_path.exists() {
+        if created {
             if let Some(parent) = wt_path.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| {
                     AppError::Worktree(format!("could not create {}: {e}", parent.display()))
@@ -122,20 +135,28 @@ impl WorktreeService {
             let _ = self.git_cli.fetch_from_origin(root);
 
             if self.git_cli.has_local_branch(root, &branch) {
-                self.git_cli.add_worktree_checkout(root, &wt_path_str, &branch)?;
+                self.git_cli
+                    .add_worktree_checkout(root, &wt_path_str, &branch)?;
             } else if self.git_cli.has_remote_branch(root, &branch) {
-                self.git_cli.add_worktree_tracking(root, &wt_path_str, &branch)?;
+                self.git_cli
+                    .add_worktree_tracking(root, &wt_path_str, &branch)?;
             } else {
                 let base = repo
                     .base_branch
                     .clone()
                     .unwrap_or_else(|| self.git_cli.default_base_branch(root));
-                self.git_cli.add_worktree_new_branch(root, &wt_path_str, &branch, &base)?;
+                self.git_cli
+                    .add_worktree_new_branch(root, &wt_path_str, &branch, &base)?;
             }
         }
 
         let session = tmux_session_name(&repo.name, &branch);
-        self.terminal_service.ensure_session(&session, &wt_path)?;
+        let launch = SessionLaunch {
+            setup_command: created.then(|| setup_line(repo)).flatten(),
+            claude,
+        };
+        self.terminal_service
+            .ensure_session(&session, &wt_path, launch)?;
 
         let gone = self.gone_branches(root);
         Ok(Worktree {
@@ -205,12 +226,21 @@ impl WorktreeService {
             .base_branch
             .clone()
             .unwrap_or_else(|| self.git_cli.default_base_branch(root));
-        let base_local = base.strip_prefix("origin/").unwrap_or(base.as_str()).to_string();
+        let base_local = base
+            .strip_prefix("origin/")
+            .unwrap_or(base.as_str())
+            .to_string();
 
-        let merged: HashSet<String> =
-            self.git_cli.branches_merged_into(root, &base).into_iter().collect();
-        let gone: HashSet<String> =
-            self.git_cli.branches_with_gone_upstream(root).into_iter().collect();
+        let merged: HashSet<String> = self
+            .git_cli
+            .branches_merged_into(root, &base)
+            .into_iter()
+            .collect();
+        let gone: HashSet<String> = self
+            .git_cli
+            .branches_with_gone_upstream(root)
+            .into_iter()
+            .collect();
 
         let mut candidates = Vec::new();
         for entry in self.git_cli.list_worktrees(root)? {
@@ -284,7 +314,29 @@ impl WorktreeService {
                 })
                 .or_insert((row.number, status));
         }
-        latest.into_iter().map(|(branch, (_, status))| (branch, status)).collect()
+        latest
+            .into_iter()
+            .map(|(branch, (_, status))| (branch, status))
+            .collect()
+    }
+
+    /// The newest Claude conversations across the repo's main checkout and every linked
+    /// worktree, newest first — what a new worktree can carry over.
+    pub fn recent_conversations(&self, repo: &ManagedRepo) -> AppResult<Vec<ClaudeConversation>> {
+        let mut conversations = Vec::new();
+        for entry in self.git_cli.list_worktrees(Path::new(&repo.path))? {
+            let origin = entry.branch.unwrap_or_else(|| "(detached)".to_string());
+            conversations.extend(self.terminal_service.recent_conversations(
+                Path::new(&entry.path),
+                &origin,
+                entry.is_main,
+                RECENT_CONVERSATIONS,
+            ));
+        }
+        // All timestamps are UTC RFC 3339, so they sort as strings.
+        conversations.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        conversations.truncate(RECENT_CONVERSATIONS);
+        Ok(conversations)
     }
 
     // ── resolution (used by the open-in-terminal / open-in-editor commands) ─────────────
@@ -300,9 +352,9 @@ impl WorktreeService {
     /// resolve here and hand the path to the terminal/editor service.
     pub fn existing_worktree_path(&self, repo: &ManagedRepo, branch: &str) -> AppResult<String> {
         let root = Path::new(&repo.path);
-        let path = self
-            .worktree_path_for(root, branch)?
-            .ok_or_else(|| AppError::Worktree(format!("no worktree found for branch '{branch}'")))?;
+        let path = self.worktree_path_for(root, branch)?.ok_or_else(|| {
+            AppError::Worktree(format!("no worktree found for branch '{branch}'"))
+        })?;
         if !Path::new(&path).exists() {
             return Err(AppError::Worktree(format!(
                 "the worktree folder is missing ({path}) — remove it and recreate the worktree"
@@ -317,7 +369,10 @@ impl WorktreeService {
     /// passed to [`Self::local_status`] for every branch. No fetch, so this reflects the
     /// local repo's last-known remote state.
     fn gone_branches(&self, root: &Path) -> HashSet<String> {
-        self.git_cli.branches_with_gone_upstream(root).into_iter().collect()
+        self.git_cli
+            .branches_with_gone_upstream(root)
+            .into_iter()
+            .collect()
     }
 
     /// A branch's local git status (no network): `gone` > `pushed` > `local`. `gone` is the
@@ -361,6 +416,13 @@ impl WorktreeService {
 
 fn tmux_session_name(repo_name: &str, branch: &str) -> String {
     format!("{repo_name}-{}", branch.replace('/', "-"))
+}
+
+/// The repo's setup command with `{repo}` filled in (the main checkout, shell-quoted), or
+/// `None` when the repo has none.
+fn setup_line(repo: &ManagedRepo) -> Option<String> {
+    let command = repo.setup_command.as_deref()?.trim();
+    (!command.is_empty()).then(|| command.replace("{repo}", &shell_quote(&repo.path)))
 }
 
 /// Map a `gh` PR row's raw state (`OPEN` / `CLOSED` / `MERGED`, plus the draft flag) to a

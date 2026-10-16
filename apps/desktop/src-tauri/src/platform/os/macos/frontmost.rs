@@ -14,17 +14,31 @@ pub fn detect_source() -> Option<FrontmostSource> {
     use objc2_app_kit::NSWorkspace;
 
     let app = NSWorkspace::sharedWorkspace().frontmostApplication()?;
-    let app_id = app.bundleIdentifier().map(|s| s.to_string()).unwrap_or_default();
-    let app_name = app.localizedName().map(|s| s.to_string()).unwrap_or_default();
+    let app_id = app
+        .bundleIdentifier()
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+    let app_name = app
+        .localizedName()
+        .map(|s| s.to_string())
+        .unwrap_or_default();
     let pid = app.processIdentifier();
 
     let window = AxElement::for_application(pid).and_then(|app| app.focused_window());
-    let window_title = window.as_ref().and_then(AxElement::title).unwrap_or_default();
+    let window_title = window
+        .as_ref()
+        .and_then(AxElement::title)
+        .unwrap_or_default();
     let url = window
         .filter(|_| is_known_browser(&app_id))
         .and_then(|window| page_url(&window));
 
-    Some(FrontmostSource { app_id, app_name, window_title, url })
+    Some(FrontmostSource {
+        app_id,
+        app_name,
+        window_title,
+        url,
+    })
 }
 
 /// Apps we try to read a page URL from — the rest skip the (pointless) lookup.
@@ -55,7 +69,11 @@ fn page_url(window: &AxElement) -> Option<String> {
     find_web_area_url(window.raw(), 0, &mut remaining_nodes)
 }
 
-fn find_web_area_url(element: AXUIElementRef, depth: u32, remaining_nodes: &mut u32) -> Option<String> {
+fn find_web_area_url(
+    element: AXUIElementRef,
+    depth: u32,
+    remaining_nodes: &mut u32,
+) -> Option<String> {
     if depth > MAX_SEARCH_DEPTH || *remaining_nodes == 0 {
         return None;
     }
@@ -66,7 +84,9 @@ fn find_web_area_url(element: AXUIElementRef, depth: u32, remaining_nodes: &mut 
             return Some(url);
         }
     }
-    find_child(element, |child| find_web_area_url(child, depth + 1, remaining_nodes))
+    find_child(element, |child| {
+        find_web_area_url(child, depth + 1, remaining_nodes)
+    })
 }
 
 fn is_http(url: &str) -> bool {

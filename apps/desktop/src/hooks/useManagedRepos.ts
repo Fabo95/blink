@@ -7,9 +7,13 @@ export interface ManagedReposView {
   repos: ManagedRepo[];
   error: string;
   refresh: () => Promise<void>;
+  /** Stop tracking a repo. Rethrows so the caller can keep its confirm open on failure. */
   remove: (path: string) => Promise<void>;
   /** Open a native folder picker and add the chosen git repo. */
   pick: () => Promise<void>;
+  /** Set (or clear with an empty string) the repo's worktree setup command. Rethrows so the
+   *  caller can keep its prompt open on failure. */
+  setSetupCommand: (path: string, command: string) => Promise<void>;
 }
 
 /**
@@ -39,6 +43,7 @@ export function useManagedRepos(): ManagedReposView {
       setRepos(await api.removeManagedRepo(path));
     } catch (e) {
       setError(errorMessage(e, 'Could not remove that repository'));
+      throw e;
     }
   }, []);
 
@@ -51,5 +56,15 @@ export function useManagedRepos(): ManagedReposView {
     }
   }, []);
 
-  return { repos, error, refresh, remove, pick };
+  const setSetupCommand = useCallback(async (path: string, command: string) => {
+    setError('');
+    try {
+      setRepos(await api.setRepoSetupCommand(path, command.trim() ? command : null));
+    } catch (e) {
+      setError(errorMessage(e, 'Could not save the setup command'));
+      throw e;
+    }
+  }, []);
+
+  return { repos, error, refresh, remove, pick, setSetupCommand };
 }

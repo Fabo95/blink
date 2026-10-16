@@ -16,4 +16,9 @@ path: string,
 /**
  * Ref new branches fork from; `None` = auto-detect (origin/HEAD → main|master → HEAD).
  */
-baseBranch: string | null, };
+baseBranch: string | null, 
+/**
+ * Shell command run in a **new** worktree before Claude starts (e.g. `pnpm i`); `{repo}`
+ * is the main checkout's path. `None` = no setup.
+ */
+setupCommand: string | null, };

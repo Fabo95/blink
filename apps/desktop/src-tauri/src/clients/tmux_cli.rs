@@ -84,7 +84,13 @@ impl TmuxCli {
     pub fn terminals_on(&self, session: &str) -> Vec<String> {
         let target = format!("={session}");
         Command::new("tmux")
-            .args(["list-clients", "-t", target.as_str(), "-F", "#{client_name}"])
+            .args([
+                "list-clients",
+                "-t",
+                target.as_str(),
+                "-F",
+                "#{client_name}",
+            ])
             .output()
             .ok()
             .filter(|o| o.status.success())
@@ -107,10 +113,9 @@ impl TmuxCli {
     }
 
     fn run(&self, args: &[&str]) -> AppResult<()> {
-        let output = Command::new("tmux")
-            .args(args)
-            .output()
-            .map_err(|e| AppError::Worktree(format!("could not run tmux (is it installed?): {e}")))?;
+        let output = Command::new("tmux").args(args).output().map_err(|e| {
+            AppError::Worktree(format!("could not run tmux (is it installed?): {e}"))
+        })?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(AppError::Worktree(format!(

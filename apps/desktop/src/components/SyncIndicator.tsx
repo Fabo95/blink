@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSyncState } from '@/hooks/useSyncState';
 import { api, isTauri } from '@/lib/api';
+import { useReloadHandler } from '@/lib/reload';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
 import { cn } from '@/lib/utils';
 
@@ -55,6 +56,10 @@ export function SyncIndicator() {
   // gating on "syncing" would blink ⌘⇧s out of the bar on every cycle. The no-op guard
   // above handles the in-flight case instead.
   useShortcut('app.sync', { enabled: isTauri, callback: syncNow });
+  // The app-wide `g` includes a server sync (this indicator shows it running).
+  useReloadHandler(() => {
+    if (isTauri) syncNow();
+  });
 
   if (!isTauri) return null;
 

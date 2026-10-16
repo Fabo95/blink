@@ -8,7 +8,7 @@ export interface Shortcut {
    *  `0` navigate (base list) · `1` browse (sections/groups) · `2` task (focused row) ·
    *  `3` overlay (editor / dialog / prompt). Omit for keys with no statusline chip. */
   level?: number;
-  /** Full description for the `?` cheat-sheet (the chip's terse label isn't enough). */
+  /** Full description for the `c` cheat-sheet (the chip's terse label isn't enough). */
   describe?: string;
   /** Sort slot within a level's row — the shared grammar, gaps left for siblings:
    *  `10` navigate · `20` primary · `30` actions · `50` context · `90` Esc. Ties keep
@@ -38,12 +38,8 @@ const HINTS = {
   'mod+k': { keys: '⌘k', label: 'note type' },
   t: { keys: 't', label: 'type' },
   y: { keys: 'y', label: 'history' },
-  w: { keys: 'w', label: 'review' },
-  u: { keys: 'u', label: 'link' },
-  // Arrows alone (no jk synonym): the link picker moves its list while you type a search.
+  // Arrows alone (no jk synonym): a list that moves while you keep typing in a field.
   down: { keys: '↑↓', label: 'navigate' },
-  'mod+1': { keys: '⌘1-5', label: 'conviction' },
-  'mod+p': { keys: '⌘p', label: 'promote' },
   'mod+e': { keys: '⌘e', label: 'export' },
   'mod+shift+e': { keys: '⌘⇧e', label: 'export json' },
   'backspace, delete, d': { keys: '⌫', vim: 'd', label: 'delete' },
@@ -66,6 +62,8 @@ const HINTS = {
   b: { keys: 'b', label: 'remote' },
   e: { keys: 'e', label: 'editor' },
   g: { keys: 'g', label: 'refresh' },
+  m: { keys: 'm', label: 'to inbox' },
+  w: { keys: 'w', label: 'worktree' },
 } satisfies Record<string, Hint>;
 
 /**
@@ -83,7 +81,7 @@ export const SHORTCUTS = {
     keys: 'down, j',
     hint: HINTS['down, j'],
     level: 0,
-    describe: 'Move between tasks',
+    describe: 'Move between rows (every list)',
     order: 10,
   },
   'cursor.up': { keys: 'up, k', hint: null, level: 0, order: 10 },
@@ -114,6 +112,43 @@ export const SHORTCUTS = {
     level: 2,
     describe: 'Copy an AI prompt for the task',
     order: 31,
+  },
+  // Start the task in its own worktree, Claude briefed with it — an in-row prompt: `↑↓` picks
+  // the repo (the branch field keeps focus), `⌘↵` starts, `Esc` cancels.
+  'task.worktree': {
+    keys: 'w',
+    hint: HINTS.w,
+    level: 2,
+    describe: 'Start the task in its own worktree, with Claude briefed on it',
+    order: 31,
+  },
+  'taskWorktree.start': {
+    keys: 'mod+enter',
+    hint: HINTS['mod+enter'],
+    level: 3,
+    order: 20,
+    opts: { enableOnFormTags: true },
+  },
+  'taskWorktree.nextRepo': {
+    keys: 'down',
+    hint: HINTS.down,
+    level: 3,
+    order: 10,
+    opts: { enableOnFormTags: true },
+  },
+  'taskWorktree.prevRepo': {
+    keys: 'up',
+    hint: null,
+    level: 3,
+    order: 10,
+    opts: { enableOnFormTags: true },
+  },
+  'taskWorktree.cancel': {
+    keys: 'escape',
+    hint: HINTS.escape,
+    level: 3,
+    order: 90,
+    opts: { enableOnFormTags: true },
   },
   'task.delete': {
     keys: 'backspace, delete, d',
@@ -441,36 +476,6 @@ export const SHORTCUTS = {
     describe: 'Show earlier versions of the note',
     order: 32,
   },
-  // `r` is taken (rename), so review is `w`. On a focused note it reviews that note; with
-  // nothing focused it walks the due queue.
-  'note.review': {
-    keys: 'w',
-    hint: HINTS.w,
-    level: 2,
-    describe: 'Review the note: conviction, comment, keep / drop / promote',
-    order: 32,
-  },
-  'ideas.reviewSession': {
-    keys: 'w',
-    hint: HINTS.w,
-    level: 1,
-    describe: 'Review everything that is due, up to 10 notes',
-    order: 52,
-  },
-  'note.link': {
-    keys: 'u',
-    hint: HINTS.u,
-    level: 2,
-    describe: 'Link the note as evidence: supports, contradicts, or related',
-    order: 32,
-  },
-  'note.refetch': {
-    keys: 'g',
-    hint: HINTS.g,
-    level: 2,
-    describe: 'Fetch and summarize a source again',
-    order: 34,
-  },
   'note.delete': {
     keys: 'backspace, delete, d',
     hint: HINTS['backspace, delete, d'],
@@ -560,113 +565,6 @@ export const SHORTCUTS = {
     level: 3,
     order: 90,
   },
-  // The review popover. Conviction keys work while typing the comment.
-  'review.conviction1': {
-    keys: 'mod+1',
-    hint: HINTS['mod+1'],
-    level: 3,
-    describe: 'Set the conviction, 1 (not convinced) to 5 (very convinced)',
-    order: 15,
-    opts: { enableOnFormTags: true },
-  },
-  'review.conviction2': {
-    keys: 'mod+2',
-    hint: null,
-    level: 3,
-    order: 15,
-    opts: { enableOnFormTags: true },
-  },
-  'review.conviction3': {
-    keys: 'mod+3',
-    hint: null,
-    level: 3,
-    order: 15,
-    opts: { enableOnFormTags: true },
-  },
-  'review.conviction4': {
-    keys: 'mod+4',
-    hint: null,
-    level: 3,
-    order: 15,
-    opts: { enableOnFormTags: true },
-  },
-  'review.conviction5': {
-    keys: 'mod+5',
-    hint: null,
-    level: 3,
-    order: 15,
-    opts: { enableOnFormTags: true },
-  },
-  'review.keep': {
-    keys: 'mod+enter',
-    hint: HINTS['mod+enter'],
-    level: 3,
-    describe: 'Save the review and keep the note',
-    order: 20,
-    opts: { enableOnFormTags: true },
-  },
-  'review.promote': {
-    keys: 'mod+p',
-    hint: HINTS['mod+p'],
-    level: 3,
-    describe: 'Save the review and turn the note into an inbox task',
-    order: 30,
-    opts: { enableOnFormTags: true },
-  },
-  'review.drop': {
-    keys: 'mod+backspace, mod+delete',
-    hint: HINTS['mod+backspace, mod+delete'],
-    level: 3,
-    describe: 'Save the review and drop the note (it stays searchable)',
-    order: 31,
-    opts: { enableOnFormTags: true },
-  },
-  'review.close': {
-    keys: 'escape',
-    hint: HINTS.escape,
-    level: 3,
-    describe: 'Close the review (ends a session)',
-    order: 90,
-    opts: { enableOnFormTags: true },
-  },
-  // The link picker: pick a note (type to search), then the relation.
-  'linkPicker.down': {
-    keys: 'down',
-    hint: HINTS.down,
-    level: 3,
-    order: 10,
-    opts: { enableOnFormTags: true },
-  },
-  'linkPicker.up': {
-    keys: 'up',
-    hint: null,
-    level: 3,
-    order: 10,
-    opts: { enableOnFormTags: true },
-  },
-  'linkPicker.confirm': {
-    keys: 'mod+enter',
-    hint: HINTS['mod+enter'],
-    level: 3,
-    describe: 'Pick the highlighted note, then the relation',
-    order: 20,
-    opts: { enableOnFormTags: true },
-  },
-  'linkPicker.remove': {
-    keys: 'mod+backspace, mod+delete',
-    hint: HINTS['mod+backspace, mod+delete'],
-    level: 3,
-    describe: 'Remove the highlighted link',
-    order: 30,
-    opts: { enableOnFormTags: true },
-  },
-  'linkPicker.cancel': {
-    keys: 'escape',
-    hint: HINTS.escape,
-    level: 3,
-    order: 90,
-    opts: { enableOnFormTags: true },
-  },
   // The history popover walks its own list while the page cursor stands down.
   'history.down': {
     keys: 'down, j',
@@ -689,22 +587,81 @@ export const SHORTCUTS = {
     order: 90,
   },
 
-  // ── AI settings: the key field in the inbox's AI card (enabled while it's focused) ──
-  'ai.saveKey': {
+  // ── incoming: the Incoming page (external items: GitHub, …) ─────────────────────────
+  'incoming.open': {
+    keys: 'o',
+    hint: HINTS.o,
+    level: 2,
+    describe: 'Open the item where it lives (GitHub, …)',
+    order: 30,
+  },
+  'incoming.task': {
+    keys: 'm',
+    hint: HINTS.m,
+    level: 2,
+    describe: 'Move the item to the inbox as a task',
+    order: 31,
+  },
+  'incoming.archive': {
+    keys: 'a',
+    hint: HINTS.a,
+    level: 2,
+    describe: 'Archive the item until it changes',
+    order: 32,
+  },
+
+  // ── usage: the Usage page (Claude Code usage; read-only, so only the range switch) ────
+  'usage.rangePrev': {
+    keys: 'left, h',
+    hint: HINTS['left, h'],
+    level: 0,
+    describe: 'Switch the range (today, 7 days, 30 days, all)',
+    order: 15,
+  },
+  'usage.rangeNext': { keys: 'right, l', hint: null, level: 0, order: 15 },
+
+  // ── settings: Connections (Incoming sources + the OpenAI key), one row each, walked with
+  // the list cursor. A row whose key Blink keeps gets a new key (`e`) or loses it (`⌫`),
+  // each in an in-row popover. (Re-checking the connections is part of the app-wide `g`.)
+  'connections.edit': {
+    keys: 'e, i',
+    hint: HINTS['e, i'],
+    level: 2,
+    describe: 'Set or replace the key (checked before it’s kept)',
+    order: 30,
+  },
+  'connections.remove': {
+    keys: 'backspace, delete, d',
+    hint: HINTS['backspace, delete, d'],
+    level: 2,
+    describe: 'Remove the key',
+    order: 32,
+  },
+  'connectionKey.save': {
     keys: 'mod+enter',
     hint: HINTS['mod+enter'],
     level: 3,
-    describe: 'Test the API key and save it',
     order: 20,
     opts: { enableOnFormTags: true },
   },
-  'ai.clearKey': {
-    keys: 'mod+backspace, mod+delete',
-    hint: HINTS['mod+backspace, mod+delete'],
+  'connectionKey.cancel': {
+    keys: 'escape',
+    hint: HINTS.escape,
     level: 3,
-    describe: 'Remove the stored API key',
-    order: 30,
+    order: 90,
     opts: { enableOnFormTags: true },
+  },
+  'connectionRemove.confirm': {
+    keys: 'mod+enter',
+    hint: HINTS['mod+enter'],
+    level: 3,
+    order: 20,
+  },
+  'connectionRemove.cancel': {
+    keys: 'escape',
+    hint: HINTS.escape,
+    level: 3,
+    order: 90,
   },
 
   // ── worktrees: the Worktrees page (replaces the inbox; own list levels) ─────────────
@@ -731,13 +688,6 @@ export const SHORTCUTS = {
     describe: 'Prune merged or gone worktrees',
     order: 56,
   },
-  'worktree.refresh': {
-    keys: 'g',
-    hint: HINTS.g,
-    level: 1,
-    describe: 'Refresh worktrees + PR status',
-    order: 55,
-  },
   // Repositories section (top of the Worktrees page): add via picker, remove the active.
   'repos.add': {
     keys: 'mod+o',
@@ -754,6 +704,28 @@ export const SHORTCUTS = {
     level: 1,
     describe: 'Stop tracking the active repository',
     order: 52,
+  },
+  // Edit the active repo's setup command (popover prompt, like a group rename).
+  'repos.setup': {
+    keys: 'r',
+    hint: HINTS.r,
+    level: 1,
+    describe: "Edit the active repository's worktree setup command",
+    order: 54,
+  },
+  'repoSetup.save': {
+    keys: 'mod+enter',
+    hint: HINTS['mod+enter'],
+    level: 3,
+    order: 20,
+    opts: { enableOnFormTags: true },
+  },
+  'repoSetup.cancel': {
+    keys: 'escape',
+    hint: HINTS.escape,
+    level: 3,
+    order: 90,
+    opts: { enableOnFormTags: true },
   },
   'repoDelete.confirm': {
     keys: 'mod+enter',
@@ -794,6 +766,23 @@ export const SHORTCUTS = {
     hint: HINTS['mod+enter'],
     level: 3,
     order: 20,
+    opts: { enableOnFormTags: true },
+  },
+  // ↑↓ picks which recent Claude conversation (if any) the new worktree carries over; the
+  // branch field keeps focus.
+  'worktreeNew.down': {
+    keys: 'down',
+    hint: HINTS.down,
+    level: 3,
+    describe: "Pick a recent conversation for the worktree's Claude to continue",
+    order: 10,
+    opts: { enableOnFormTags: true },
+  },
+  'worktreeNew.up': {
+    keys: 'up',
+    hint: null,
+    level: 3,
+    order: 10,
     opts: { enableOnFormTags: true },
   },
   'worktreeNew.cancel': {
@@ -893,6 +882,16 @@ export const SHORTCUTS = {
 
   // ── always on ───────────────────────────────────────────────────────────────────────
   // help + dialect toggle have their own footer affordances (no statusline chip).
+  // The one manual reload, on every page: background syncing keeps things fresh on its own,
+  // `g` fetches everything again now (Incoming, source connections, tasks, a server sync, and
+  // whatever the current page shows — see `lib/reload.tsx`).
+  'app.reload': {
+    keys: 'g',
+    hint: HINTS.g,
+    level: 0,
+    order: 50,
+    describe: 'Reload everything now (Incoming, sources, sync, and this page)',
+  },
   'app.help': { keys: 'c', hint: null, order: 50 },
   'app.hintDialect': { keys: 'v', hint: null, order: 50 },
   // Sign-out is a base-level (0) statusline chip so it shows wherever it's enabled,
@@ -934,31 +933,50 @@ export type ShortcutId = keyof typeof SHORTCUTS;
 
 export const SHORTCUT_IDS = Object.keys(SHORTCUTS) as ShortcutId[];
 
-/** The `?` cheat-sheet, grouped by the three shortcut types the user thinks in. Each id's
- *  chip comes from its `hint`, its explanation from `describe` — one source of truth. */
+/** The `c` cheat-sheet, one section per page in nav order (plus the keys that work
+ *  everywhere). Each id's chip comes from its `hint`, its explanation from `describe` — one
+ *  source of truth. Every row with a `describe` should be listed here. */
 export const CHEATSHEET: { title: string; ids: ShortcutId[] }[] = [
-  { title: 'Task groups', ids: ['group.new', 'group.rename', 'group.delete', 'filter.prev'] },
   {
-    title: 'Archive',
-    ids: ['archive.toggle', 'archive.search', 'archive.prevPage', 'archive.close'],
+    title: 'Everywhere',
+    ids: ['cursor.down', 'cursor.unselect', 'app.reload', 'app.sync', 'app.signOut'],
   },
+  { title: 'Incoming', ids: ['incoming.open', 'incoming.task', 'incoming.archive'] },
   {
-    title: 'Tasks',
+    title: 'Inbox',
     ids: [
-      'cursor.down',
       'task.toggle',
       'task.edit',
       'task.open',
       'task.prompt',
       'task.effortQuick',
+      'task.worktree',
       'task.delete',
       'task.moveUp',
-      'cursor.unselect',
     ],
   },
+  { title: 'Task groups', ids: ['group.new', 'group.rename', 'group.delete', 'filter.prev'] },
   {
     title: 'Editing a task',
     ids: ['editor.field', 'editor.improve', 'editor.save', 'editor.cancel'],
+  },
+  {
+    title: 'Archive',
+    ids: ['archive.toggle', 'archive.search', 'archive.prevPage', 'archive.close'],
+  },
+  {
+    title: 'Ideas',
+    ids: [
+      'note.edit',
+      'note.type',
+      'note.open',
+      'note.history',
+      'note.delete',
+      'history.restore',
+      'ideas.search',
+      'ideas.export',
+      'ideas.exportJson',
+    ],
   },
   {
     title: 'Topics',
@@ -966,50 +984,30 @@ export const CHEATSHEET: { title: string; ids: ShortcutId[] }[] = [
       'topic.new',
       'topic.edit',
       'topic.delete',
+      'topicDelete.unfile',
+      'topicDelete.withNotes',
       'ideaFilter.prev',
-      'ideas.search',
-      'ideas.export',
-      'ideas.exportJson',
     ],
   },
-  {
-    title: 'Notes',
-    ids: [
-      'note.edit',
-      'note.type',
-      'note.open',
-      'note.link',
-      'note.refetch',
-      'note.history',
-      'note.delete',
-      'history.restore',
-    ],
-  },
-  {
-    title: 'Review',
-    ids: [
-      'ideas.reviewSession',
-      'note.review',
-      'review.conviction1',
-      'review.keep',
-      'review.promote',
-      'review.drop',
-      'review.close',
-    ],
-  },
-  { title: 'App', ids: ['app.sync', 'app.signOut'] },
   {
     title: 'Worktrees',
     ids: [
       'repos.add',
       'repos.remove',
+      'repos.setup',
       'worktree.switchPrev',
       'worktree.new',
+      'worktreeNew.down',
       'worktree.terminal',
       'worktree.editor',
       'worktree.remove',
+      'worktreeRemove.toggleRemote',
       'worktree.prune',
-      'worktree.refresh',
     ],
+  },
+  { title: 'Usage', ids: ['usage.rangePrev'] },
+  {
+    title: 'Settings',
+    ids: ['connections.edit', 'connections.remove', 'worktreeTerminal.save', 'worktreeEditor.save'],
   },
 ];

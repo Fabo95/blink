@@ -130,7 +130,8 @@ pub struct NewTask {
     /// The group picked in the capture panel (defaults to the inbox's active filter).
     pub task_group_id: Option<String>,
     pub source: CaptureSource,
-    /// Set only when a review promotes a note into a task; capture never sends it.
+    /// Set only by the retired note-review promote flow (older tasks still carry it);
+    /// capture never sends it.
     #[serde(default)]
     #[ts(optional)]
     pub origin_note_id: Option<String>,
@@ -187,36 +188,6 @@ impl NoteType {
             "thought" => Self::Thought,
             "source" => Self::Source,
             _ => Self::Idea,
-        }
-    }
-}
-
-/// Where a note stands after review. Dropped notes stay searchable but leave the sections;
-/// promoted ones became a task and keep being reviewed.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/generated/")]
-#[serde(rename_all = "camelCase")]
-pub enum NoteStatus {
-    #[default]
-    Open,
-    Promoted,
-    Dropped,
-}
-
-impl NoteStatus {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Open => "open",
-            Self::Promoted => "promoted",
-            Self::Dropped => "dropped",
-        }
-    }
-
-    pub fn from_stored(value: &str) -> Self {
-        match value {
-            "promoted" => Self::Promoted,
-            "dropped" => Self::Dropped,
-            _ => Self::Open,
         }
     }
 }
@@ -325,24 +296,6 @@ pub struct Note {
     /// A sync pull overwrote an unsynced local edit; the lost text is kept as a conflict
     /// revision. Device-local, cleared once the user opens the note's history.
     pub conflict: bool,
-    pub status: NoteStatus,
-    /// When the note comes back for review; `None` = not scheduled (sources, or a note
-    /// rated 1).
-    pub revisit_at: Option<String>,
-    /// Every conviction (1 to 5) the note was given, oldest first.
-    #[ts(type = "Array<number>")]
-    pub conviction_history: Vec<i64>,
-    /// A hint derived from the history (promote or drop), computed in the core so the rule
-    /// lives in one place.
-    pub review_nudge: Option<ReviewNudge>,
-    /// Sources only: the fetched page's title, a short excerpt, and an AI
-    /// summary (never for confidential topics or private hosts).
-    pub title: Option<String>,
-    pub excerpt: Option<String>,
-    pub summary: Option<String>,
-    pub enrichment: Enrichment,
-    /// How many notes point at this one as evidence. Computed from links, never stored.
-    pub evidence: Evidence,
     pub source: CaptureSource,
     pub created_at: String,
     pub updated_at: String,
@@ -401,95 +354,6 @@ pub struct NoteRevision {
     pub created_at: String,
 }
 
-/// Where a source's background enrichment (page fetch + summary) stands.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/generated/")]
-#[serde(rename_all = "camelCase")]
-pub enum Enrichment {
-    /// Not a source with a link, so nothing to fetch.
-    #[default]
-    None,
-    Pending,
-    Done,
-    /// Gave up after repeated failures; `g` on the note retries.
-    Failed,
-    /// Not fetched on purpose: the note's topic is confidential.
-    Skipped,
-}
-
-impl Enrichment {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::None => "none",
-            Self::Pending => "pending",
-            Self::Done => "done",
-            Self::Failed => "failed",
-            Self::Skipped => "skipped",
-        }
-    }
-
-    pub fn from_stored(value: &str) -> Self {
-        match value {
-            "pending" => Self::Pending,
-            "done" => Self::Done,
-            "failed" => Self::Failed,
-            "skipped" => Self::Skipped,
-            _ => Self::None,
-        }
-    }
-}
-
-/// How one note bears on another: `from` supports, contradicts, or relates to `to`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/generated/")]
-#[serde(rename_all = "camelCase")]
-pub enum NoteRelation {
-    Supports,
-    Contradicts,
-    Related,
-}
-
-impl NoteRelation {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Supports => "supports",
-            Self::Contradicts => "contradicts",
-            Self::Related => "related",
-        }
-    }
-
-    pub fn from_stored(value: &str) -> Self {
-        match value {
-            "supports" => Self::Supports,
-            "contradicts" => Self::Contradicts,
-            _ => Self::Related,
-        }
-    }
-}
-
-/// A typed link between two notes. Append-only like reviews: removing one tombstones it.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/generated/")]
-#[serde(rename_all = "camelCase")]
-pub struct NoteLink {
-    pub id: String,
-    pub from_note_id: String,
-    pub to_note_id: String,
-    pub relation: NoteRelation,
-    pub created_at: String,
-}
-
-/// The evidence a note has collected: incoming `supports` / `contradicts` links, and
-/// `related` links in either direction.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/generated/")]
-#[serde(rename_all = "camelCase")]
-pub struct Evidence {
-    pub supports: u32,
-    pub contradicts: u32,
-    pub related: u32,
-}
-
 /// What kind of content left the device.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../src/generated/")]
@@ -499,9 +363,11 @@ pub enum EgressKind {
     AiImprove,
     /// A task's text sent to the AI provider to write a prompt.
     AiPrompt,
-    /// A fetched page excerpt sent to the AI provider to summarize a source.
+    /// A fetched page excerpt sent to the AI provider to summarize a source. Source
+    /// enrichment is gone; kept so older egress rows still label correctly.
     AiSummary,
-    /// A source's page fetched (a request to its host, nothing of yours sent).
+    /// A source's page fetched (a request to its host, nothing of yours sent). Kept for
+    /// older egress rows, like `AiSummary`.
     PageFetch,
 }
 
@@ -542,54 +408,6 @@ pub struct EgressEvent {
     pub created_at: String,
 }
 
-/// One dated judgement of a note. Append-only and per person: a review is never edited.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/generated/")]
-#[serde(rename_all = "camelCase")]
-pub struct NoteReview {
-    pub id: String,
-    pub note_id: String,
-    /// 1 (not convinced) to 5 (very convinced). Serialized as a JSON number; ts-rs would
-    /// otherwise type an `i64` as `bigint`.
-    #[ts(type = "number")]
-    pub conviction: i64,
-    pub comment: Option<String>,
-    pub reviewed_at: String,
-}
-
-/// What a review does with the note besides recording the conviction.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/generated/")]
-#[serde(rename_all = "camelCase")]
-pub enum ReviewDecision {
-    /// Keep the note and schedule its next review from the conviction.
-    Keep,
-    /// Stop reviewing it; it stays searchable.
-    Drop,
-    /// Turn it into a validation task in the inbox; it keeps being reviewed.
-    Promote,
-}
-
-/// A hint the review popover shows from the note's conviction history.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/generated/")]
-#[serde(rename_all = "camelCase")]
-pub enum ReviewNudge {
-    /// Rated 4 or higher three times in a row: time to act on it.
-    Promote,
-    /// Rated 1, or 2 or lower twice in a row: probably not worth keeping.
-    Drop,
-}
-
-/// The result of a review: the updated note, and the task when it was promoted.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "../../src/generated/")]
-#[serde(rename_all = "camelCase")]
-pub struct ReviewOutcome {
-    pub note: Note,
-    pub task: Option<Task>,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../src/generated/")]
 #[serde(rename_all = "camelCase")]
@@ -610,6 +428,26 @@ pub struct ManagedRepo {
     pub path: String,
     /// Ref new branches fork from; `None` = auto-detect (origin/HEAD → main|master → HEAD).
     pub base_branch: Option<String>,
+    /// Shell command run in a **new** worktree before Claude starts (e.g. `pnpm i`); `{repo}`
+    /// is the main checkout's path. `None` = no setup.
+    pub setup_command: Option<String>,
+}
+
+/// A recent Claude conversation from one of a repo's checkouts, offered for carrying over into
+/// a new worktree (`claude --resume <id> --fork-session`).
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeConversation {
+    pub session_id: String,
+    /// The conversation's first prompt, shortened — enough to recognise it.
+    pub preview: String,
+    /// When the transcript was last written (RFC 3339, UTC).
+    pub updated_at: String,
+    /// The branch of the checkout it ran in.
+    pub origin: String,
+    /// It ran in the main checkout, not a linked worktree.
+    pub from_main: bool,
 }
 
 /// A worktree branch's status — one flat set covering both sources. The first three are
@@ -659,7 +497,6 @@ pub struct Worktree {
     /// one field and never has to combine two sources.
     pub status: WorktreeStatus,
 }
-
 
 /// A worktree `prune` would remove, with the reason it qualifies. Shown in the
 /// prune confirmation before anything is deleted.
@@ -725,4 +562,207 @@ pub struct WorktreeAttentionUpdate {
     pub repo: String,
     pub branch: String,
     pub attention: WorktreeAttention,
+}
+
+/// Where an Incoming item comes from. Each has an [`crate::core::incoming_provider`]
+/// implementation that reads it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub enum IncomingSource {
+    Github,
+    Slack,
+    Linear,
+    BetterStack,
+}
+
+impl IncomingSource {
+    /// The stable spelling used in item ids (`github:123`) and task sources.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Github => "github",
+            Self::Slack => "slack",
+            Self::Linear => "linear",
+            Self::BetterStack => "betterStack",
+        }
+    }
+
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Self::Github => "GitHub",
+            Self::Slack => "Slack",
+            Self::Linear => "Linear",
+            Self::BetterStack => "Better Stack",
+        }
+    }
+
+    /// The id of an item from this source: `<source>:<id at the source>`.
+    pub fn item_id(self, source_id: &str) -> String {
+        format!("{}:{source_id}", self.as_str())
+    }
+}
+
+/// Something from an external source that wants your attention (a review request, a Slack
+/// DM, an incident, …) — the one shape every source maps into. Read-only at the source:
+/// archiving it only hides it in Blink until it changes.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct IncomingItem {
+    /// `<source>:<source id>` (see [`IncomingSource::item_id`]), stable across polls.
+    pub id: String,
+    pub source: IncomingSource,
+    /// Why it's here, in a few words (`review requested`, `mentioned`, `incident`, …).
+    pub reason: String,
+    pub title: String,
+    /// Where it lives: the GitHub repo, the Slack channel or sender, the Linear team, …
+    pub context: String,
+    pub url: String,
+    /// When it last changed at the source (RFC 3339, UTC).
+    pub updated_at: String,
+    /// Worth interrupting you for (an incident, a DM): a native notification fires when it
+    /// first appears. Everything else waits quietly in the list.
+    pub urgent: bool,
+}
+
+/// The Incoming feed: the items still waiting on you, plus one error line per source that
+/// couldn't be read (so a missing `gh` login shows up instead of an empty list).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct IncomingFeed {
+    pub items: Vec<IncomingItem>,
+    pub errors: Vec<String>,
+}
+
+/// How an Incoming source is signed in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub enum SourceAuth {
+    /// Rides on the `gh` CLI's own login; managed outside Blink.
+    GhCli,
+    /// A key pasted in Blink, kept in the keychain; set, replaced, and removed in Settings.
+    ApiKey,
+}
+
+/// The profile a source is signed in as — the same shape for every source.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct SourceAccount {
+    pub name: String,
+    /// `@login` or an email.
+    pub handle: Option<String>,
+    /// The company / workspace the account belongs to, when the source says.
+    pub organization: Option<String>,
+    pub avatar_url: Option<String>,
+}
+
+/// One source's connection, checked live: who it's signed in as and how — what Settings →
+/// Sources shows for every source alike.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct SourceConnection {
+    pub source: IncomingSource,
+    pub auth: SourceAuth,
+    pub connected: bool,
+    pub account: Option<SourceAccount>,
+    /// A safe glimpse of the credential (`lin_api_…a1b2`, `gh · github.com`), never the secret.
+    pub credential_hint: Option<String>,
+    /// Why it isn't connected, or why the live check failed (e.g. a revoked key).
+    pub problem: Option<String>,
+}
+
+/// A task started in a worktree (`w` on a task): which repo + branch it lives in. Device-local.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct TaskWorktree {
+    pub task_id: String,
+    /// The task's text, so the Worktrees page can show what a worktree is for.
+    pub task_text: String,
+    pub repo_path: String,
+    pub branch: String,
+}
+
+/// Which slice of Claude Code usage a report covers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub enum UsageRange {
+    Today,
+    Week,
+    Month,
+    All,
+}
+
+/// Claude Code token usage summed over a set of replies (each reply counted once), with its
+/// cost estimated at API list prices.
+#[derive(Debug, Clone, Default, Serialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct UsageTotals {
+    #[ts(type = "number")]
+    pub input_tokens: i64,
+    /// Includes the thinking tokens (billed as output).
+    #[ts(type = "number")]
+    pub output_tokens: i64,
+    #[ts(type = "number")]
+    pub thinking_tokens: i64,
+    #[ts(type = "number")]
+    pub cache_write_tokens: i64,
+    #[ts(type = "number")]
+    pub cache_read_tokens: i64,
+    /// Share of all input tokens served from the cache (0–1).
+    pub cache_hit_rate: f64,
+    pub cost_usd: f64,
+    pub replies: u32,
+    pub web_searches: u32,
+    pub web_fetches: u32,
+}
+
+/// One row of a usage breakdown (a day, a model, a repo + branch).
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct UsageGroup {
+    pub label: String,
+    pub detail: Option<String>,
+    pub totals: UsageTotals,
+}
+
+/// One Claude Code session (its sub-agents included).
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct UsageSession {
+    pub session_id: String,
+    /// The session's first prompt.
+    pub title: String,
+    pub repo: String,
+    pub branch: Option<String>,
+    pub last_active: String,
+    pub totals: UsageTotals,
+}
+
+/// Claude Code usage on this Mac for one range, read from Claude's own transcripts.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export, export_to = "../../src/generated/")]
+#[serde(rename_all = "camelCase")]
+pub struct UsageReport {
+    pub range: UsageRange,
+    pub totals: UsageTotals,
+    pub sessions: u32,
+    /// Newest day first.
+    pub by_day: Vec<UsageGroup>,
+    pub by_model: Vec<UsageGroup>,
+    /// Repo + branch, most expensive first.
+    pub by_repo: Vec<UsageGroup>,
+    pub top_sessions: Vec<UsageSession>,
+    /// Models seen with tokens but no known price (left out of the cost).
+    pub unpriced_models: Vec<String>,
+    /// The earliest reply in the store — how far back "all" reaches.
+    pub first_seen: Option<String>,
 }

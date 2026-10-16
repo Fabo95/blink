@@ -64,6 +64,12 @@ impl GitCli {
             .unwrap_or(false)
     }
 
+    /// The `.git` dir shared by a checkout and all its worktrees (absolute), or `None` outside
+    /// a repo.
+    pub fn common_dir(&self, path: &Path) -> Option<String> {
+        self.run_opt(path, &["rev-parse", "--path-format=absolute", "--git-common-dir"])
+    }
+
     pub fn is_git_repo(&self, path: &Path) -> bool {
         self.run_ok(path, &["rev-parse", "--git-dir"])
     }

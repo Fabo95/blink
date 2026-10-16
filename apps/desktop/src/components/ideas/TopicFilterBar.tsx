@@ -2,6 +2,8 @@ import { Lock } from 'lucide-react';
 import { useState } from 'react';
 import { PickerField } from '@/components/ideas/PickerField';
 import { Input } from '@/components/ui/input';
+import { Kbd } from '@/components/ui/kbd';
+import { Pill } from '@/components/ui/pill';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
 import type { Sensitivity } from '@/generated/Sensitivity';
@@ -11,7 +13,6 @@ import type { TopicsView } from '@/hooks/useTopics';
 import { wrapFocus } from '@/lib/focus';
 import { SENSITIVITY_OPTIONS, TOPIC_STATUS_OPTIONS } from '@/lib/notes';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
-import { cn } from '@/lib/utils';
 
 const FIELD = { 'data-topic-field': true };
 
@@ -43,7 +44,11 @@ export function TopicFilterBar({ view }: { view: TopicsView }) {
               <Pill
                 key={topic.id}
                 label={topic.name}
-                locked={topic.sensitivity === 'confidential'}
+                icon={
+                  topic.sensitivity === 'confidential' ? (
+                    <Lock aria-label="Confidential" className="size-3" />
+                  ) : undefined
+                }
                 selected={view.selectedId === topic.id}
                 onSelect={() => view.select(topic.id)}
               />
@@ -138,40 +143,9 @@ function DeleteTopicPopover({ topic }: { topic: Topic }) {
     <PopoverContent align="start" sideOffset={8} className="w-72 p-3">
       <p className="text-sm font-medium">Delete “{topic.name}”?</p>
       <p className="mt-1 text-[11px] text-muted-foreground">
-        ⌘↵ deletes the topic and keeps its notes (they move to All). ⌘⌫ deletes the notes too, on
-        every device.
+        <Kbd>⌘↵</Kbd> deletes the topic and keeps its notes (they move to All).{' '}
+        <Kbd>⌘⌫</Kbd> deletes the notes too, on every device.
       </p>
     </PopoverContent>
-  );
-}
-
-// Mouse-only click target, like the group pills: out of the Tab order, focus stays on body.
-function Pill({
-  label,
-  selected,
-  locked,
-  onSelect,
-}: {
-  label: string;
-  selected: boolean;
-  locked?: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      tabIndex={-1}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onSelect}
-      className={cn(
-        'inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors',
-        selected
-          ? 'border-primary/40 bg-card/70 text-foreground'
-          : 'border-border/60 bg-card/40 text-muted-foreground',
-      )}
-    >
-      {locked && <Lock aria-label="Confidential" className="size-3" />}
-      {label}
-    </button>
   );
 }

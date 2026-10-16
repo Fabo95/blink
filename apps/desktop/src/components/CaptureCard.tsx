@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ShortcutRecorder } from '@/components/ShortcutRecorder';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { SECTION_TITLE } from '@/components/ui/section';
 import { api } from '@/lib/api';
 
 export function CaptureCard() {
@@ -26,7 +27,7 @@ export function CaptureCard() {
   return (
     <Card className="panel">
       <CardHeader>
-        <CardTitle className="section-bar text-sm font-semibold uppercase tracking-wide text-primary">
+        <CardTitle className={SECTION_TITLE}>
           Capture
         </CardTitle>
       </CardHeader>

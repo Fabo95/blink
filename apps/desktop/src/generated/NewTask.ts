@@ -21,6 +21,7 @@ link: string | null,
  */
 taskGroupId: string | null, source: CaptureSource, 
 /**
- * Set only when a review promotes a note into a task; capture never sends it.
+ * Set only by the retired note-review promote flow (older tasks still carry it);
+ * capture never sends it.
  */
 originNoteId?: string, };

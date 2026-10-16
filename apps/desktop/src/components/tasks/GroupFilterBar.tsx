@@ -1,12 +1,12 @@
 import { useRef } from 'react';
 import { DeleteGroupPopover } from '@/components/tasks/DeleteGroupPopover';
 import { Input } from '@/components/ui/input';
+import { Pill } from '@/components/ui/pill';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
 import type { TaskGroupsView } from '@/hooks/useTaskGroups';
 import { wrapFocus } from '@/lib/focus';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
-import { cn } from '@/lib/utils';
 
 /**
  * The group filter above the inbox: an All pill plus one per group. Keyboard-only
@@ -94,34 +94,5 @@ export function GroupFilterBar({ view }: { view: TaskGroupsView }) {
         <p className="line-clamp-2 text-[11px] text-destructive">{view.error}</p>
       )}
     </div>
-  );
-}
-
-// Mouse-only click target (like the rows' overlay): tabIndex -1 keeps it out of the Tab
-// order and mousedown-preventDefault keeps focus on <body> so the hotkeys keep firing.
-function Pill({
-  label,
-  selected,
-  onSelect,
-}: {
-  label: string;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      tabIndex={-1}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onSelect}
-      className={cn(
-        'rounded-full border px-3 py-1 text-[11px] font-medium transition-colors',
-        selected
-          ? 'border-primary/40 bg-card/70 text-foreground'
-          : 'border-border/60 bg-card/40 text-muted-foreground',
-      )}
-    >
-      {label}
-    </button>
   );
 }

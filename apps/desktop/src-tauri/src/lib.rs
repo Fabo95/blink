@@ -10,10 +10,15 @@ use std::sync::Arc;
 
 use tauri::Manager;
 
+use crate::clients::better_stack_client::BetterStackClient;
+use crate::clients::claude_store::ClaudeStore;
 use crate::clients::git_cli::GitCli;
 use crate::clients::github_cli::GitHubCli;
+use crate::clients::linear_client::LinearClient;
 use crate::clients::server_client::ServerClient;
+use crate::clients::slack_client::SlackClient;
 use crate::clients::tmux_cli::TmuxCli;
+use crate::core::incoming_provider::IncomingProvider;
 use crate::core::state::{PendingCapture, PendingSource};
 use crate::core::sync_channel;
 use crate::database::Db;
@@ -21,27 +26,33 @@ use crate::repository::Repository;
 use crate::services::ai_key_service::AiKeyService;
 use crate::services::ai_service::AiService;
 use crate::services::attention_service::AttentionService;
-use crate::clients::web_client::WebClient;
+use crate::services::auth_service::AuthService;
+use crate::services::better_stack_account_service::BetterStackAccountService;
+use crate::services::better_stack_incoming_provider::BetterStackIncomingProvider;
+use crate::services::capture_service::CaptureService;
 use crate::services::editor_service::EditorService;
 use crate::services::egress_service::EgressService;
-use crate::services::enrichment_service::EnrichmentService;
-use crate::services::link_service::LinkService;
 use crate::services::export_service::ExportService;
+use crate::services::github_incoming_provider::GitHubIncomingProvider;
+use crate::services::hlc_service::HlcService;
+use crate::services::hook_service::HookService;
+use crate::services::incoming_service::IncomingService;
+use crate::services::linear_account_service::LinearAccountService;
+use crate::services::linear_incoming_provider::LinearIncomingProvider;
 use crate::services::note_service::NoteService;
 use crate::services::policy_service::PolicyService;
-use crate::services::review_service::ReviewService;
-use crate::services::topic_service::TopicService;
-use crate::services::hook_service::HookService;
-use crate::services::terminal_service::TerminalService;
-use crate::services::auth_service::AuthService;
-use crate::services::capture_service::CaptureService;
-use crate::services::hlc_service::HlcService;
+use crate::services::repo_service::RepoService;
 use crate::services::session_token_service::SessionTokenService;
 use crate::services::shortcut_service::ShortcutService;
+use crate::services::slack_account_service::SlackAccountService;
+use crate::services::slack_incoming_provider::SlackIncomingProvider;
 use crate::services::sync_service::SyncService;
 use crate::services::task_group_service::TaskGroupService;
 use crate::services::task_service::TaskService;
-use crate::services::repo_service::RepoService;
+use crate::services::task_worktree_service::TaskWorktreeService;
+use crate::services::terminal_service::TerminalService;
+use crate::services::topic_service::TopicService;
+use crate::services::usage_service::UsageService;
 use crate::services::worktree_service::WorktreeService;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -102,8 +113,6 @@ pub fn run() {
                 repository.topics.clone(),
                 repository.notes.clone(),
                 repository.note_revisions.clone(),
-                repository.note_reviews.clone(),
-                repository.note_links.clone(),
                 repository.settings.clone(),
                 hlc_service.clone(),
                 sync_sender.clone(),
@@ -111,44 +120,13 @@ pub fn run() {
             app.manage(NoteService::new(
                 repository.notes.clone(),
                 repository.note_revisions.clone(),
-                repository.note_reviews.clone(),
-                repository.note_links.clone(),
-                repository.jobs.clone(),
-                hlc_service.clone(),
-                sync_sender.clone(),
-            ));
-            app.manage(LinkService::new(
-                repository.note_links.clone(),
-                repository.notes.clone(),
                 hlc_service.clone(),
                 sync_sender.clone(),
             ));
             app.manage(EgressService::new(repository.egress_events.clone()));
-            // Its own instances of the stateless helpers (AI key reads go to the keychain
-            // per call; policy and egress share the same repositories).
-            app.manage(Arc::new(EnrichmentService::new(
-                repository.jobs.clone(),
-                repository.notes.clone(),
-                PolicyService::new(repository.topics.clone()),
-                WebClient::new(),
-                AiService::new(AiKeyService::new()),
-                EgressService::new(repository.egress_events.clone()),
-                hlc_service.clone(),
-                sync_sender.clone(),
-            )));
-            app.manage(ReviewService::new(
-                repository.notes.clone(),
-                repository.note_reviews.clone(),
-                repository.note_links.clone(),
-                repository.tasks.clone(),
-                hlc_service.clone(),
-                sync_sender.clone(),
-            ));
             app.manage(PolicyService::new(repository.topics.clone()));
             app.manage(ExportService::new(
                 repository.notes.clone(),
-                repository.note_reviews.clone(),
-                repository.note_links.clone(),
                 repository.topics.clone(),
             ));
             app.manage(ShortcutService::new(repository.settings.clone()));
@@ -168,8 +146,12 @@ pub fn run() {
                 crate::core::paths::shell_quote(&hook_service.settings_path().to_string_lossy())
             );
 
-            let terminal_service =
-                TerminalService::new(TmuxCli::new(), repository.settings.clone(), claude_command);
+            let terminal_service = TerminalService::new(
+                TmuxCli::new(),
+                ClaudeStore::new(),
+                repository.settings.clone(),
+                claude_command,
+            );
             let editor_service = EditorService::new(repository.settings.clone());
             let worktree_service = WorktreeService::new(
                 GitCli::new(),
@@ -182,11 +164,37 @@ pub fn run() {
                 worktree_service.clone(),
                 attention_dir,
             ));
+            app.manage(Arc::new(UsageService::new(ClaudeStore::new(), GitCli::new())));
             app.manage(repo_service);
+            app.manage(TaskWorktreeService::new(
+                repository.task_worktrees.clone(),
+                repository.tasks.clone(),
+                worktree_service.clone(),
+                data_dir.join("briefs"),
+            ));
             app.manage(worktree_service);
             app.manage(terminal_service);
             app.manage(editor_service);
             app.manage(attention_service);
+            // Every Incoming source, in one list; adding a source is one more entry here.
+            let incoming_providers: Vec<Arc<dyn IncomingProvider>> = vec![
+                Arc::new(GitHubIncomingProvider::new(GitHubCli::new())),
+                Arc::new(LinearIncomingProvider::new(
+                    LinearClient::new(),
+                    Arc::new(LinearAccountService::new(LinearClient::new())),
+                )),
+                Arc::new(SlackIncomingProvider::new(
+                    SlackClient::new(),
+                    Arc::new(SlackAccountService::new(SlackClient::new())),
+                )),
+                Arc::new(BetterStackIncomingProvider::new(Arc::new(
+                    BetterStackAccountService::new(BetterStackClient::new()),
+                ))),
+            ];
+            app.manage(Arc::new(IncomingService::new(
+                incoming_providers,
+                repository.incoming_dismissals.clone(),
+            )));
             let sync_service = Arc::new(SyncService::new(
                 ServerClient::new(),
                 SessionTokenService::new(),
@@ -195,10 +203,7 @@ pub fn run() {
                 repository.topics.clone(),
                 repository.notes.clone(),
                 repository.note_revisions.clone(),
-                repository.note_reviews.clone(),
-                repository.note_links.clone(),
                 repository.sync_state.clone(),
-                repository.jobs.clone(),
                 hlc_service,
                 sync_sender,
             ));
@@ -250,15 +255,8 @@ pub fn run() {
             commands::notes::delete_note,
             commands::notes::note_history,
             commands::notes::restore_note_revision,
-            commands::notes::retry_enrichment,
-            commands::links::list_note_links,
-            commands::links::link_notes,
-            commands::links::unlink_notes,
             commands::egress::list_egress_events,
             commands::export::export_notes,
-            commands::reviews::list_due_notes,
-            commands::reviews::list_note_reviews,
-            commands::reviews::review_note,
             commands::link::open_link,
             commands::shortcut::get_capture_shortcut,
             commands::shortcut::set_capture_shortcut,
@@ -266,6 +264,7 @@ pub fn run() {
             commands::repo::list_managed_repos,
             commands::repo::remove_managed_repo,
             commands::repo::pick_managed_repo,
+            commands::repo::set_repo_setup_command,
             commands::worktree::list_worktrees,
             commands::worktree::add_worktree,
             commands::worktree::remove_worktree,
@@ -273,10 +272,21 @@ pub fn run() {
             commands::worktree::list_worktree_pr_statuses,
             commands::worktree::prune_worktrees,
             commands::worktree::get_worktree_attention,
+            commands::task_worktrees::list_task_worktrees,
+            commands::task_worktrees::start_task_worktree,
+            commands::usage::get_usage_report,
+            commands::incoming::get_incoming,
+            commands::incoming::refresh_incoming,
+            commands::incoming::archive_incoming,
+            commands::incoming::incoming_to_task,
+            commands::incoming::list_source_connections,
+            commands::incoming::connect_source,
+            commands::incoming::disconnect_source,
             commands::worktree::get_worktree_base_dir,
             commands::worktree::set_worktree_base_dir,
             commands::worktree::pick_worktree_base_dir,
             commands::terminal::open_worktree_in_terminal,
+            commands::terminal::list_claude_conversations,
             commands::terminal::get_worktree_terminal,
             commands::terminal::set_worktree_terminal,
             commands::terminal::list_terminals,

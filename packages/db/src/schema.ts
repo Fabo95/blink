@@ -14,6 +14,8 @@ import {
 // Better Auth's tables (user/session/account/verification) — re-exported so the shared
 // Drizzle client (and Better Auth's adapter) sees them alongside the app tables.
 export * from './auth-schema.js';
+// November Escape side project (see november.ts) — removable as a unit.
+export * from './november.js';
 
 /**
  * The payload of a synced row — the whole client row as JSON, tagged by `kind`.

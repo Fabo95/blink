@@ -14,8 +14,8 @@ use crate::core::error::{AppError, AppResult};
 use crate::core::models::{NewTopic, Sensitivity, Topic, TopicStatus};
 use crate::core::wire::{Clock, LocalChange, RecordBody, TopicBody};
 
-use crate::database::{serde_err, store_err, Db};
 use crate::core::synced_repository::SyncedRepository;
+use crate::database::{serde_err, store_err, Db};
 
 /// A patch over a topic's mutable fields. `None` leaves a field untouched; an empty
 /// `question` clears it (stored NULL), the same convention as `TaskGroupPatch::context`.

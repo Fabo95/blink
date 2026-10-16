@@ -1,4 +1,4 @@
-import { Check, ExternalLink, Lightbulb, Tag, WandSparkles } from 'lucide-react';
+import { Check, ExternalLink, GitBranch, Lightbulb, Tag, WandSparkles } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverAnchor } from '@/components/ui/popover';
@@ -23,7 +23,12 @@ interface TaskRowProps {
   onOpenLink: (task: Task) => void;
   onCancelEdit: () => void;
   onCancelDelete: () => void;
-  /** The editor's `PopoverContent`, rendered only while this row is being edited. */
+  /** True while this row's "start in a worktree" prompt is open. */
+  startingWorktree: boolean;
+  onCancelWorktree: () => void;
+  /** The branch of the worktree this task was started in, shown as a chip. */
+  worktreeBranch?: string;
+  /** The open overlay's `PopoverContent` (the editor or the worktree prompt). */
   children?: ReactNode;
 }
 
@@ -39,14 +44,17 @@ export function TaskRow({
   onOpenLink,
   onCancelEdit,
   onCancelDelete,
+  startingWorktree,
+  onCancelWorktree,
+  worktreeBranch,
   children,
 }: TaskRowProps) {
   const done = task.status === 'done';
   const source = task.source.appName || task.source.appId;
   const effortBadge = EFFORT_BADGE[task.effort];
-  // The editor and the delete-confirm share the row's one popover — they're mutually
-  // exclusive (you cancel one to open the other).
-  const overlayOpen = editing || confirmingDelete;
+  // The editor, the delete-confirm and the worktree prompt share the row's one popover —
+  // they're mutually exclusive (you cancel one to open the other).
+  const overlayOpen = editing || confirmingDelete || startingWorktree;
 
   return (
     <Popover
@@ -55,6 +63,7 @@ export function TaskRow({
         if (open) return;
         if (editing) onCancelEdit();
         else if (confirmingDelete) onCancelDelete();
+        else if (startingWorktree) onCancelWorktree();
       }}
     >
       <PopoverAnchor asChild>
@@ -65,6 +74,7 @@ export function TaskRow({
             focused && 'border-primary/40 bg-card/70',
             editing && 'border-primary/40 bg-card/70 ring-2 ring-primary/30',
             confirmingDelete && 'border-destructive/50 bg-card/70 ring-2 ring-destructive/30',
+            startingWorktree && 'border-primary/40 bg-card/70 ring-2 ring-primary/30',
           )}
         >
           {/* Whole-card click target: single-click selects (then ↵ completes), double-click
@@ -107,6 +117,8 @@ export function TaskRow({
                     </span>
                     <button
                       type="button"
+                      tabIndex={-1}
+                      onMouseDown={(e) => e.preventDefault()}
                       onClick={() => onOpenLink(task)}
                       title={task.link}
                       className="pointer-events-auto relative inline-flex min-w-0 items-center gap-1 text-blink-bright transition hover:underline"
@@ -114,6 +126,17 @@ export function TaskRow({
                       <ExternalLink className="size-3 shrink-0" />
                       <span className="truncate">{linkLabel(task.link)}</span>
                     </button>
+                  </>
+                )}
+                {worktreeBranch && (
+                  <>
+                    <span aria-hidden className="text-muted-foreground/30">
+                      ·
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-blink-bright">
+                      <GitBranch className="size-3 shrink-0" />
+                      {worktreeBranch}
+                    </span>
                   </>
                 )}
                 {groupName && (
@@ -174,7 +197,7 @@ export function TaskRow({
           </div>
         </li>
       </PopoverAnchor>
-      {editing && children}
+      {(editing || startingWorktree) && children}
       {confirmingDelete && <DeleteTaskPopover task={task} />}
     </Popover>
   );

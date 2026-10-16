@@ -8,8 +8,7 @@ use crate::core::error::AppResult;
 use crate::core::models::{NewTopic, Topic};
 use crate::core::sync_channel::SyncSignalSender;
 use crate::repository::{
-    NoteLinksRepository, NotesRepository, NoteReviewsRepository, NoteRevisionsRepository,
-    SettingsRepository, TopicsRepository,
+    NoteRevisionsRepository, NotesRepository, SettingsRepository, TopicsRepository,
 };
 use crate::services::hlc_service::HlcService;
 use crate::services::note_service::delete_note_children;
@@ -26,8 +25,6 @@ pub struct TopicService {
     // and must be stamped for sync, so the topic service reaches both repositories.
     notes_repository: NotesRepository,
     note_revisions_repository: NoteRevisionsRepository,
-    note_reviews_repository: NoteReviewsRepository,
-    note_links_repository: NoteLinksRepository,
     settings_repository: SettingsRepository,
     hlc_service: Arc<HlcService>,
     sync_signal: SyncSignalSender,
@@ -38,8 +35,6 @@ impl TopicService {
         topics_repository: TopicsRepository,
         notes_repository: NotesRepository,
         note_revisions_repository: NoteRevisionsRepository,
-        note_reviews_repository: NoteReviewsRepository,
-        note_links_repository: NoteLinksRepository,
         settings_repository: SettingsRepository,
         hlc_service: Arc<HlcService>,
         sync_signal: SyncSignalSender,
@@ -48,8 +43,6 @@ impl TopicService {
             topics_repository,
             notes_repository,
             note_revisions_repository,
-            note_reviews_repository,
-            note_links_repository,
             settings_repository,
             hlc_service,
             sync_signal,
@@ -73,7 +66,7 @@ impl TopicService {
     }
 
     /// Delete a topic. `delete_notes` tombstones its notes with everything that hangs off
-    /// them (revisions, reviews, links); otherwise the notes move back to unfiled. Every
+    /// them (revisions); otherwise the notes move back to unfiled. Every
     /// touched row is stamped for sync.
     pub fn delete(&self, id: &str, delete_notes: bool) -> AppResult<()> {
         self.topics_repository.delete(id)?;
@@ -86,13 +79,7 @@ impl TopicService {
         self.hlc_service.stamp(&self.notes_repository, &note_ids)?;
         if delete_notes {
             for note_id in &note_ids {
-                delete_note_children(
-                    note_id,
-                    &self.note_revisions_repository,
-                    &self.note_reviews_repository,
-                    &self.note_links_repository,
-                    &self.hlc_service,
-                )?;
+                delete_note_children(note_id, &self.note_revisions_repository, &self.hlc_service)?;
             }
         }
 

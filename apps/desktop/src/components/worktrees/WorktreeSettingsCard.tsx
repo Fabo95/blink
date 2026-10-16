@@ -2,11 +2,13 @@ import { FolderTree, PenLine, Terminal as TerminalIcon, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { ErrorLine, FIELD_LABEL, SECTION_TITLE } from '@/components/ui/section';
+import { Pill } from '@/components/ui/pill';
 import type { EditorOption } from '@/generated/EditorOption';
 import type { TerminalOption } from '@/generated/TerminalOption';
 import { api } from '@/lib/api';
 import { useShortcut } from '@/lib/shortcuts/useShortcut';
-import { cn, errorMessage } from '@/lib/utils';
+import { errorMessage } from '@/lib/utils';
 
 /**
  * Worktree behaviour settings — the "worktree stuff" config. **Location** (where worktrees
@@ -144,13 +146,13 @@ export function WorktreeSettingsCard() {
   return (
     <Card className="panel">
       <CardHeader>
-        <CardTitle className="section-bar text-sm font-semibold uppercase tracking-wide text-primary">
+        <CardTitle className={SECTION_TITLE}>
           Worktrees
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className={FIELD_LABEL}>
             Location
           </p>
           <div className="flex h-9 items-center gap-2 rounded-md border border-input bg-transparent px-3 shadow-sm">
@@ -189,7 +191,7 @@ export function WorktreeSettingsCard() {
         </div>
 
         <div className="space-y-2">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className={FIELD_LABEL}>
             Terminal
           </p>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -224,13 +226,13 @@ export function WorktreeSettingsCard() {
             {savingTerminal
               ? 'Saving…'
               : customTerminal
-                ? 'Command that opens a worktree. {session} is the tmux session; ⌘↵ saves.'
+                ? 'Command that opens a worktree. {session} is the tmux session.'
                 : 'Which terminal a worktree opens in (running Claude via tmux).'}
           </p>
         </div>
 
         <div className="space-y-2">
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className={FIELD_LABEL}>
             Editor
           </p>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -265,42 +267,13 @@ export function WorktreeSettingsCard() {
             {savingEditor
               ? 'Saving…'
               : customEditor
-                ? 'Command the e shortcut runs. {path} is the worktree path; ⌘↵ saves.'
-                : 'Which editor the e shortcut opens a worktree in.'}
+                ? 'Command that opens a worktree in your editor. {path} is the worktree path.'
+                : 'Which editor a worktree opens in.'}
           </p>
         </div>
 
-        {error && <p className="text-[11px] text-destructive">{error}</p>}
+        {error && <ErrorLine>{error}</ErrorLine>}
       </CardContent>
     </Card>
-  );
-}
-
-// Mouse-only selector (like the repo / group-filter pills): out of the Tab order, mousedown
-// preventDefault keeps focus on <body> so the keyboard shortcuts keep firing.
-function Pill({
-  label,
-  selected,
-  onSelect,
-}: {
-  label: string;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      tabIndex={-1}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onSelect}
-      className={cn(
-        'rounded-full border px-3 py-1 text-[11px] font-medium transition-colors',
-        selected
-          ? 'border-primary/40 bg-card/70 text-foreground'
-          : 'border-border/60 bg-card/40 text-muted-foreground',
-      )}
-    >
-      {label}
-    </button>
   );
 }

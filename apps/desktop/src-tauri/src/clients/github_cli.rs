@@ -21,6 +21,39 @@ pub struct PrRow {
     pub is_draft: bool,
 }
 
+/// One unread thread from `gh api notifications` (GitHub's REST shape, only the fields used).
+#[derive(Debug, Clone, Deserialize)]
+pub struct NotificationRow {
+    pub id: String,
+    /// Why it reached you: `review_requested`, `mention`, `assign`, `author`, `ci_activity`, …
+    pub reason: String,
+    pub updated_at: String,
+    pub subject: NotificationSubject,
+    pub repository: NotificationRepository,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NotificationSubject {
+    pub title: String,
+    /// The API URL of the PR/issue; absent for some types (e.g. a CI check suite).
+    pub url: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NotificationRepository {
+    pub full_name: String,
+    pub html_url: String,
+}
+
+/// The account `gh` is signed in as (`gh api user`, only the fields used).
+#[derive(Debug, Clone, Deserialize)]
+pub struct GitHubUser {
+    pub login: String,
+    pub name: Option<String>,
+    pub avatar_url: Option<String>,
+    pub company: Option<String>,
+}
+
 #[derive(Clone)]
 pub struct GitHubCli;
 
@@ -55,5 +88,42 @@ impl GitHubCli {
         }
         serde_json::from_slice(&output.stdout)
             .map_err(|e| AppError::Worktree(format!("could not parse gh output: {e}")))
+    }
+
+    /// Your GitHub notifications updated at or after `since` (RFC 3339), read **and** unread,
+    /// up to 50, newest first, via `gh`'s own auth. Errors carry `gh`'s message (absent, not
+    /// signed in, missing `notifications` scope).
+    pub fn notifications(&self, since: &str) -> AppResult<Vec<NotificationRow>> {
+        let path = format!("notifications?all=true&per_page=50&since={since}");
+        let output = Command::new("gh")
+            .args(["api", path.as_str()])
+            .output()
+            .map_err(|e| AppError::Incoming(format!("GitHub CLI (gh) couldn't run: {e}")))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(AppError::Incoming(format!(
+                "gh api notifications failed: {}",
+                stderr.trim()
+            )));
+        }
+        serde_json::from_slice(&output.stdout)
+            .map_err(|e| AppError::Incoming(format!("could not parse gh output: {e}")))
+    }
+
+    /// The account `gh` is signed in as. Errors carry `gh`'s message (absent, signed out).
+    pub fn user(&self) -> AppResult<GitHubUser> {
+        let output = Command::new("gh")
+            .args(["api", "user"])
+            .output()
+            .map_err(|e| AppError::Incoming(format!("GitHub CLI (gh) couldn't run: {e}")))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(AppError::Incoming(format!(
+                "gh api user failed: {}",
+                stderr.trim()
+            )));
+        }
+        serde_json::from_slice(&output.stdout)
+            .map_err(|e| AppError::Incoming(format!("could not parse gh output: {e}")))
     }
 }
