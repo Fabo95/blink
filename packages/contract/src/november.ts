@@ -7,7 +7,7 @@ import { z } from 'zod';
 export const zNovPerson = z.enum(['fabo', 'lara']);
 export type NovPerson = z.infer<typeof zNovPerson>;
 
-export const zNovDestinationId = z.enum(['marokko', 'kapverden', 'oman']);
+export const zNovDestinationId = z.enum(['marokko', 'kapverden', 'azoren']);
 export type NovDestinationId = z.infer<typeof zNovDestinationId>;
 
 export const zNovPlace = z.object({

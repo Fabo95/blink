@@ -22,7 +22,7 @@
                     "items": {
                       "type": "object",
                       "properties": {
-                        "taskId": {
+                        "id": {
                           "type": "string",
                           "format": "uuid",
                           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -46,120 +46,24 @@
                             "nodeId"
                           ]
                         },
-                        "status": {
-                          "type": "string",
-                          "enum": [
-                            "inbox",
-                            "active",
-                            "exported",
-                            "archived"
-                          ]
-                        },
-                        "encrypted": {
+                        "body": {
                           "type": "object",
                           "properties": {
-                            "title": {
-                              "type": "object",
-                              "properties": {
-                                "ciphertext": {
-                                  "type": "string"
-                                },
-                                "iv": {
-                                  "type": "string"
-                                },
-                                "kdf": {
-                                  "type": "object",
-                                  "properties": {
-                                    "algorithm": {
-                                      "type": "string",
-                                      "enum": [
-                                        "PBKDF2"
-                                      ]
-                                    },
-                                    "hash": {
-                                      "type": "string",
-                                      "enum": [
-                                        "SHA-256"
-                                      ]
-                                    },
-                                    "iterations": {
-                                      "type": "number"
-                                    },
-                                    "salt": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "required": [
-                                    "algorithm",
-                                    "hash",
-                                    "iterations",
-                                    "salt"
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "ciphertext",
-                                "iv",
-                                "kdf"
-                              ]
-                            },
-                            "body": {
-                              "type": "object",
-                              "properties": {
-                                "ciphertext": {
-                                  "type": "string"
-                                },
-                                "iv": {
-                                  "type": "string"
-                                },
-                                "kdf": {
-                                  "type": "object",
-                                  "properties": {
-                                    "algorithm": {
-                                      "type": "string",
-                                      "enum": [
-                                        "PBKDF2"
-                                      ]
-                                    },
-                                    "hash": {
-                                      "type": "string",
-                                      "enum": [
-                                        "SHA-256"
-                                      ]
-                                    },
-                                    "iterations": {
-                                      "type": "number"
-                                    },
-                                    "salt": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "required": [
-                                    "algorithm",
-                                    "hash",
-                                    "iterations",
-                                    "salt"
-                                  ]
-                                }
-                              },
-                              "required": [
-                                "ciphertext",
-                                "iv",
-                                "kdf"
-                              ]
+                            "kind": {
+                              "type": "string",
+                              "minLength": 1
                             }
                           },
                           "required": [
-                            "title",
-                            "body"
-                          ]
+                            "kind"
+                          ],
+                          "additionalProperties": {}
                         }
                       },
                       "required": [
-                        "taskId",
+                        "id",
                         "clock",
-                        "status",
-                        "encrypted"
+                        "body"
                       ]
                     }
                   }
@@ -251,12 +155,12 @@
                     "data": {
                       "type": "object",
                       "properties": {
-                        "packets": {
+                        "records": {
                           "type": "array",
                           "items": {
                             "type": "object",
                             "properties": {
-                              "taskId": {
+                              "id": {
                                 "type": "string",
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -281,132 +185,1213 @@
                                 ],
                                 "additionalProperties": false
                               },
-                              "status": {
-                                "type": "string",
-                                "enum": [
-                                  "inbox",
-                                  "active",
-                                  "exported",
-                                  "archived"
-                                ]
-                              },
-                              "encrypted": {
+                              "body": {
                                 "type": "object",
                                 "properties": {
-                                  "title": {
-                                    "type": "object",
-                                    "properties": {
-                                      "ciphertext": {
-                                        "type": "string"
-                                      },
-                                      "iv": {
-                                        "type": "string"
-                                      },
-                                      "kdf": {
-                                        "type": "object",
-                                        "properties": {
-                                          "algorithm": {
-                                            "type": "string",
-                                            "enum": [
-                                              "PBKDF2"
-                                            ]
-                                          },
-                                          "hash": {
-                                            "type": "string",
-                                            "enum": [
-                                              "SHA-256"
-                                            ]
-                                          },
-                                          "iterations": {
-                                            "type": "number"
-                                          },
-                                          "salt": {
-                                            "type": "string"
-                                          }
-                                        },
-                                        "required": [
-                                          "algorithm",
-                                          "hash",
-                                          "iterations",
-                                          "salt"
-                                        ],
-                                        "additionalProperties": false
-                                      }
-                                    },
-                                    "required": [
-                                      "ciphertext",
-                                      "iv",
-                                      "kdf"
-                                    ],
-                                    "additionalProperties": false
-                                  },
-                                  "body": {
-                                    "type": "object",
-                                    "properties": {
-                                      "ciphertext": {
-                                        "type": "string"
-                                      },
-                                      "iv": {
-                                        "type": "string"
-                                      },
-                                      "kdf": {
-                                        "type": "object",
-                                        "properties": {
-                                          "algorithm": {
-                                            "type": "string",
-                                            "enum": [
-                                              "PBKDF2"
-                                            ]
-                                          },
-                                          "hash": {
-                                            "type": "string",
-                                            "enum": [
-                                              "SHA-256"
-                                            ]
-                                          },
-                                          "iterations": {
-                                            "type": "number"
-                                          },
-                                          "salt": {
-                                            "type": "string"
-                                          }
-                                        },
-                                        "required": [
-                                          "algorithm",
-                                          "hash",
-                                          "iterations",
-                                          "salt"
-                                        ],
-                                        "additionalProperties": false
-                                      }
-                                    },
-                                    "required": [
-                                      "ciphertext",
-                                      "iv",
-                                      "kdf"
-                                    ],
-                                    "additionalProperties": false
+                                  "kind": {
+                                    "type": "string",
+                                    "minLength": 1
                                   }
                                 },
                                 "required": [
-                                  "title",
-                                  "body"
+                                  "kind"
                                 ],
-                                "additionalProperties": false
+                                "additionalProperties": {}
+                              },
+                              "seq": {
+                                "type": "number"
                               }
                             },
                             "required": [
-                              "taskId",
+                              "id",
                               "clock",
-                              "status",
-                              "encrypted"
+                              "body",
+                              "seq"
                             ],
                             "additionalProperties": false
                           }
                         }
                       },
                       "required": [
-                        "packets"
+                        "records"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "reqId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "reqId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/capture": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 10000
+                  },
+                  "via": {
+                    "default": "remote",
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  }
+                },
+                "required": [
+                  "text"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "reqId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "reqId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/november/state": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "destinations": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "region": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "mapQuery": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "coords": {
+                                "type": "object",
+                                "properties": {
+                                  "lat": {
+                                    "type": "number"
+                                  },
+                                  "lng": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "lat",
+                                  "lng"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "tagline": {
+                                "type": "string"
+                              },
+                              "summary": {
+                                "type": "string"
+                              },
+                              "flight": {
+                                "type": "object",
+                                "properties": {
+                                  "airportCode": {
+                                    "type": "string",
+                                    "minLength": 3,
+                                    "maxLength": 3
+                                  },
+                                  "airportName": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "airportMapQuery": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "duration": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "stops": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "via": {
+                                    "type": "string"
+                                  },
+                                  "extraTransfer": {
+                                    "type": "string"
+                                  },
+                                  "airlineExamples": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "airportCode",
+                                  "airportName",
+                                  "airportMapQuery",
+                                  "duration",
+                                  "stops",
+                                  "airlineExamples"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "climate": {
+                                "type": "object",
+                                "properties": {
+                                  "air": {
+                                    "type": "string"
+                                  },
+                                  "water": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "air",
+                                  "water"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "activities": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "location": {
+                                      "type": "string"
+                                    },
+                                    "description": {
+                                      "type": "string"
+                                    },
+                                    "places": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "mapQuery": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "mapQuery"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "name",
+                                    "location",
+                                    "description",
+                                    "places"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "logistics": {
+                                "type": "object",
+                                "properties": {
+                                  "vehicle": {
+                                    "type": "string"
+                                  },
+                                  "lodging": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "vehicle",
+                                  "lodging"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "limitation": {
+                                "type": "string"
+                              },
+                              "theme": {
+                                "type": "object",
+                                "properties": {
+                                  "surface": {
+                                    "type": "string"
+                                  },
+                                  "surfaceElevated": {
+                                    "type": "string"
+                                  },
+                                  "accent": {
+                                    "type": "string"
+                                  },
+                                  "accentStrong": {
+                                    "type": "string"
+                                  },
+                                  "accentSoft": {
+                                    "type": "string"
+                                  },
+                                  "ink": {
+                                    "type": "string"
+                                  },
+                                  "inkMuted": {
+                                    "type": "string"
+                                  },
+                                  "sceneSky": {
+                                    "type": "string"
+                                  },
+                                  "sceneGround": {
+                                    "type": "string"
+                                  },
+                                  "sceneWater": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "surface",
+                                  "surfaceElevated",
+                                  "accent",
+                                  "accentStrong",
+                                  "accentSoft",
+                                  "ink",
+                                  "inkMuted",
+                                  "sceneSky",
+                                  "sceneGround",
+                                  "sceneWater"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "id": {
+                                "type": "string",
+                                "enum": [
+                                  "marokko",
+                                  "kapverden",
+                                  "azoren"
+                                ]
+                              },
+                              "itinerary": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "format": "uuid",
+                                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                    },
+                                    "date": {
+                                      "type": "string",
+                                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                                    },
+                                    "title": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 120
+                                    },
+                                    "note": {
+                                      "nullable": true,
+                                      "type": "string",
+                                      "maxLength": 240
+                                    },
+                                    "mapQuery": {
+                                      "nullable": true,
+                                      "type": "string",
+                                      "maxLength": 120
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "date",
+                                    "title",
+                                    "note",
+                                    "mapQuery"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "packing": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "format": "uuid",
+                                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                    },
+                                    "label": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 120
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "dokument",
+                                        "ausruestung",
+                                        "geld",
+                                        "sonstiges"
+                                      ]
+                                    },
+                                    "note": {
+                                      "nullable": true,
+                                      "type": "string",
+                                      "maxLength": 160
+                                    },
+                                    "done": {
+                                      "type": "boolean"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "label",
+                                    "kind",
+                                    "note",
+                                    "done"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "region",
+                              "mapQuery",
+                              "coords",
+                              "tagline",
+                              "summary",
+                              "flight",
+                              "climate",
+                              "activities",
+                              "logistics",
+                              "limitation",
+                              "theme",
+                              "id",
+                              "itinerary",
+                              "packing"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "votes": {
+                          "type": "object",
+                          "properties": {
+                            "fabo": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "destinationId": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "marokko",
+                                    "kapverden",
+                                    "azoren"
+                                  ]
+                                },
+                                "updatedAt": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "destinationId",
+                                "updatedAt"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "lara": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "destinationId": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "marokko",
+                                    "kapverden",
+                                    "azoren"
+                                  ]
+                                },
+                                "updatedAt": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "destinationId",
+                                "updatedAt"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "fabo",
+                            "lara"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "destinations",
+                        "votes"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "reqId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "reqId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/november/votes": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "fabo": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "destinationId": {
+                              "nullable": true,
+                              "type": "string",
+                              "enum": [
+                                "marokko",
+                                "kapverden",
+                                "azoren"
+                              ]
+                            },
+                            "updatedAt": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "destinationId",
+                            "updatedAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "lara": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "destinationId": {
+                              "nullable": true,
+                              "type": "string",
+                              "enum": [
+                                "marokko",
+                                "kapverden",
+                                "azoren"
+                              ]
+                            },
+                            "updatedAt": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "destinationId",
+                            "updatedAt"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "fabo",
+                        "lara"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "reqId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "reqId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/november/votes/{person}": {
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "destinationId": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "marokko",
+                      "kapverden",
+                      "azoren"
+                    ]
+                  }
+                },
+                "required": [
+                  "destinationId"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "fabo",
+                "lara"
+              ]
+            },
+            "in": "path",
+            "name": "person",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "fabo": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "destinationId": {
+                              "nullable": true,
+                              "type": "string",
+                              "enum": [
+                                "marokko",
+                                "kapverden",
+                                "azoren"
+                              ]
+                            },
+                            "updatedAt": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "destinationId",
+                            "updatedAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "lara": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "destinationId": {
+                              "nullable": true,
+                              "type": "string",
+                              "enum": [
+                                "marokko",
+                                "kapverden",
+                                "azoren"
+                              ]
+                            },
+                            "updatedAt": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "destinationId",
+                            "updatedAt"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "fabo",
+                        "lara"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "reqId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "reqId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/november/destinations/{id}/itinerary": {
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "days": {
+                    "maxItems": 40,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "date": {
+                          "type": "string",
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120
+                        },
+                        "note": {
+                          "nullable": true,
+                          "type": "string",
+                          "maxLength": 240
+                        },
+                        "mapQuery": {
+                          "nullable": true,
+                          "type": "string",
+                          "maxLength": 120
+                        }
+                      },
+                      "required": [
+                        "date",
+                        "title",
+                        "note",
+                        "mapQuery"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "days"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "marokko",
+                "kapverden",
+                "azoren"
+              ]
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "days": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "date": {
+                                "type": "string",
+                                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                              },
+                              "title": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 120
+                              },
+                              "note": {
+                                "nullable": true,
+                                "type": "string",
+                                "maxLength": 240
+                              },
+                              "mapQuery": {
+                                "nullable": true,
+                                "type": "string",
+                                "maxLength": 120
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "date",
+                              "title",
+                              "note",
+                              "mapQuery"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "days"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "reqId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "reqId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/november/destinations/{id}/itinerary/reset": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "marokko",
+                "kapverden",
+                "azoren"
+              ]
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "days": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "date": {
+                                "type": "string",
+                                "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                              },
+                              "title": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 120
+                              },
+                              "note": {
+                                "nullable": true,
+                                "type": "string",
+                                "maxLength": 240
+                              },
+                              "mapQuery": {
+                                "nullable": true,
+                                "type": "string",
+                                "maxLength": 120
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "date",
+                              "title",
+                              "note",
+                              "mapQuery"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "days"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "reqId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "reqId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/november/destinations/{id}/packing": {
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "items": {
+                    "maxItems": 80,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "dokument",
+                            "ausruestung",
+                            "geld",
+                            "sonstiges"
+                          ]
+                        },
+                        "note": {
+                          "nullable": true,
+                          "type": "string",
+                          "maxLength": 160
+                        },
+                        "done": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "kind",
+                        "note",
+                        "done"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "items"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "marokko",
+                "kapverden",
+                "azoren"
+              ]
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 120
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "dokument",
+                                  "ausruestung",
+                                  "geld",
+                                  "sonstiges"
+                                ]
+                              },
+                              "note": {
+                                "nullable": true,
+                                "type": "string",
+                                "maxLength": 160
+                              },
+                              "done": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "label",
+                              "kind",
+                              "note",
+                              "done"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "items"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "reqId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "reqId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/november/destinations/{id}/packing/reset": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "marokko",
+                "kapverden",
+                "azoren"
+              ]
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 120
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "dokument",
+                                  "ausruestung",
+                                  "geld",
+                                  "sonstiges"
+                                ]
+                              },
+                              "note": {
+                                "nullable": true,
+                                "type": "string",
+                                "maxLength": 160
+                              },
+                              "done": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "label",
+                              "kind",
+                              "note",
+                              "done"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "items"
                       ],
                       "additionalProperties": false
                     },

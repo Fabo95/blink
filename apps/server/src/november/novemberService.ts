@@ -25,6 +25,9 @@ interface NovemberServiceDeps {
 
 const PEOPLE: readonly NovPerson[] = ['fabo', 'lara'];
 
+/** Shared across requests so concurrent first calls run the sync once. */
+let seedSync: Promise<void> | null = null;
+
 /**
  * The trip-picker's whole backend: three destinations with editable itinerary and packing
  * lists, and one heart per person. Public, unauthenticated, two users — so no RLS and
@@ -118,20 +121,40 @@ export class NovemberService {
     return this.replacePacking(destinationId, seedFor(destinationId).packing);
   }
 
-  /** Writes the seed once. Concurrent first requests are harmless: the inserts ignore
-   * conflicts and the destination rows are the gate. */
-  private async ensureSeeded(): Promise<void> {
-    const { db } = this.deps;
-    const existing = await db.select({ id: novDestinations.id }).from(novDestinations).limit(1);
-    if (existing.length > 0) return;
-    await db.transaction(async (tx) => {
-      await tx
-        .insert(novDestinations)
-        .values(
-          novSeed.map((seed, index) => ({ id: seed.id, sortOrder: index, content: seed.content })),
-        )
-        .onConflictDoNothing();
-      for (const seed of novSeed) {
+  /**
+   * Brings the tables in line with the seed, once per process (a redeploy is what changes
+   * the seed). Destination facts are code-owned and always updated; itinerary and packing are
+   * user-owned, so they are written only for a destination that is new. A destination that
+   * left the seed is dropped with its lists (cascade); a vote on it becomes null (set null).
+   */
+  private ensureSeeded(): Promise<void> {
+    if (seedSync == null) {
+      seedSync = this.syncSeed().catch((err) => {
+        seedSync = null;
+        throw err;
+      });
+    }
+    return seedSync;
+  }
+
+  private async syncSeed(): Promise<void> {
+    await this.deps.db.transaction(async (tx) => {
+      const existing = await tx.select({ id: novDestinations.id }).from(novDestinations);
+      const have = new Set(existing.map((row) => row.id));
+      for (const row of existing) {
+        if (!novSeed.some((seed) => seed.id === row.id)) {
+          await tx.delete(novDestinations).where(eq(novDestinations.id, row.id));
+        }
+      }
+      for (const [sortOrder, seed] of novSeed.entries()) {
+        if (have.has(seed.id)) {
+          await tx
+            .update(novDestinations)
+            .set({ sortOrder, content: seed.content, updatedAt: new Date() })
+            .where(eq(novDestinations.id, seed.id));
+          continue;
+        }
+        await tx.insert(novDestinations).values({ id: seed.id, sortOrder, content: seed.content });
         await insertDays(tx, seed.id, seed.itinerary);
         await insertItems(tx, seed.id, seed.packing);
       }

@@ -27,6 +27,11 @@ setup/logger.ts     pino config
 utils/              errors/ (ApiError), functions/renderOtpEmail.ts (email templates),
                     schemas/headers.ts
 scripts/            dumpOpenapi.ts (writes openapi.json)
+november/           November Escape side project (trip-picker site): public, unauthenticated
+                    routes under /v1/november, its own service + seed. Self-contained and
+                    removable: delete this folder, its two cradle lines, its router line,
+                    /db november.ts (+ schema.ts re-export), migration 0009 and
+                    /contract november.ts.
 env.ts              zod-validated env — no defaults, all required
 ```
 
